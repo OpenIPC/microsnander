@@ -1,5 +1,5 @@
 # MicroSNANDer
-Stripped down version of Serial Nor/nAND/Eeprom programmeR (based on CH341A)
+Stripped down and modified version of Serial Nor/nAND/Eeprom programmeR (based on CH341A)
 
 ## Links
 
