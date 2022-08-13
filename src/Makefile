@@ -1,7 +1,7 @@
 # To assist in cross-compiling
 # apt-get inatall libusb-1.0-0 libusb-1.0-0-dev
 #
-CC=gcc
+
 LDFLAGS=-pthread -lusb-1.0
 TOPDIR=$(shell pwd)
 
