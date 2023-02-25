@@ -74,7 +74,7 @@ void usage(void)
 		" -a <address>   manually set address\n"\
 		" -w <filename>  write chip with data from filename\n"\
 		" -r <filename>  read chip and save data to filename\n"\
-		" -u             unlock chip\n"\
+		" -u             unprotect chip\n"\
 		" -v             verify after write on chip\n";
 	printf(use);
 	exit(0);
