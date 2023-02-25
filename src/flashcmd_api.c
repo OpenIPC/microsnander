@@ -36,6 +36,7 @@ long flash_cmd_init(struct flash_cmd *cmd)
 			cmd->flash_write = snand_write;
 			cmd->flash_read  = snand_read;
 		} else if ((flen = snor_init()) > 0) {
+			cmd->flash_unprotect = snor_unprotect;
 			cmd->flash_erase = snor_erase;
 			cmd->flash_write = snor_write;
 			cmd->flash_read  = snor_read;
