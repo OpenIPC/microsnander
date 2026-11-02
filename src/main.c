@@ -48,18 +48,19 @@ extern int org;
 #define EHELP	""
 #endif
 
-#define _VER	"1.8.0"
+#define _VER	"1.8.1"
 
 void title(void)
 {
 #ifdef EEPROM_SUPPORT
-	printf("\nSNANDer - Serial Nor/nAND/Eeprom programmeR v." _VER " by McMCC <mcmcc@mail.ru>\n\n");
+	printf("\nMicroSNANDer - Serial Nor/nAND/Eeprom programmeR v." _VER " (based on SNANDer by McMCC <mcmcc@mail.ru>)\n\n");
 #else
-	printf("\nSNANDer - Spi Nor/nAND programmER v." _VER " by McMCC <mcmcc@mail.ru>\n\n");
+	printf("\nMicroSNANDer - Spi Nor/nAND programmER v." _VER " (based on SNANDer by McMCC <mcmcc@mail.ru>)\n\n");
 #endif
 }
 
-void usage(void)
+/* Exit code: 0 for -h, 1 for an unknown option or no operation. */
+void usage(int code)
 {
 	const char use[] =
 		"  Usage:\n"\
@@ -77,12 +78,12 @@ void usage(void)
 		" -u             unprotect chip\n"\
 		" -v             verify after write on chip\n";
 	printf(use);
-	exit(0);
+	exit(code);
 }
 
 int main(int argc, char* argv[])
 {
-	int c, vr = 0, svr = 0, ret = 0;
+	int c, vr = 0, ret = 0, rc = 1;
 	char *str, *fname = NULL, op = 0;
 	unsigned char *buf;
 	int long long len = 0, addr = 0, flen = 0, wlen = 0;
@@ -91,7 +92,7 @@ int main(int argc, char* argv[])
 	title();
 
 #ifdef EEPROM_SUPPORT
-	while ((c = getopt(argc, argv, "diIhveLl:a:w:r:E:f:8")) != -1)
+	while ((c = getopt(argc, argv, "diIhveuLl:a:w:r:E:f:8")) != -1)
 #else
 	while ((c = getopt(argc, argv, "diIhveuLl:a:w:r:")) != -1)
 #endif
@@ -105,7 +106,7 @@ int main(int argc, char* argv[])
 					strncpy(eepromname, optarg, 10);
 					if (len > eepromsize) {
 						printf("Error set size %lld, max size %d for EEPROM %s!!!\n", len, eepromsize, eepromname);
-						exit(0);
+						exit(1);
 					}
 				} else if ((mw_eepromsize = deviceSize_3wire(optarg)) > 0) {
 					memset(eepromname, 0, sizeof(eepromname));
@@ -113,18 +114,18 @@ int main(int argc, char* argv[])
 					org = 1;
 					if (len > mw_eepromsize) {
 						printf("Error set size %lld, max size %d for EEPROM %s!!!\n", len, mw_eepromsize, eepromname);
-						exit(0);
+						exit(1);
 					}
 				} else {
 					printf("Unknown EEPROM chip %s!!!\n", optarg);
-					exit(0);
+					exit(1);
 				}
 				break;
 			case '8':
 				if (mw_eepromsize <= 0)
 				{
 					printf("-8 option only for Microwire EEPROM chips!!!\n");
-					exit(0);
+					exit(1);
 				}
 				org = 0;
 				break;
@@ -132,13 +133,13 @@ int main(int argc, char* argv[])
 				if (mw_eepromsize <= 0)
 				{
 					printf("-f option only for Microwire EEPROM chips!!!\n");
-					exit(0);
+					exit(1);
 				}
 				str = strdup(optarg);
 				fix_addr_len = strtoll(str, NULL, *str && *(str + 1) == 'x' ? 16 : 10);
 				if (fix_addr_len > 32) {
 						printf("Address len is very big!!!\n");
-						exit(0);
+						exit(1);
 				}
 				break;
 #endif
@@ -162,6 +163,7 @@ int main(int argc, char* argv[])
 				break;
 			case 'i':
 			case 'e':
+			case 'u':
 				if(!op)
 					op = c;
 				else
@@ -175,28 +177,26 @@ int main(int argc, char* argv[])
 				} else
 					op = 'x';
 				break;
-			case 'u':
-				op = c;
-				break;
 			case 'L':
 				support_flash_list();
 				exit(0);
 			case 'h':
+				usage(0);
 			default:
-				usage();
+				usage(1);
 		}
 	}
 
-	if (op == 0) usage();
+	if (op == 0) usage(1);
 
 	if (op == 'x' || (ECC_ignore && !ECC_fcheck) || (op == 'w' && ECC_ignore)) {
 		printf("Conflicting options, only one option at a time.\n\n");
-		return -1;
+		return 1;
 	}
 
 	if (ch341a_spi_init() < 0) {
 		printf("Programmer device not found!\n\n");
-		return -1;
+		return 1;
 	}
 
 	if((flen = flash_cmd_init(&prog)) <= 0)
@@ -207,9 +207,11 @@ int main(int argc, char* argv[])
 		printf("Programmer not supported auto detect EEPROM!\n\n");
 		goto out;
 	}
-#else
-	if (op == 'i') goto out;
 #endif
+	if (op == 'i') {
+		rc = 0;
+		goto out;
+	}
 
 	if (op == 'e') {
 		printf("ERASE:\n");
@@ -225,34 +227,37 @@ int main(int argc, char* argv[])
 		}
 		printf("Erase addr = 0x%016llX, len = 0x%016llX\n", addr, len);
 		ret = prog.flash_erase(addr, len);
-		if(!ret)
+		if(!ret) {
 			printf("Status: OK\n");
-		else
+			rc = 0;
+		} else
 			printf("Status: BAD(%d)\n", ret);
 		goto out;
 	}
 
 	if (op == 'u') {
 		printf("UNLOCK:\n");
+		if (!prog.flash_unprotect) {
+			printf("Unprotect is not supported for this chip type (SPI NOR only).\n");
+			goto out;
+		}
 		ret = prog.flash_unprotect();
-		if(!ret)
+		if(!ret) {
 			printf("Status: OK\n");
-		else
+			rc = 0;
+		} else
 			printf("Status: BAD(%d)\n", ret);
 		goto out;
 	}
 
-	if ((op == 'r') || (op == 'w')) {
-		if(addr && !len)
-			len = flen - addr;
-		else if(!addr && !len) {
-			len = flen;
-		}
-		buf = (unsigned char *)malloc(len + 1);
-		if (!buf) {
-			printf("Malloc failed for read buffer.\n");
-			goto out;
-		}
+	if(addr && !len)
+		len = flen - addr;
+	else if(!addr && !len)
+		len = flen;
+	buf = (unsigned char *)malloc(len + 1);
+	if (!buf) {
+		printf("Malloc failed for read buffer.\n");
+		goto out;
 	}
 
 	if (op == 'w') {
@@ -266,56 +271,59 @@ int main(int argc, char* argv[])
 		wlen = fread(buf, 1, len, fp);
 		if (ferror(fp)) {
 			printf("Error reading file [%s]\n", fname);
-			if (fp)
-				fclose(fp);
+			fclose(fp);
 			free(buf);
 			goto out;
 		}
+		fclose(fp);
 		if(len == flen)
 			len = wlen;
 		printf("Write addr = 0x%016llX, len = 0x%016llX\n", addr, len);
 		ret = prog.flash_write(buf, addr, len);
-		if(ret > 0) {
-			printf("Status: OK\n");
-			if (vr) {
-				op = 'r';
-				svr = 1;
-				printf("VERIFY:\n");
-				goto very;
-			}
-		}
-		else
-			printf("Status: BAD(%d)\n", ret);
-		fclose(fp);
-		free(buf);
-	}
-
-very:
-	if (op == 'r') {
-		if (!svr) printf("READ:\n");
-		else memset(buf, 0, len);
-		printf("Read addr = 0x%016llX, len = 0x%016llX\n", addr, len);
-		ret = prog.flash_read(buf, addr, len);
-		if (ret < 0) {
+		if(ret <= 0) {
 			printf("Status: BAD(%d)\n", ret);
 			free(buf);
 			goto out;
 		}
-		if (svr) {
-			unsigned char ch1;
-			int i = 0;
+		printf("Status: OK\n");
+		if (vr) {
+			/* Read the same range back and compare it with the data written. */
+			unsigned char *vbuf = (unsigned char *)malloc(len + 1);
+			long long i;
 
-			fseek(fp, 0, SEEK_SET);
-			ch1 = (unsigned char)getc(fp);
+			printf("VERIFY:\n");
+			if (!vbuf) {
+				printf("Malloc failed for verify buffer.\n");
+				free(buf);
+				goto out;
+			}
+			printf("Read addr = 0x%016llX, len = 0x%016llX\n", addr, len);
+			ret = prog.flash_read(vbuf, addr, len);
+			if (ret < 0) {
+				printf("Status: BAD(%d)\n", ret);
+			} else {
+				for (i = 0; i < len && vbuf[i] == buf[i]; i++)
+					;
+				if (i == len) {
+					printf("Status: OK\n");
+					rc = 0;
+				} else
+					printf("Status: BAD, first difference at 0x%016llX: wrote 0x%02X, read 0x%02X\n",
+						addr + i, buf[i], vbuf[i]);
+			}
+			free(vbuf);
+		} else
+			rc = 0;
+		free(buf);
+		goto out;
+	}
 
-			while ((ch1 != EOF) && (i < len - 1) && (ch1 == buf[i++]))
-				ch1 = (unsigned char)getc(fp);
-
-			if (ch1 == buf[i])
-				printf("Status: OK\n");
-			else
-				printf("Status: BAD\n");
-			fclose(fp);
+	if (op == 'r') {
+		printf("READ:\n");
+		printf("Read addr = 0x%016llX, len = 0x%016llX\n", addr, len);
+		ret = prog.flash_read(buf, addr, len);
+		if (ret < 0) {
+			printf("Status: BAD(%d)\n", ret);
 			free(buf);
 			goto out;
 		}
@@ -326,14 +334,17 @@ very:
 			goto out;
 		}
 		fwrite(buf, 1, len, fp);
-		if (ferror(fp))
+		if (ferror(fp) | fclose(fp)) {
 			printf("Error writing file [%s]\n", fname);
-		fclose(fp);
+			free(buf);
+			goto out;
+		}
 		free(buf);
 		printf("Status: OK\n");
+		rc = 0;
 	}
 
 out:
 	ch341a_spi_shutdown();
-	return 0;
+	return rc;
 }
