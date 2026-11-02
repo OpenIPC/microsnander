@@ -14,15 +14,16 @@ EEPROM_SUPPORT = n
 LIBUSB_CFLAGS ?=
 LIBUSB_LIBS ?= -lusb-1.0
 
-BIGFILES = -D_FILE_OFFSET_BITS=64
+# CFLAGS is the user's (optimization, extra flags); the flags the build needs
+# are in ALL_CFLAGS, so a CFLAGS given on the command line cannot drop them.
 CFLAGS ?= -Os
-CFLAGS += -std=gnu99 -Wall $(BIGFILES) $(LIBUSB_CFLAGS)
+ALL_CFLAGS = $(CFLAGS) -std=gnu99 -Wall -D_FILE_OFFSET_BITS=64 $(LIBUSB_CFLAGS)
 LDLIBS = $(LIBUSB_LIBS) -pthread
 
 OBJS = flashcmd_api.o spi_controller.o spi_nand_flash.o spi_nor_flash.o ch341a_spi.o timer.o main.o
 
 ifeq ($(EEPROM_SUPPORT),y)
-    CFLAGS += -DEEPROM_SUPPORT
+    ALL_CFLAGS += -DEEPROM_SUPPORT
     OBJS += ch341a_i2c.o i2c_eeprom.o
     OBJS += bitbang_microwire.o mw_eeprom.o ch341a_gpio.o
 endif
@@ -30,10 +31,10 @@ endif
 all: microsnander
 
 microsnander: $(OBJS)
-	$(CC) $(CFLAGS) $(LDFLAGS) -s -o $@ $(OBJS) $(LDLIBS)
+	$(CC) $(ALL_CFLAGS) $(LDFLAGS) -s -o $@ $(OBJS) $(LDLIBS)
 
 .c.o:
-	$(CC) $(CFLAGS) -c $<
+	$(CC) $(ALL_CFLAGS) -c $<
 
 clean:
 	rm -f *.o microsnander*
