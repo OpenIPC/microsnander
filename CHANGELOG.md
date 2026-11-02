@@ -4,6 +4,12 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.8.2 — 2026-11-02
+
+- `EEPROM_SUPPORT=y` build: the Microwire EEPROM info line printed a pointer to an
+  array of a function that had already returned (`-Wdangling-pointer`); the number is
+  formatted in `mw_init()` itself now. CI fails on warnings in this build too (#10).
+
 ## 1.8.1 — 2026-11-02
 
 - Verify after write (`-v`) compares the data read back with the file byte by byte

@@ -1,7 +1,7 @@
 #
 # build.yml — CI for microsnander: a native build against the system libusb
-# (any compiler warning fails the job), its tests (tests/run.sh) and the
-# build with EEPROM_SUPPORT=y, plus the
+# and with EEPROM_SUPPORT=y (any compiler warning fails the job), its
+# tests (tests/run.sh), plus the
 # static musl builds the release ships (ci/build-musl.sh): x86_64 and 32-bit
 # ARM for cameras and boards, each started and checked for the version that
 # src/main.c defines.
@@ -62,13 +62,16 @@ jobs:
       - name: Tests
         run: tests/run.sh
 
-      # The EEPROM support is a build option, not in the release: it must build.
-      # Its warnings are reported, not fatal.
+      # The EEPROM support is a build option, not in the release: it must
+      # build without warnings too.
       - name: Build with EEPROM_SUPPORT=y
         run: |
           make -C src clean
           make -C src EEPROM_SUPPORT=y 2>&1 | tee build.log
-          grep 'warning:' build.log | sed 's/^/::warning::/' || true
+          if grep -q 'warning:' build.log; then
+            echo "::error::compiler warnings, see the build log"
+            exit 1
+          fi
           ./src/microsnander -h | head -3
 
   static:

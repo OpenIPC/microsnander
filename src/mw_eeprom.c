@@ -146,14 +146,6 @@ static int mw_gpio_init(void)
 	return 0;
 }
 
-static char *__itoa(int a)
-{
-	char *p, tmp[32];
-	p = tmp;
-	snprintf(p, sizeof(tmp), "%d", a);
-	return p;
-}
-
 
 long mw_init(void)
 {
@@ -167,8 +159,13 @@ long mw_init(void)
 
 	bsize = 1;
 
+	/* the buffer lives in this function: printf gets a valid pointer */
+	char addr_len[16] = "Auto";
+	if (fix_addr_len)
+		snprintf(addr_len, sizeof(addr_len), "%d", fix_addr_len);
+
 	printf("Microwire EEPROM chip: %s, Size: %d bytes, Org: %d bits, fix addr len: %s\n", eepromname, mw_eepromsize / (org ? 2 : 1),
-			org ? 16 : 8, fix_addr_len ? __itoa(fix_addr_len) : "Auto");
+			org ? 16 : 8, addr_len);
 
 	return (long)mw_eepromsize;
 }
