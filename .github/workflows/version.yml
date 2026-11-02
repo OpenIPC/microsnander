@@ -1,0 +1,40 @@
+#
+# version.yml — the version check of pull requests
+#
+# A change to the code or the build (build.yml included) comes with a new
+# _VER in src/main.c (MAJOR.MINOR.PATCH) and its CHANGELOG.md section, unless
+# the no-release label says the release files do not change. A workflow of
+# its own: adding or removing a label re-runs this check, not the builds.
+#
+
+name: Version
+
+on:
+  pull_request:
+    # labeled / unlabeled: the check reads the no-release label
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+# a newer event of the same pull request cancels the older check
+concurrency:
+  group: version-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  version:
+    name: Version bump
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      # The checkout is the merge commit; its first parent is the base it was made from.
+      - name: Code changes come with a new version
+        env:
+          # a change that leaves the release files as they are may skip the new version
+          NO_RELEASE: ${{ contains(github.event.pull_request.labels.*.name, 'no-release') }}
+        run: .github/check-version.sh HEAD^1

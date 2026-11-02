@@ -1,0 +1,211 @@
+#
+# build.yml — CI for microsnander: a native build against the system libusb
+# (any compiler warning fails the job) and with EEPROM_SUPPORT=y, plus the
+# static musl builds the release ships (ci/build-musl.sh): x86_64 and 32-bit
+# ARM for cameras and boards, each started and checked for the version that
+# src/main.c defines.
+# On pull requests, version.yml runs .github/check-version.sh: a change to
+# the code or the build (this workflow included) comes with a new _VER and
+# its CHANGELOG.md section; the no-release label lets a change that keeps
+# the release files as they are through without one.
+# Release: one release only, "latest", replaced by every push to main once
+# all builds pass. Its title carries _VER ("Microsnander 1.8.0"), its notes
+# are short; the history is in CHANGELOG.md. Only the head of main
+# publishes, so a re-run of an older run never rolls "latest" back. A new
+# version (not every rebuild) goes to the OpenIPC Telegram dev channel.
+#
+
+name: Build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+# The builds only read the repository and upload artifacts.
+permissions:
+  contents: read
+
+# A newer push to the same branch or PR cancels the run still in progress;
+# on main it waits instead, so a release job is never stopped between
+# deleting the old "latest" and creating the new one.
+concurrency:
+  group: build-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  native:
+    name: Linux x86_64 (native, glibc)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install libusb
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libusb-1.0-0-dev
+
+      - name: Build
+        run: |
+          make -C src clean
+          make -C src 2>&1 | tee build.log
+          if grep -q 'warning:' build.log; then
+            echo "::error::compiler warnings, see the build log"
+            exit 1
+          fi
+          ./src/microsnander -h | head -3
+
+      # The EEPROM support is a build option, not in the release: it must build.
+      # Its warnings are reported, not fatal.
+      - name: Build with EEPROM_SUPPORT=y
+        run: |
+          make -C src clean
+          make -C src EEPROM_SUPPORT=y 2>&1 | tee build.log
+          grep 'warning:' build.log | sed 's/^/::warning::/' || true
+          ./src/microsnander -h | head -3
+
+  static:
+    name: Linux ${{ matrix.target }} (static, musl)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [x86_64, arm]
+    env:
+      TOOLCHAIN_CACHE: ${{ github.workspace }}/.toolchains
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install qemu-user
+        if: matrix.target != 'x86_64'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq qemu-user
+
+      - name: Cache toolchain
+        uses: actions/cache@v6
+        with:
+          path: .toolchains
+          key: toolchain-${{ matrix.target }}-${{ hashFiles('ci/build-musl.sh') }}
+
+      - name: Build
+        env:
+          GITHUB_TOKEN: ${{ github.token }}   # toolchain digest lookup (ci/build-musl.sh)
+        run: ci/build-musl.sh ${{ matrix.target }} dist
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v5
+        with:
+          name: microsnander-linux-${{ matrix.target }}
+          path: dist/microsnander-linux-${{ matrix.target }}
+          if-no-files-found: error
+
+  # The one release, "latest": rebuilt from every push to main after all
+  # builds pass, from the static binaries built and checked above.
+  release:
+    name: Publish "latest"
+    needs: [native, static]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # replace the release
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Download
+        uses: actions/download-artifact@v5
+        with:
+          pattern: microsnander-linux-*
+          merge-multiple: true
+          path: dist
+
+      - name: Check the files
+        run: |
+          ver=$(sed -n 's/^#define[[:space:]]*_VER[[:space:]]*"\([^"]*\)".*/\1/p' src/main.c)
+          [ -n "$ver" ] || { echo "::error::no _VER in src/main.c"; exit 1; }
+          ls -l dist
+          [ "$(ls dist | wc -l)" = 2 ] || { echo "::error::expected 2 binaries"; exit 1; }
+          file dist/microsnander-linux-arm | grep -q 'ARM.*statically linked' ||
+            { echo "::error::microsnander-linux-arm is not a static ARM binary"; exit 1; }
+          chmod 755 dist/*
+          ./dist/microsnander-linux-x86_64 -h | grep -q " v\.$ver " ||
+            { echo "::error::the binary does not print v.$ver"; exit 1; }
+          echo "VER=$ver" >> "$GITHUB_ENV"
+
+      - name: Publish
+        id: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Only the head of main publishes: a re-run of an older run must not
+          # roll "latest" back to its commit. Checked here, right before the
+          # release is touched; a newer push's run waits for this one (concurrency)
+          # and publishes after it. A failed lookup fails the job, not skips it.
+          if ! head=$(git ls-remote --exit-code origin refs/heads/main); then
+            echo "::error::cannot read the head of main"; exit 1
+          fi
+          head=${head%%[[:space:]]*}
+          if [ "$head" != "$GITHUB_SHA" ]; then
+            echo "::notice::main is at ${head:0:7} now, not ${GITHUB_SHA::7}: not published"
+            exit 0
+          fi
+          # The release being replaced: its title tells Telegram whether this
+          # is a new version. "Not found" means there is none yet; any other
+          # failure stops here, before anything is deleted or announced.
+          if prev=$(gh release view latest --json name -q .name 2>err.txt); then
+            exists=1
+          elif grep -qi 'not found' err.txt; then
+            exists=0 prev=""
+          else
+            cat err.txt; echo "::error::cannot read the current \"latest\" release"; exit 1
+          fi
+          echo "previous release: ${prev:-none}"
+          [ "$prev" = "Microsnander ${VER}" ] || echo "new=true" >> "$GITHUB_OUTPUT"
+
+          cat > notes.md <<NOTES
+          Microsnander ${VER} (${GITHUB_SHA::7}): static Linux binaries (musl, libusb built in), no dependencies.
+
+          - \`microsnander-linux-x86_64\` — PCs and servers
+          - \`microsnander-linux-arm\` — 32-bit ARM (ARMv5TE and later, soft-float): cameras, Raspberry Pi and other boards
+
+          Changes: [CHANGELOG.md](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/main/CHANGELOG.md); usage: [README](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}#readme).
+          NOTES
+          # "latest" is missing only before the first publication
+          if [ "$exists" = 1 ]; then
+            gh release delete latest --cleanup-tag --yes
+          fi
+          gh release create latest dist/* \
+            --latest \
+            --title "Microsnander ${VER}" \
+            --target "${GITHUB_SHA}" \
+            --notes-file notes.md
+
+      # The binaries of a new version go to the OpenIPC Telegram dev channel as files, for the
+      # archive and test downloads: one post (sendMediaGroup), a short caption, no text from
+      # CHANGELOG.md. Organization secrets; a failed upload is a warning, not a failed release.
+      - name: Telegram
+        if: steps.publish.outputs.new == 'true'
+        env:
+          TG_TOKEN: ${{ secrets.TELEGRAM_TOKEN_BOT_OPENIPC }}
+          TG_CHANNEL: ${{ secrets.TELEGRAM_CHANNEL_OPENIPC_DEV }}
+        run: |
+          if [ -z "$TG_TOKEN" ] || [ -z "$TG_CHANNEL" ]; then
+            echo "::warning::Telegram secrets are not available, binaries not posted"; exit 0
+          fi
+          caption=$(printf 'Microsnander %s for Linux\nCommit: %s\nTime: %s\n\n%s' "$VER" "${GITHUB_SHA::7}" \
+            "$(date -u '+%Y-%m-%d %H:%M:%S UTC')" "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/latest")
+          files=(dist/microsnander-linux-*)
+          media='[]' form=()
+          for i in "${!files[@]}"; do
+            item=$(jq -cn --arg m "attach://f$i" '{type: "document", media: $m}')
+            [ "$i" -eq $(( ${#files[@]} - 1 )) ] && item=$(jq -c --arg c "$caption" '. + {caption: $c}' <<< "$item")
+            media=$(jq -c --argjson it "$item" '. + [$it]' <<< "$media")
+            form+=(-F "f$i=@${files[$i]}")
+          done
+          HTTP=$(curl -sS -o tg.json -w '%{http_code}' "https://api.telegram.org/bot${TG_TOKEN}/sendMediaGroup" \
+            -F chat_id="$TG_CHANNEL" -F media="$media" "${form[@]}") || HTTP=000
+          echo "Telegram response: $HTTP"
+          [ "$HTTP" = 200 ] || echo "::warning::Telegram upload failed (HTTP $HTTP): $(cat tg.json 2>/dev/null)"
