@@ -1,6 +1,6 @@
 /* tests/stub.c — test double for main.c: the programmer and a 64 KiB chip in chip.img.
    MS_CHIP=nor|nand|none, MS_CORRUPT=<offset> flips a byte on write,
-   MS_FAIL=erase|read|write|partial|unprotect makes that operation fail. */
+   MS_FAIL=erase|read|shortread|write|partial|unprotect makes that operation fail. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -8,7 +8,7 @@
 int ECC_fcheck = 1, ECC_ignore = 0; unsigned char _ondie_ecc_flag = 1; unsigned int bsize = 4096;
 static unsigned char chip[65536];
 static const char *env(const char *n) { const char *v = getenv(n); return v ? v : ""; }
-static int r(unsigned char *b, unsigned long f, unsigned long l) { if (!strcmp(env("MS_FAIL"),"read")) return -1; memcpy(b, chip + f, l); return l; }
+static int r(unsigned char *b, unsigned long f, unsigned long l) { if (!strcmp(env("MS_FAIL"),"read")) return -1; if (!strcmp(env("MS_FAIL"),"shortread")) { memcpy(b, chip + f, l / 2); return l / 2; } memcpy(b, chip + f, l); return l; }
 static int w(unsigned char *b, unsigned long t, unsigned long l) { if (!strcmp(env("MS_FAIL"),"write")) return -1; if (!strcmp(env("MS_FAIL"),"partial")) { memcpy(chip + t, b, l / 2); return l / 2; } memcpy(chip + t, b, l); if (*env("MS_CORRUPT")) chip[t + atol(env("MS_CORRUPT"))] ^= 0x5a; return l; }
 static int e(unsigned long o, unsigned long l) { if (!strcmp(env("MS_FAIL"),"erase")) return -2; memset(chip + o, 0xff, l); return 0; }
 static int u(void) { return strcmp(env("MS_FAIL"),"unprotect") ? 0 : -3; }

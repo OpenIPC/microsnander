@@ -37,6 +37,7 @@ printf "\000\000\000\000\000\000\000\000" > zero8.bin
 t 1 "-w -v false OK of #2 (byte 3 differs, next bytes equal)" MS_CORRUPT=3 $B -w zero8.bin -v -l 8
 t 0 "-w small file -v"                $B -w small.bin -v
 t 1 "-w -v read fails"                MS_FAIL=read $B -w img.bin -v
+t 1 "-w -v short read-back"          MS_FAIL=shortread $B -w img.bin -v
 t 1 "-w write error"                 MS_FAIL=write $B -w img.bin
 t 1 "-w partial write"               MS_FAIL=partial $B -w img.bin
 t 1 "-w missing file"                 $B -w nope.bin
@@ -47,6 +48,7 @@ $B -w abc.bin -a 0x100 -l 0x1000 | grep -q 'writing 0x3 bytes' && echo "ok   onl
 $B -w img.bin >/dev/null
 t 0 "-r full"                         $B -r out.bin
 cmp -s out.bin img.bin && echo "ok   -r gives the written image" || { echo "FAIL -r content"; fail=1; }
+t 1 "-r short read"                  MS_FAIL=shortread $B -r out3.bin
 t 1 "-r read fails"                   MS_FAIL=read $B -r out2.bin
 t 1 "-r unwritable file"              $B -r /nonexistent/dir/out.bin
 [ "$fail" = 0 ] && echo "all tests passed"

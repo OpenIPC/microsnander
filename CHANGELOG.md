@@ -6,9 +6,10 @@ from every push to `main`; this file is the change history.
 
 ## 1.8.1 — 2026-11-02
 
-- Verify after write (`-v`) compares the data read back with the data written, byte by
-  byte, and prints the address of the first difference; before, a mismatch could be
-  reported as `OK` (#2).
+- Verify after write (`-v`) compares the data read back with the file byte by byte
+  (the file in 64 KiB chunks, so the memory use stays one image) and prints the address
+  of the first difference; before, a mismatch could be reported as `OK` (#2). A read
+  shorter than requested fails, in `-r` too.
 - `-u` on a chip without unprotect support (SPI NAND, EEPROM) prints a message and
   fails instead of crashing; `-u` with another operation is a conflicting-options
   error; `-u` is available in the `EEPROM_SUPPORT=y` build too (#3).

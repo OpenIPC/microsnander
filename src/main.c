@@ -301,31 +301,48 @@ int main(int argc, char* argv[])
 		}
 		printf("Status: OK\n");
 		if (vr) {
-			/* Read the same range back and compare it with the data written. */
-			unsigned char *vbuf = (unsigned char *)malloc(len + 1);
-			long long i;
+			/* Read the range back into buf and compare it with the file, which
+			   holds exactly the bytes written (its first len bytes): one buffer
+			   as large as the image, the file in small chunks. */
+			static unsigned char cmp[65536];
+			long long off = 0;
+			size_t n = 0, k = 0;
 
 			printf("VERIFY:\n");
-			if (!vbuf) {
-				printf("Malloc failed for verify buffer.\n");
+			fp = fopen(fname, "rb");
+			if (!fp) {
+				printf("Couldn't open file %s for reading.\n", fname);
 				free(buf);
 				goto out;
 			}
+			memset(buf, 0, len);
 			printf("Read addr = 0x%016llX, len = 0x%016llX\n", addr, len);
-			ret = prog.flash_read(vbuf, addr, len);
-			if (ret < 0) {
+			ret = prog.flash_read(buf, addr, len);
+			if (ret != len) {
 				printf("Status: BAD(%d)\n", ret);
 			} else {
-				for (i = 0; i < len && vbuf[i] == buf[i]; i++)
-					;
-				if (i == len) {
+				while (off < len) {
+					n = len - off < (long long)sizeof(cmp) ? (size_t)(len - off) : sizeof(cmp);
+					if (fread(cmp, 1, n, fp) != n) {
+						k = n;	/* the file changed: not a chip difference */
+						break;
+					}
+					for (k = 0; k < n && cmp[k] == buf[off + k]; k++)
+						;
+					if (k < n)
+						break;
+					off += n;
+				}
+				if (off == len) {
 					printf("Status: OK\n");
 					rc = 0;
-				} else
+				} else if (k < n)
 					printf("Status: BAD, first difference at 0x%016llX: wrote 0x%02X, read 0x%02X\n",
-						addr + i, buf[i], vbuf[i]);
+						addr + off + k, cmp[k], buf[off + k]);
+				else
+					printf("Error reading file [%s]\n", fname);
 			}
-			free(vbuf);
+			fclose(fp);
 		} else
 			rc = 0;
 		free(buf);
@@ -336,7 +353,7 @@ int main(int argc, char* argv[])
 		printf("READ:\n");
 		printf("Read addr = 0x%016llX, len = 0x%016llX\n", addr, len);
 		ret = prog.flash_read(buf, addr, len);
-		if (ret < 0) {
+		if (ret != len) {
 			printf("Status: BAD(%d)\n", ret);
 			free(buf);
 			goto out;
