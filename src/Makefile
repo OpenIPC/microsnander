@@ -1,19 +1,29 @@
-# To assist in cross-compiling
-# apt-get inatall libusb-1.0-0 libusb-1.0-0-dev
+# MicroSNANDer: SPI NOR/NAND programmer for CH341A, built with libusb-1.0.
 #
-
-LDFLAGS=-pthread -lusb-1.0
-TOPDIR=$(shell pwd)
+#   make                         native build against the system libusb
+#                                (Debian/Ubuntu: apt-get install libusb-1.0-0-dev)
+#   make EEPROM_SUPPORT=y        with the I2C and Microwire EEPROM support
+#   make CC=<cross>gcc LDFLAGS=-static LIBUSB_CFLAGS=-I<prefix>/include \
+#        LIBUSB_LIBS=<prefix>/lib/libusb-1.0.a
+#                                static build against a libusb built for the
+#                                target (ci/build-musl.sh, the release binaries)
+#
 
 EEPROM_SUPPORT = n
 
-BIGFILES=-D_FILE_OFFSET_BITS=64
-CFLAGS=-Os -std=gnu99 -Wall $(BIGFILES)
+LIBUSB_CFLAGS ?=
+LIBUSB_LIBS ?= -lusb-1.0
 
-OBJS= flashcmd_api.o spi_controller.o spi_nand_flash.o spi_nor_flash.o ch341a_spi.o timer.o main.o
+# CFLAGS is the user's (optimization, extra flags); the flags the build needs
+# are in ALL_CFLAGS, so a CFLAGS given on the command line cannot drop them.
+CFLAGS ?= -Os
+ALL_CFLAGS = $(CFLAGS) -std=gnu99 -Wall -D_FILE_OFFSET_BITS=64 $(LIBUSB_CFLAGS)
+LDLIBS = $(LIBUSB_LIBS) -pthread
+
+OBJS = flashcmd_api.o spi_controller.o spi_nand_flash.o spi_nor_flash.o ch341a_spi.o timer.o main.o
 
 ifeq ($(EEPROM_SUPPORT),y)
-    CFLAGS += -DEEPROM_SUPPORT
+    ALL_CFLAGS += -DEEPROM_SUPPORT
     OBJS += ch341a_i2c.o i2c_eeprom.o
     OBJS += bitbang_microwire.o mw_eeprom.o ch341a_gpio.o
 endif
@@ -21,10 +31,12 @@ endif
 all: microsnander
 
 microsnander: $(OBJS)
-	$(CC) $(CFLAGS) -s -o $@ $(OBJS) $(LDFLAGS)
+	$(CC) $(ALL_CFLAGS) $(LDFLAGS) -s -o $@ $(OBJS) $(LDLIBS)
 
 .c.o:
-	$(CC) $(CFLAGS) -c $<
+	$(CC) $(ALL_CFLAGS) -c $<
 
-clean: 
+clean:
 	rm -f *.o microsnander*
+
+.PHONY: all clean
