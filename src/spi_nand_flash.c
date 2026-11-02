@@ -3284,11 +3284,14 @@ static SPI_NAND_FLASH_RTN_T spi_nand_write_internal( u32 dst_addr, u32 len, u32 
 		}
 
 		rtn_status = spi_nand_write_page(page_number, addr_offset, &(ptr_buf[len - remain_len]), data_len, 0, NULL, 0 , speed_mode);
+		/* a failed page stops the write: *ptr_rtn_len counts what was written */
+		if( rtn_status != SPI_NAND_FLASH_RTN_NO_ERROR )
+			break;
 
 		/* 8. Write remain data if neccessary */
 		write_addr += data_len;
 		remain_len -= data_len;
-		ptr_rtn_len += data_len;
+		*ptr_rtn_len += data_len;
 		if( timer_progress() )
 		{
 			printf("\bWritten %d%% [%u] of [%u] bytes      ", 100 * ((len - remain_len) / 1024) / (len / 1024), len - remain_len, len);
