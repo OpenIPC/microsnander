@@ -14,6 +14,8 @@ from every push to `main`; this file is the change history.
   error; `-u` is available in the `EEPROM_SUPPORT=y` build too (#3).
 - The exit code is 0 only on success and 1 on any failure: chip not found, operation
   error, verify mismatch, file or memory error, unknown option, no operation (#4).
+- `-w` writes only the bytes of the file: with `-l` longer than the file the rest of
+  the buffer was written too; an empty file is an error.
 - The banner names the program MicroSNANDer, based on SNANDer by McMCC.
 - `tests/run.sh`: tests of `main.c` against a test double of the programmer, run in CI.
 

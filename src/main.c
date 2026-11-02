@@ -276,8 +276,18 @@ int main(int argc, char* argv[])
 			goto out;
 		}
 		fclose(fp);
-		if(len == flen)
+		if (wlen <= 0) {
+			printf("File %s is empty.\n", fname);
+			free(buf);
+			goto out;
+		}
+		/* Only the bytes taken from the file are written and verified, never the
+		   rest of the buffer. */
+		if (wlen < len) {
+			if (len != flen)
+				printf("File %s is shorter than the length, writing 0x%llX bytes.\n", fname, wlen);
 			len = wlen;
+		}
 		printf("Write addr = 0x%016llX, len = 0x%016llX\n", addr, len);
 		ret = prog.flash_write(buf, addr, len);
 		if(ret <= 0) {
@@ -333,8 +343,9 @@ int main(int argc, char* argv[])
 			free(buf);
 			goto out;
 		}
-		fwrite(buf, 1, len, fp);
-		if (ferror(fp) | fclose(fp)) {
+		/* fclose() flushes: its result counts as much as that of fwrite() */
+		int werr = fwrite(buf, 1, len, fp) != (size_t)len;
+		if (fclose(fp) != 0 || werr) {
 			printf("Error writing file [%s]\n", fname);
 			free(buf);
 			goto out;
