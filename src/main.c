@@ -290,8 +290,12 @@ int main(int argc, char* argv[])
 		}
 		printf("Write addr = 0x%016llX, len = 0x%016llX\n", addr, len);
 		ret = prog.flash_write(buf, addr, len);
-		if(ret <= 0) {
-			printf("Status: BAD(%d)\n", ret);
+		/* the drivers return the number of bytes written: less than len is a failure */
+		if (ret != len) {
+			if (ret < 0)
+				printf("Status: BAD(%d)\n", ret);
+			else
+				printf("Status: BAD, wrote 0x%X of 0x%llX bytes\n", ret, len);
 			free(buf);
 			goto out;
 		}

@@ -37,6 +37,8 @@ printf "\000\000\000\000\000\000\000\000" > zero8.bin
 t 1 "-w -v false OK of #2 (byte 3 differs, next bytes equal)" MS_CORRUPT=3 $B -w zero8.bin -v -l 8
 t 0 "-w small file -v"                $B -w small.bin -v
 t 1 "-w -v read fails"                MS_FAIL=read $B -w img.bin -v
+t 1 "-w write error"                 MS_FAIL=write $B -w img.bin
+t 1 "-w partial write"               MS_FAIL=partial $B -w img.bin
 t 1 "-w missing file"                 $B -w nope.bin
 t 1 "-w empty file"                   $B -w /dev/null
 printf 'abc' > abc.bin
