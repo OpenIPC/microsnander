@@ -3,3 +3,11 @@ dist/
 src/*.o
 src/microsnander
 src/web_page.h
+android/.gradle/
+android/build/
+android/app/build/
+android/app/.cxx/
+android/local.properties
+android/.preview/
+android/.emu/
+android/.ci/

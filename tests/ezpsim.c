@@ -3,6 +3,7 @@
    program data on 0x01, a 1 MB chip behind it. */
 #include <stdlib.h>
 #include "../src/ezp.c"
+#include "../src/usb.c"
 
 #define SIM_SIZE (1 << 20)
 static unsigned char mem[SIM_SIZE];
@@ -25,6 +26,8 @@ const char *snor_lookup(const unsigned char id[3], unsigned long *size, unsigned
 int libusb_init(libusb_context **c) { (void)c; return 0; }
 void libusb_exit(libusb_context *c) { (void)c; }
 const char *libusb_error_name(int e) { (void)e; return "LIBUSB_ERROR"; }
+int libusb_set_option(libusb_context *c, enum libusb_option o, ...) { (void)c; (void)o; return 0; }
+int libusb_wrap_sys_device(libusb_context *c, intptr_t fd, libusb_device_handle **h) { (void)c; (void)fd; *h = NULL; return -1; }
 libusb_device_handle *libusb_open_device_with_vid_pid(libusb_context *c, uint16_t v, uint16_t p)
 { (void)c; return v == EZP_VID && p == 0x310b ? (libusb_device_handle *)1 : NULL; }
 void libusb_close(libusb_device_handle *h) { (void)h; }

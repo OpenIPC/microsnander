@@ -25,6 +25,7 @@
 #include <stdio.h>
 #include "ch341a_spi.h"
 #include <libusb-1.0/libusb.h>
+#include "usb.h"
 #include <stdbool.h>
 
 /* LIBUSB_CALL ensures the right calling conventions on libusb callbacks.
@@ -480,7 +481,7 @@ int ch341a_spi_init(void)
 		return -1;
 	}
 
-	int32_t ret = libusb_init(NULL);
+	int32_t ret = ms_usb_init();
 	if (ret < 0) {
 		printf("Couldnt initialize libusb!\n");
 		return -1;
@@ -492,7 +493,7 @@ int ch341a_spi_init(void)
 #endif
 	uint16_t vid = devs_ch341a_spi[0].vendor_id;
 	uint16_t pid = devs_ch341a_spi[0].device_id;
-	handle = libusb_open_device_with_vid_pid(NULL, vid, pid);
+	handle = ms_usb_open(vid, pid);
 	if (handle == NULL) {
 		printf("Couldn't open device %04x:%04x.\n", vid, pid);
 		return -1;

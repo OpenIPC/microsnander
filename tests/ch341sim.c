@@ -4,6 +4,7 @@
    known pattern, so the order of the data read back can be checked. */
 #include <stdlib.h>
 #include "../src/ch341a_spi.c"
+#include "../src/usb.c"
 
 #define RATE_BYTES_PER_MS 60		/* ~60 KB/s of SPI stream */
 
@@ -70,6 +71,7 @@ int libusb_init(libusb_context **c) { (void)c; return 0; }
 void libusb_exit(libusb_context *c) { (void)c; }
 int libusb_set_option(libusb_context *c, enum libusb_option o, ...) { (void)c; (void)o; return 0; }
 void libusb_set_debug(libusb_context *c, int l) { (void)c; (void)l; }
+int libusb_wrap_sys_device(libusb_context *c, intptr_t fd, libusb_device_handle **h) { (void)c; (void)fd; *h = NULL; return -1; }
 libusb_device_handle *libusb_open_device_with_vid_pid(libusb_context *c, uint16_t v, uint16_t p) { (void)c; (void)v; (void)p; return NULL; }
 void libusb_close(libusb_device_handle *h) { (void)h; }
 int libusb_detach_kernel_driver(libusb_device_handle *h, int i) { (void)h; (void)i; return 0; }

@@ -16,6 +16,7 @@
 #include <string.h>
 #include <strings.h>
 #include <libusb-1.0/libusb.h>
+#include "usb.h"
 #include "ch347_spi.h"
 
 #define CH347_VID		0x1a86
@@ -114,12 +115,12 @@ int ch347_spi_init(void)
 
 	if (ch347)
 		return -1;
-	if (libusb_init(NULL) < 0) {
+	if (ms_usb_init() < 0) {
 		printf("Could not initialize libusb!\n");
 		return -1;
 	}
 	for (unsigned i = 0; i < sizeof(pids) / sizeof(pids[0]) && !ch347; i++)
-		if ((ch347 = libusb_open_device_with_vid_pid(NULL, CH347_VID, pids[i])))
+		if ((ch347 = ms_usb_open(CH347_VID, pids[i])))
 			pid = pids[i];
 	if (!ch347) {
 		printf("Couldn't open a CH347 (%04x:%04x or %04x:%04x).\n", CH347_VID, CH347T_PID, CH347_VID, CH347F_PID);

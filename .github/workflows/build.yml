@@ -4,7 +4,7 @@
 # tests (tests/run.sh), plus the
 # static musl builds the release ships (ci/build-musl.sh): x86_64 and 32-bit
 # ARM for cameras and boards, each started and checked for the version that
-# src/main.c defines.
+# src/main.c defines; and the Android app (android/), a debug APK.
 # On pull requests, version.yml runs .github/check-version.sh: a change to
 # the code or the build (this workflow included) comes with a new _VER and
 # its CHANGELOG.md section; the no-release label lets a change that keeps
@@ -115,6 +115,42 @@ jobs:
 
   # The one release, "latest": rebuilt from every push to main after all
   # builds pass, from the static binaries built and checked above.
+  # The Android app (android/): NDK build of src/ with libusb, lint without
+  # warnings, a debug-signed APK as an artifact. Not in the release yet.
+  android:
+    name: Android app (APK)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Java 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Gradle 8.11.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+
+      - name: NDK r27c
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;27.2.12479018" > /dev/null
+
+      - name: Build and lint
+        run: |
+          cd android
+          gradle --no-daemon assembleDebug lintDebug
+          cp app/build/outputs/apk/debug/app-debug.apk microsnander-android-debug.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v5
+        with:
+          name: microsnander-android-debug
+          path: android/microsnander-android-debug.apk
+          if-no-files-found: error
+
   release:
     name: Publish "latest"
     needs: [native, static]

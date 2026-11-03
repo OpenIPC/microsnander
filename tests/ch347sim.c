@@ -3,6 +3,7 @@
    the SPI bus would see, and answers like the chip, a read with a known pattern. */
 #include <stdlib.h>
 #include "../src/ch347_spi.c"
+#include "../src/usb.c"
 
 static unsigned short sim_pid = 0x55db;
 static int claimed_iface = -1, detached_iface = -1, attached_iface = -1;
@@ -23,6 +24,9 @@ static unsigned char pattern(unsigned int i) { return (unsigned char)(i * 29 + (
 int libusb_init(libusb_context **c) { (void)c; return 0; }
 void libusb_exit(libusb_context *c) { (void)c; }
 const char *libusb_error_name(int e) { (void)e; return "LIBUSB_ERROR"; }
+static int no_discovery, wrapped_fd = -1;
+int libusb_set_option(libusb_context *c, enum libusb_option o, ...) { (void)c; if (o == LIBUSB_OPTION_NO_DEVICE_DISCOVERY) no_discovery = 1; return 0; }
+int libusb_wrap_sys_device(libusb_context *c, intptr_t fd, libusb_device_handle **h) { (void)c; wrapped_fd = (int)fd; *h = (libusb_device_handle *)1; return 0; }
 libusb_device_handle *libusb_open_device_with_vid_pid(libusb_context *c, uint16_t v, uint16_t p)
 { (void)c; return v == 0x1a86 && p == sim_pid ? (libusb_device_handle *)1 : NULL; }
 void libusb_close(libusb_device_handle *h) { (void)h; }
@@ -127,6 +131,18 @@ int main(void)
 	check(ch347_set_speed("1.875M") == 0 && ch347_set_speed("100M") < 0, "-S accepts the listed speeds only");
 	sim_pid = 0;
 	check(ch347_spi_init() < 0, "no CH347: init fails");
+
+	/* Android: the device the USB manager opened, by its file descriptor */
+	ms_usb_fd = 42; ms_usb_vid = 0x1a86; ms_usb_pid = 0x55de; claimed_iface = -1;
+	check(ch347_spi_init() == 0 && wrapped_fd == 42 && no_discovery && claimed_iface == 4,
+	      "Android: the CH347F from its file descriptor, no device discovery, interface 4");
+	ch347_spi_shutdown();
+	ms_usb_pid = 0x55db; wrapped_fd = -1;
+	check(ch347_spi_init() == 0 && wrapped_fd == 42 && claimed_iface == 2, "  a CH347T: interface 2");
+	ch347_spi_shutdown();
+	ms_usb_vid = 0x1fc8; ms_usb_pid = 0x310b; wrapped_fd = -1;
+	check(ch347_spi_init() < 0 && wrapped_fd == -1, "  the opened device is not a CH347: init fails");
+	ms_usb_fd = -1;
 
 	if (!fail) printf("all ch347sim checks passed\n");
 	return fail;

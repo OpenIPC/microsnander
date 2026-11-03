@@ -51,7 +51,7 @@ extern int org;
 #define EHELP	""
 #endif
 
-#define _VER	"1.15.0"
+#define _VER	"1.16.0"
 
 const char *ms_version = _VER;
 

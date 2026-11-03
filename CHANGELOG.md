@@ -4,6 +4,18 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.16.0 — 2026-11-03
+
+- Android app (`android/`, minSdk 21): Detect, Read, Erase, Write and Registers as in
+  the web mode, with a CH341A, CH347 or EZP programmer on the USB host port of a phone or
+  TV box, no root. The dump `flash-YYYYMMDDHHMM-CHIP.bin` goes to Downloads; Save as… and
+  Share. The page style of the web mode; launcher icon and TV banner of the OpenIPC apps.
+- The same C code in both: the operations moved from `web.c` to `src/ops.c`, and the
+  drivers open their USB device through `src/usb.c`, which in the app takes the file
+  descriptor of the Android USB manager (`libusb_wrap_sys_device`, no device discovery).
+- CI builds the app (lint without warnings) and keeps a debug APK as an artifact.
+- `tests/ch347sim.c`: a CH347 opened from a file descriptor.
+
 ## 1.15.0 — 2026-11-03
 
 - Web mode: `-W [address:]port` runs microsnander as a service with a page in the

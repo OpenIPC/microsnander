@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- the programmers microsnander drives (decimal IDs) -->
+<resources>
+    <usb-device vendor-id="6790" product-id="21778" /> <!-- 1a86:5512 CH341A -->
+    <usb-device vendor-id="6790" product-id="21979" /> <!-- 1a86:55db CH347T -->
+    <usb-device vendor-id="6790" product-id="21982" /> <!-- 1a86:55de CH347F -->
+    <usb-device vendor-id="8136" product-id="12555" /> <!-- 1fc8:310b EZP -->
+    <usb-device vendor-id="8136" product-id="12556" /> <!-- 1fc8:310c EZP -->
+    <usb-device vendor-id="8136" product-id="12557" /> <!-- 1fc8:310d EZP -->
+</resources>

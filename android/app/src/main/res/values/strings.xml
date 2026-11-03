@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">MicroSNANDer</string>
+    <string name="subtitle">SPI NOR / NAND programmer · CH341A · CH347 · EZP</string>
+    <string name="console">FLASH CONSOLE</string>
+    <string name="version">V%1$s</string>
+    <string name="detect">Detect</string>
+    <string name="read">Read</string>
+    <string name="erase">Erase</string>
+    <string name="write">Write</string>
+    <string name="registers">Registers</string>
+    <string name="unprotect">Clear protection</string>
+    <string name="save_as">Save as…</string>
+    <string name="share">Share</string>
+    <string name="stand_by">STAND BY</string>
+    <string name="done">DONE</string>
+    <string name="failed">FAILED</string>
+    <string name="detecting">DETECTING</string>
+    <string name="reading">READING</string>
+    <string name="erasing">ERASING</string>
+    <string name="writing">WRITING</string>
+    <string name="verifying">VERIFYING</string>
+    <string name="reading_registers">READING REGISTERS</string>
+    <string name="unprotecting">UNPROTECTING</string>
+    <string name="press_detect">Plug a CH341A, CH347 or EZP programmer into the USB host port and press Detect.</string>
+    <string name="no_programmer">No programmer found: plug it into the USB host port (on a TV box, try the other port).</string>
+    <string name="no_permission">The USB permission for the programmer was not given.</string>
+    <string name="no_storage">Without the storage permission the dump cannot go to Downloads.</string>
+    <string name="erase_confirm">Erase the whole chip?</string>
+    <string name="write_confirm">Write this file from address 0 into the erased chip, then verify it? Erase the chip first.</string>
+    <string name="programmer_is">PROGRAMMER  %1$s</string>
+    <string name="chip_is">CHIP  %1$s · %2$s</string>
+    <string name="dump_is">DUMP  %1$s</string>
+    <string name="dump_kept">The dump is kept in the app; use Save as… or Share.</string>
+    <string name="saved_as">Saved.</string>
+    <string name="saving">SAVING</string>
+    <string name="cannot_keep">The dump could not be kept in the app.</string>
+    <string name="cannot_save">The dump could not be saved there.</string>
+    <string name="cannot_open">The file could not be opened.</string>
+    <string name="pick_file">A file to write (Downloads)</string>
+    <string name="no_files">No .bin file in Downloads: copy the image there first.</string>
+    <string name="no_picker_save">This device has no file picker: the dump is in Downloads, or use Share.</string>
+    <string name="status_registers">STATUS REGISTERS</string>
+    <string name="registers_hex">SR %1$02X %2$02X %3$02X</string>
+    <string name="sr_n">SR%1$d</string>
+    <string name="registers_note">Bit names as on most Winbond-type chips. Amber: a protection bit. Clear protection clears BP, SRP and CMP, as -u does, and keeps QE.</string>
+</resources>

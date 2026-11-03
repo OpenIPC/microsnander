@@ -45,6 +45,7 @@ sudo ./microsnander -w firmware.bin -v
 - [用法](#用法)
 - [示例](#示例)
 - [Web 模式](#web-模式)
+- [Android 应用](#android-应用)
 - [支持的芯片](#支持的芯片)
 - [数据不确定的芯片](#数据不确定的芯片)
 - [构建](#构建)
@@ -257,6 +258,27 @@ Restart=on-failure
 [Install]
 WantedBy=multi-user.target
 ```
+
+## Android 应用
+
+`android/` 是一个与 Web 模式按钮相同的应用（Detect、Read、Erase、Write、Registers），用于连接在
+手机或 Android TV 盒子 USB 主机端口上的 CH341A、CH347 或 EZP 编程器（Android 5.0 及以上，无需
+root；在电视盒子上会出现在主屏幕，可用遥控器操作）。
+
+<p align="center">
+  <img src="screenshots/android-main.png" alt="MicroSNANDer Android 版：显示屏、黄铜按钮" width="320">
+</p>
+
+- 插上编程器（手机需通过 OTG 转接头；电视盒子的某个端口可能只能作为设备端口，请换另一个），并允许
+  应用使用它。
+- **Read** 将 `flash-YYYYMMDDHHMM-芯片.bin` 保存到“下载”；**Save as…** 可保存到任意位置，**Share**
+  可发送给其他应用。
+- **Write** 通过文件选择器选取文件，从地址 0 写入已擦除的芯片，然后校验。**Erase** 擦除整片芯片。
+- **Registers** 和 **Clear protection** 与 Web 模式相同（通过 CH341A 或 CH347 操作 SPI NOR）。
+- 应用使用与 microsnander 相同的 C 代码（`src/`），由 NDK 编译，libusb 使用 Android USB 管理器
+  打开的设备。CI 会构建调试版 APK（构件 `microsnander-android-debug`）。
+
+构建：在安装了 Android SDK 和 NDK r27c 的环境中运行 `cd android && gradle assembleDebug`。
 
 ## 支持的芯片
 

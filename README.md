@@ -48,6 +48,7 @@ sudo ./microsnander -w firmware.bin -v
 - [Usage](#usage)
 - [Examples](#examples)
 - [Web mode](#web-mode)
+- [Android app](#android-app)
 - [Supported chips](#supported-chips)
 - [Chips with uncertain data](#chips-with-uncertain-data)
 - [Build](#build)
@@ -279,6 +280,31 @@ Restart=on-failure
 [Install]
 WantedBy=multi-user.target
 ```
+
+## Android app
+
+`android/` is an app with the same buttons as the web mode — Detect, Read, Erase, Write,
+Registers — for a CH341A, CH347 or EZP programmer on the USB host port of a phone or an
+Android TV box (Android 5.0 and later, no root; on a TV box it is on the home screen and works
+with the remote).
+
+<p align="center">
+  <img src="screenshots/android-main.png" alt="MicroSNANDer for Android: display, brass buttons" width="320">
+</p>
+
+- Plug the programmer in (through an OTG adapter on a phone; on a TV box one of its ports may
+  be a device port only — try the other) and allow the app to use it.
+- **Read** saves `flash-YYYYMMDDHHMM-CHIP.bin` to Downloads; **Save as…** puts it anywhere,
+  **Share** sends it to another app.
+- **Write** takes a file from the file picker and writes it from address 0 into an erased chip,
+  then verifies it. **Erase** erases the whole chip.
+- **Registers** and **Clear protection** as in the web mode (SPI NOR through the CH341A or the
+  CH347).
+- The app runs the same C code as microsnander (`src/`), built with the NDK, with libusb on the
+  device the Android USB manager opened. CI builds a debug APK (artifact
+  `microsnander-android-debug`).
+
+Build: `cd android && gradle assembleDebug` with the Android SDK and NDK r27c.
 
 ## Supported chips
 
