@@ -4,6 +4,30 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.13.0 — 2026-11-03
+
+- CH347 programmers: CH347T (`1a86:55db`, mode 1, SPI interface 2) and CH347F
+  (`1a86:55de`, interface 4), in the same build as the CH341A. The kernel driver, if
+  one has taken the interface, is detached for the run and attached back after it.
+- `-P ch341a|ch347|auto` chooses the programmer. By default (`auto`) the one
+  connected is used; with several connected microsnander asks for `-P`.
+- `-S 60M|30M|15M|7.5M|3.75M|1.875M` sets the SPI clock of the CH347; the default is
+  30 MHz, within the 50 MHz of the plain READ command of most chips.
+- `-S` with the CH341A, whose clock is fixed, is an error, given before the
+  programmer is opened. Two programmers of the same kind connected: refused, as it is
+  not known which one would be opened.
+- Every CH347 answer is checked: a write must be acknowledged with status 0, a read
+  answer must carry the read command and as many bytes as its length says.
+- EEPROM chips (`EEPROM_SUPPORT=y` builds) stay CH341A-only.
+- Checked on hardware: CH347T with a W25Q128JV (16 MB): chip erase 34 s, full read
+  7.2 s at 30 MHz and 5.2 s at 60 MHz (the CH341A reads 8 MB in 68 s), full write
+  485 s (writes are limited by USB round trips per page, #29), write with verify, all
+  read-backs identical.
+- `tests/ch347sim.c` runs `ch347_spi.c` against a fake libusb that plays a CH347:
+  configuration, chip select, writes and reads in 510-byte packets, CH347F interface.
+- README: the CH347 in the requirements, `-P` and `-S` in the usage, one udev rule
+  for both programmers.
+
 ## 1.12.2 — 2026-11-03
 
 - SPI NOR: the chip is ready when the write-in-progress bit of the status register is

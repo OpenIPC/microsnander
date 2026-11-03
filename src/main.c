@@ -26,7 +26,8 @@
 #include <stdio.h>
 
 #include "flashcmd_api.h"
-#include "ch341a_spi.h"
+#include "programmer.h"
+#include "ch347_spi.h"
 #include "spi_nand_flash.h"
 
 struct flash_cmd prog;
@@ -48,7 +49,7 @@ extern int org;
 #define EHELP	""
 #endif
 
-#define _VER	"1.12.2"
+#define _VER	"1.13.0"
 
 void title(void)
 {
@@ -77,7 +78,9 @@ void usage(int code)
 		" -w <filename>  write chip with data from filename\n"\
 		" -r <filename>  read chip and save data to filename\n"\
 		" -u             unprotect chip\n"\
-		" -v             verify after write on chip\n";
+		" -v             verify after write on chip\n"\
+		" -P <name>      programmer: ch341a, ch347, auto (default: the one connected)\n"\
+		" -S <speed>     SPI clock of the CH347: 60M, 30M (default), 15M, 7.5M, 3.75M, 1.875M\n";
 	printf(use);
 	exit(code);
 }
@@ -93,9 +96,9 @@ int main(int argc, char* argv[])
 	title();
 
 #ifdef EEPROM_SUPPORT
-	while ((c = getopt(argc, argv, "diIhveukLl:a:w:r:E:f:8")) != -1)
+	while ((c = getopt(argc, argv, "diIhveukLl:a:w:r:E:f:8P:S:")) != -1)
 #else
-	while ((c = getopt(argc, argv, "diIhveukLl:a:w:r:")) != -1)
+	while ((c = getopt(argc, argv, "diIhveukLl:a:w:r:P:S:")) != -1)
 #endif
 	{
 		switch(c)
@@ -150,6 +153,18 @@ int main(int argc, char* argv[])
 			case 'k':
 				Skip_BAD_page = 1;
 				break;
+			case 'P':
+				if (programmer_select(optarg) < 0) {
+					printf("Unknown programmer %s; use one of: %s.\n\n", optarg, programmer_names());
+					exit(1);
+				}
+				break;
+			case 'S':
+				if (ch347_set_speed(optarg) < 0) {
+					printf("Unknown SPI speed %s; use one of: %s.\n\n", optarg, ch347_speed_list());
+					exit(1);
+				}
+				break;
 			case 'd':
 				ECC_fcheck = 0;
 				_ondie_ecc_flag = 0;
@@ -198,11 +213,19 @@ int main(int argc, char* argv[])
 		return 1;
 	}
 
-	if (ch341a_spi_init() < 0) {
-		printf("Programmer device not found!\n\n");
+	ret = programmer_init();
+	if (ret < 0) {
+		if (ret == -1)
+			printf("Programmer device not found!\n\n");
 		return 1;
 	}
 
+#ifdef EEPROM_SUPPORT
+	if ((eepromsize > 0 || mw_eepromsize > 0) && strcmp(programmer->key, "ch341a")) {
+		printf("EEPROM chips are supported with the CH341A only.\n\n");
+		goto out;
+	}
+#endif
 	if((flen = flash_cmd_init(&prog)) <= 0)
 		goto out;
 
@@ -383,6 +406,6 @@ int main(int argc, char* argv[])
 	}
 
 out:
-	ch341a_spi_shutdown();
+	programmer_shutdown();
 	return rc;
 }

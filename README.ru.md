@@ -11,7 +11,7 @@
 [![Platform](https://img.shields.io/badge/platform-Linux-brightgreen)](#требования)
 
 MicroSNANDer — консольный программатор микросхем флеш-памяти SPI NOR и SPI NAND
-для недорогого USB-программатора CH341A. Он читает, записывает, стирает и проверяет
+для недорогих USB-программаторов CH341A и CH347. Он читает, записывает, стирает и проверяет
 флеш камер, роутеров и других плат, снимает защиту от записи с микросхем SPI NOR и
 знает 291 микросхему SPI NOR и 135 микросхем SPI NAND.
 
@@ -30,7 +30,7 @@ OpenIPC. Релизные файлы статические и без завис
 curl -fLo microsnander https://github.com/OpenIPC/microsnander/releases/latest/download/microsnander-linux-x86_64
 chmod +x microsnander
 
-# 2. Подключить CH341A с микросхемой и определить её
+# 2. Подключить программатор с микросхемой и определить её
 sudo ./microsnander -i
 
 # 3. Сохранить копию всей микросхемы, затем записать новый образ с проверкой
@@ -54,19 +54,32 @@ sudo ./microsnander -w firmware.bin -v
 
 ## Требования
 
-- Программатор CH341A (USB ID `1a86:5512`) в режиме SPI (перемычка на плате
-  программатора), с панелькой или клипсой для микросхемы. Линии данных у распространённой
-  чёрной платы CH341A работают на 5 В: для микросхем на 3,3 В нужна доработанная
-  плата на 3,3 В или преобразователь уровней, для микросхем на 1,8 В — переходник
-  на 1,8 В.
+- USB-программатор с панелькой или клипсой для микросхемы:
+  - CH341A (USB ID `1a86:5512`) в режиме SPI (перемычка на плате программатора).
+    Линии данных у распространённой чёрной платы CH341A работают на 5 В: для микросхем
+    на 3,3 В нужна доработанная плата на 3,3 В или преобразователь уровней, для
+    микросхем на 1,8 В — переходник на 1,8 В.
+  - CH347T (`1a86:55db`) в режиме 1 (UART + SPI + I2C, переключатель или перемычки
+    режима) или CH347F (`1a86:55de`). Намного быстрее CH341A (16 МБ читаются примерно за 7 с); частота SPI —
+    30 МГц, её меняет `-S`.
+
+  Если подключён один программатор, microsnander работает с ним; если несколько —
+  выберите нужный ключом `-P ch341a` или `-P ch347`. Драйвер ядра, занявший
+  программатор (например, `spi-ch341`), на время работы отключается и потом
+  возвращается.
 - Linux на x86_64 или 32-битном ARM (ARMv5TE и новее). Релизные файлы статические
   (musl, libusb встроена), ставить ничего не нужно.
-- Доступ к USB-устройству: запуск от root или правило udev для группы:
+- Доступ к USB-устройству: запуск от root или правило udev для группы (после него
+  переподключите программатор):
 
   ```sh
-  echo 'SUBSYSTEM=="usb", ATTR{idVendor}=="1a86", ATTR{idProduct}=="5512", MODE="0660", GROUP="plugdev"' |
-    sudo tee /etc/udev/rules.d/60-ch341a.rules
-  sudo udevadm control --reload-rules
+  sudo tee /etc/udev/rules.d/60-microsnander.rules <<'EOF'
+  SUBSYSTEM=="usb", ATTR{idVendor}=="1a86", ATTR{idProduct}=="5512", MODE="0660", GROUP="plugdev"
+  SUBSYSTEM=="usb", ATTR{idVendor}=="1a86", ATTR{idProduct}=="55db", MODE="0660", GROUP="plugdev"
+  SUBSYSTEM=="usb", ATTR{idVendor}=="1a86", ATTR{idProduct}=="55de", MODE="0660", GROUP="plugdev"
+  EOF
+  sudo usermod -aG plugdev "$USER"
+  sudo udevadm control --reload-rules && sudo udevadm trigger
   ```
 
 ## Релизы и постоянные ссылки
@@ -101,6 +114,8 @@ microsnander [options]
  -r <filename>  read chip and save data to filename
  -u             unprotect chip
  -v             verify after write on chip
+ -P <name>      programmer: ch341a, ch347, auto (default: the one connected)
+ -S <speed>     SPI clock of the CH347: 60M, 30M (default), 15M, 7.5M, 3.75M, 1.875M
 ```
 
 За один запуск — одна операция: `-i`, `-e`, `-r`, `-w` или `-u`. Без `-a` и `-l`

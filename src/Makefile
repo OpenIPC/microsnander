@@ -1,4 +1,4 @@
-# MicroSNANDer: SPI NOR/NAND programmer for CH341A, built with libusb-1.0.
+# MicroSNANDer: SPI NOR/NAND programmer for CH341A and CH347, built with libusb-1.0.
 #
 #   make                         native build against the system libusb
 #                                (Debian/Ubuntu: apt-get install libusb-1.0-0-dev)
@@ -20,7 +20,7 @@ CFLAGS ?= -Os
 ALL_CFLAGS = $(CFLAGS) -std=gnu99 -Wall -D_FILE_OFFSET_BITS=64 $(LIBUSB_CFLAGS)
 LDLIBS = $(LIBUSB_LIBS) -pthread
 
-OBJS = flashcmd_api.o spi_controller.o spi_nand_flash.o spi_nor_flash.o ch341a_spi.o timer.o main.o
+OBJS = flashcmd_api.o spi_controller.o spi_nand_flash.o spi_nor_flash.o programmer.o ch341a_spi.o ch347_spi.o timer.o main.o
 
 ifeq ($(EEPROM_SUPPORT),y)
     ALL_CFLAGS += -DEEPROM_SUPPORT
