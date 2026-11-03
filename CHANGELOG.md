@@ -4,6 +4,13 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.16.2 — 2026-11-03
+
+- Release: the check of the APK signer tries the build-tools from the newest down until
+  `apksigner` runs, and prints its output when none does. On the CI runner the newest
+  `apksigner` gave no signer, so 1.16.1 was not published; this is the first release with
+  `microsnander-android.apk`.
+
 ## 1.16.1 — 2026-11-03
 
 - The Android app is in the release: `microsnander-android.apk`, signed with the

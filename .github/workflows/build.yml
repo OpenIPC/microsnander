@@ -203,8 +203,17 @@ jobs:
           (cd android && gradle --no-daemon assembleRelease)
           rm -rf "$RUNNER_TEMP/keys"
           cp android/app/build/outputs/apk/release/app-release.apk microsnander-android.apk
-          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-          signer=$("$BT/apksigner" verify --print-certs microsnander-android.apk | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+          # the signer of an APK: the newest build-tools whose apksigner runs here
+          signer_of() {
+            for bt in $(ls -d "$ANDROID_HOME"/build-tools/* | sort -rV); do
+              if out=$("$bt/apksigner" verify --print-certs "$1" 2>&1); then
+                echo "$out" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p'; return 0
+              fi
+              echo "$bt/apksigner: $out" | head -3 >&2
+            done
+            return 1
+          }
+          signer=$(signer_of microsnander-android.apk) || { echo "::error::apksigner could not check the APK"; exit 1; }
           [ "$signer" = "$CERT_SHA256" ] ||
             { echo "::error::signed by $signer, not the project's certificate $CERT_SHA256"; exit 1; }
           echo "signed=true" >> "$GITHUB_OUTPUT"
@@ -258,8 +267,18 @@ jobs:
           if [ "$SIGNED" = true ]; then
             want=3
             # the project's certificate, or users of an earlier release cannot update
+            # the signer of an APK: the newest build-tools whose apksigner runs here
+            signer_of() {
+              for bt in $(ls -d "$ANDROID_HOME"/build-tools/* | sort -rV); do
+                if out=$("$bt/apksigner" verify --print-certs "$1" 2>&1); then
+                  echo "$out" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p'; return 0
+                fi
+                echo "$bt/apksigner: $out" | head -3 >&2
+              done
+              return 1
+            }
+            signer=$(signer_of dist/microsnander-android.apk) || { echo "::error::apksigner could not check the APK"; exit 1; }
             BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-            signer=$("$BT/apksigner" verify --print-certs dist/microsnander-android.apk | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
             [ "$signer" = "$CERT_SHA256" ] ||
               { echo "::error::microsnander-android.apk is not signed with the project's certificate"; exit 1; }
             "$BT/aapt" dump badging dist/microsnander-android.apk | grep -q "versionName='$ver'" ||
