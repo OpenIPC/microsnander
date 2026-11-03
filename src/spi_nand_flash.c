@@ -4912,9 +4912,7 @@ static void spi_nand_manufacute_init( struct SPI_NAND_FLASH_INFO_T *ptr_device_t
 			((ptr_device_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_FORESEE) && (ptr_device_t->dev_id == _SPI_NAND_DEVICE_ID_FS35ND04GS2Y2)) ||
 			((ptr_device_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_FORESEE) && (ptr_device_t->dev_id == _SPI_NAND_DEVICE_ID_F35UQA512M)) ||
 			((ptr_device_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_FORESEE) && (ptr_device_t->dev_id == _SPI_NAND_DEVICE_ID_F35UQA001G)) ||
-			((ptr_device_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_FORESEE) && (ptr_device_t->dev_id == _SPI_NAND_DEVICE_ID_F35UQA002G)) ||
-			((ptr_device_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_FORESEE) && (ptr_device_t->dev_id == _SPI_NAND_DEVICE_ID_F35SQA001G)) ||
-			((ptr_device_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_FORESEE) && (ptr_device_t->dev_id == _SPI_NAND_DEVICE_ID_F35SQA002G)))
+			((ptr_device_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_FORESEE) && (ptr_device_t->dev_id == _SPI_NAND_DEVICE_ID_F35UQA002G)))
 	{
 		/* 1. Unlock All block */
 		spi_nand_protocol_get_status_reg_1(&feature);
@@ -4968,8 +4966,11 @@ static void spi_nand_manufacute_init( struct SPI_NAND_FLASH_INFO_T *ptr_device_t
 		spi_nand_protocol_get_status_reg_1(&feature);
 		_SPI_NAND_DEBUG_PRINTF(SPI_NAND_FLASH_DEBUG_LEVEL_1, "After Unlock all block setup, the status register1 = 0x%x\n", feature);
 	}
-	else if((ptr_device_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_FORESEE) && (ptr_device_t->dev_id == _SPI_NAND_DEVICE_ID_F35SQA512M))
+	else if(((ptr_device_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_FORESEE) && (ptr_device_t->dev_id == _SPI_NAND_DEVICE_ID_F35SQA512M)) ||
+		((ptr_device_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_FORESEE) && (ptr_device_t->dev_id == _SPI_NAND_DEVICE_ID_F35SQA001G)) ||
+		((ptr_device_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_FORESEE) && (ptr_device_t->dev_id == _SPI_NAND_DEVICE_ID_F35SQA002G)))
 	{
+		/* BP3..BP0 and TB at bits 6..2 (A0 = 0x7c at power-up): all cleared */
 		/* 1. Unlock All block */
 		spi_nand_protocol_get_status_reg_1(&feature);
 		feature &= 0x83;
@@ -4997,6 +4998,41 @@ static void spi_nand_manufacute_init( struct SPI_NAND_FLASH_INFO_T *ptr_device_t
 
 		spi_nand_protocol_get_status_reg_2(&feature);
 		_SPI_NAND_DEBUG_PRINTF(SPI_NAND_FLASH_DEBUG_LEVEL_1, "After enable qual mode setup, the status register2 = 0x%x\n", feature);
+	}
+
+	/* the unlock above is per maker, with its own mask; a mask that misses a
+	   bit leaves blocks locked (the FORESEE F35SQA001G powers up with A0 =
+	   0x7c, BP3..BP0 and TB at bits 6..2, and 0xC7 kept BP3 and TB: its
+	   first 8 MB took no erase and no program). So check what is left of
+	   BP (bits 3..6) and clear bits 2..6, as the parts that use them want */
+	/* every die has its own register */
+	int dies = (ptr_device_t->feature & (SPI_NAND_FLASH_DIE_SELECT_1_HAVE | SPI_NAND_FLASH_DIE_SELECT_2_HAVE)) ? 2 : 1;
+
+	for (int die = 0; die < dies; die++) {
+		if (dies > 1) {
+			_die_id = die;
+			if (ptr_device_t->feature & SPI_NAND_FLASH_DIE_SELECT_1_HAVE)
+				spi_nand_protocol_die_select_1(_die_id);
+			else
+				spi_nand_protocol_die_select_2(_die_id);
+		}
+		if (spi_nand_protocol_get_status_reg_1(&feature) != SPI_NAND_FLASH_RTN_NO_ERROR || !(feature & 0x78))
+			continue;
+		unsigned char now = 0xff;	/* what the chip says after the write, not the value written */
+
+		if (spi_nand_protocol_set_status_reg_1(feature & 0x83) != SPI_NAND_FLASH_RTN_NO_ERROR ||
+		    spi_nand_protocol_get_status_reg_1(&now) != SPI_NAND_FLASH_RTN_NO_ERROR) {
+			_SPI_NAND_PRINTF("Warning: the unlock of the block lock register%s could not be checked "
+					 "(0x%02x before it).\n", dies > 1 ? (die ? " of die 1" : " of die 0") : "", feature);
+			continue;
+		}
+		feature = now;
+		if (feature & 0x78)
+			_SPI_NAND_PRINTF("Warning: the block lock register%s stays 0x%02x: some blocks stay locked "
+					 "(erase and program fail there).\n", dies > 1 ? (die ? " of die 1" : " of die 0") : "", feature);
+		else
+			_SPI_NAND_PRINTF("Blocks unlocked%s (the block lock register is 0x%02x now).\n",
+					 dies > 1 ? (die ? " on die 1" : " on die 0") : "", feature);
 	}
 }
 

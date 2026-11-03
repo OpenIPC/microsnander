@@ -214,6 +214,25 @@ int main(void)
 		      "the 1.8 V SPI NAND chips are told by their names, the others are 3.3 V");
 	}
 
+	/* the block lock register (A0) after the unlock: the FORESEE F35SQA001G
+	   powers up with 0x7c (BP3..BP0 and TB at bits 6..2), all of it goes;
+	   a chip whose maker mask misses bits is cleared by the check after it */
+	{
+		const struct SPI_NAND_FLASH_INFO_T *e = NULL;
+		const int n = sizeof(spi_nand_flash_tables) / sizeof(spi_nand_flash_tables[0]);
+
+		chip(0xcd, 0x71, 0x71);
+		feat[0xa0] = 0x7c;
+		check(snand_init() > 0 && !(feat[0xa0] & 0x7c), "FORESEE F35SQA001G: A0 0x7c at power-up is fully unlocked");
+		for (int i = 0; i < n && !e; i++)
+			if (!strcmp(spi_nand_flash_tables[i].ptr_name, "GIGADEVICE GD5F1GQ4UB"))
+				e = &spi_nand_flash_tables[i];
+		chip(e->mfr_id, e->dev_id, e->dev_id_2);
+		feat[0xa0] = 0x7c;
+		/* the GigaDevice mask 0xC1 keeps bit 6: only the check after it clears that */
+		check(snand_init() > 0 && !(feat[0xa0] & 0x78), "  a maker mask that keeps a BP bit (GD5F1GQ4UB, 0xC1): the check clears it");
+	}
+
 	chip(0xef, 0xaa, 0x21);
 	snand_init();
 	fill(buf, 3, 1);
