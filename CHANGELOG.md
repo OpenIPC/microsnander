@@ -4,6 +4,25 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.9.2 — 2026-11-03
+
+- CH341A: a long SPI stream goes to the programmer in parts of at most 16 KB, and
+  the USB timeout grows with the transfer size. A whole 64 KB NOR sector in one
+  transfer needed more than the flat 1 s timeout, so reading chips with 64 KB
+  sectors failed on the first sector. A failed NOR read prints where it stopped
+  instead of a wrong byte count.
+- SPI NAND: a page whose data is all `0xFF` is not programmed: it would change
+  nothing on the chip, and an erased page stays erased (its ECC bytes too).
+  Writing images with empty areas is faster. With `-k` such a page is still read
+  first, so a BAD page under it is skipped as on a read.
+- SPI NAND: waiting for the chip to finish a page read, program or block erase
+  stops after 3 s with an error; a chip that stays busy (or is not connected) hung
+  the program before. A write that stops reports the bytes actually written (the
+  count was always the full length), and a stopped erase does not print 100%.
+- Tests: `tests/ch341sim.c` runs `ch341a_spi.c` against a fake libusb that plays a
+  CH341A at its real stream speed; nandsim checks the `0xFF` pages and a chip that
+  stays busy.
+
 ## 1.9.1 — 2026-11-03
 
 - The banner shows the program name and version only.
