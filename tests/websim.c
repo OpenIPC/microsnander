@@ -134,7 +134,7 @@ int main(void)
 	extra = "";
 	wait_idle();
 	request("GET", "/api/state", NULL, NULL, 0);
-	check(strstr(body_of(), "\"ok\":false") && strstr(body_of(), "not the W25Q16") && mem[0] == 0x12,
+	check(strstr(body_of(), "\"ok\":false") && strstr(body_of(), "W25Q80 (1 MB) now, not the W25Q16 (2 MB)") && mem[0] == 0x12,
 	      "  refused before anything is erased");
 	extra = "Host: 127.0.0.1:8080\r\nX-MicroSNANDer-Chip: W25Q80;1048576\r\n";
 	request("POST", "/api/erase", NULL, NULL, 0);

@@ -39,6 +39,18 @@ static void progress(ms_progress cb, void *ctx, const char *phase, unsigned long
 		cb(ctx, phase, done, total);
 }
 
+/* "16 MB", "512 KB" or "300 bytes" */
+static const char *size_text(char *buf, size_t n, long long size)
+{
+	if (size >= 1 << 20 && !(size & ((1 << 20) - 1)))
+		snprintf(buf, n, "%lld MB", size >> 20);
+	else if (size >= 1024 && !(size & 1023))
+		snprintf(buf, n, "%lld KB", size >> 10);
+	else
+		snprintf(buf, n, "%lld bytes", size);
+	return buf;
+}
+
 /* the chip the user confirmed for the next operation: Erase and Write go
    only to it; "" takes any */
 static char expect_chip[64];
@@ -87,8 +99,10 @@ static int chip_open(struct ms_chip *c, char *msg, size_t n, int confirmed)
 	c->voltage = ms_voltage(c->chip);
 	ms_voltage_warning(c->programmer, c->chip, c->warning, sizeof(c->warning));
 	if (want[0] && (strcmp(c->chip, want) || c->size != want_size)) {
-		say(msg, n, "The chip is %s (%lld MB) now, not the %s (%lld MB) confirmed: nothing done.",
-		    c->chip, c->size >> 20, want, want_size >> 20);
+		char now[24], was[24];
+
+		say(msg, n, "The chip is %s (%s) now, not the %s (%s) confirmed: nothing done.",
+		    c->chip, size_text(now, sizeof(now), c->size), want, size_text(was, sizeof(was), want_size));
 		programmer_shutdown();
 		return -1;
 	}
