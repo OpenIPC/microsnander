@@ -9,9 +9,9 @@
 #                  soft-float) — runs on every 32-bit ARM camera and board
 #
 # Produces <outdir>/microsnander-linux-<target>: static, stripped, no version in the
-# name, so the release links never change. libusb is built from its release tarball
-# for the target, without udev (devices are found by scanning /dev/bus/usb), so the
-# binary has no dependencies and runs whatever the libc of the system. Any compiler
+# name, so the release links never change. The programmers are reached through the
+# Linux usbfs (/dev/bus/usb) by src/usbfs.c, without libusb, so the binary has no
+# dependencies and runs whatever the libc of the system. Any compiler
 # warning in microsnander fails the build. The binary must start and print the
 # version that src/main.c defines (under qemu-user for arm).
 #
@@ -27,10 +27,6 @@ CACHE=${TOOLCHAIN_CACHE:-$HOME/.cache/microsnander-toolchains}
 # Relative paths are the caller's: the build below runs elsewhere.
 case "$OUT" in /*) ;; *) OUT=$PWD/$OUT ;; esac
 case "$CACHE" in /*) ;; *) CACHE=$PWD/$CACHE ;; esac
-
-LIBUSB_VERSION=1.0.30
-LIBUSB_SHA=fea36f34f9156400209595e300840767ab1a385ede1dc7ee893015aea9c6dbaf
-LIBUSB_URL=https://github.com/libusb/libusb/releases/download/v$LIBUSB_VERSION/libusb-$LIBUSB_VERSION.tar.bz2
 
 OPENIPC=https://github.com/OpenIPC/firmware/releases/download/toolchain
 BOOTLIN=https://toolchains.bootlin.com/downloads/releases/toolchains
@@ -88,30 +84,10 @@ BUILD=$ROOT/build/musl-$ARCH
 rm -rf "$BUILD"
 mkdir -p "$BUILD" "$OUT"
 
-# libusb for the target: static only, no udev.
-# ac_cv_header_linux_netlink_h=yes: configure checks <linux/netlink.h> on its own,
-# and the Linux 3.0 headers of the OpenIPC toolchain need <sys/socket.h> first
-# (sa_family_t); libusb itself includes them in that order (os/linux_netlink.c).
-echo "building libusb $LIBUSB_VERSION for $HOST"
-fetch "$LIBUSB_URL" "$LIBUSB_SHA" "$BUILD/libusb.tar.bz2"
-tar -xjf "$BUILD/libusb.tar.bz2" -C "$BUILD"
-(
-    cd "$BUILD/libusb-$LIBUSB_VERSION"
-    ./configure -q --host="$HOST" --prefix="$BUILD/libusb" CC="${CROSS}gcc" \
-        --enable-static --disable-shared --disable-udev --disable-examples-build \
-        --disable-tests-build ac_cv_header_linux_netlink_h=yes \
-        > "$BUILD/libusb-configure.log" 2>&1 ||
-        { cat "$BUILD/libusb-configure.log"; exit 1; }
-    make -s -j"$(nproc)" install > "$BUILD/libusb-build.log" 2>&1 ||
-        { cat "$BUILD/libusb-build.log"; exit 1; }
-)
-
 # microsnander: objects of another toolchain are never rebuilt by make, so clean first
 make -s -C "$ROOT/src" clean
 # No pipe: a failing make must stop the script (sh has no pipefail).
-if ! make -C "$ROOT/src" CC="${CROSS}gcc" LDFLAGS=-static \
-        LIBUSB_CFLAGS="-I$BUILD/libusb/include" \
-        LIBUSB_LIBS="$BUILD/libusb/lib/libusb-1.0.a" > "$BUILD/build.log" 2>&1; then
+if ! make -C "$ROOT/src" CC="${CROSS}gcc" LDFLAGS=-static > "$BUILD/build.log" 2>&1; then
     cat "$BUILD/build.log"
     exit 1
 fi

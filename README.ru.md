@@ -83,7 +83,8 @@ sudo ./microsnander -w firmware.bin -v
   программатор (например, `spi-ch341`), на время работы отключается и потом
   возвращается.
 - Linux на x86_64 или 32-битном ARM (ARMv5TE и новее). Релизные файлы статические
-  (musl, libusb встроена), ставить ничего не нужно.
+  (musl), без libusb: с программаторами microsnander работает сам, через usbfs Linux
+  (`/dev/bus/usb`). Ставить ничего не нужно.
 - Доступ к USB-устройству: запуск от root или правило udev для группы (после него
   переподключите программатор):
 
@@ -309,8 +310,8 @@ Android TV (Android 5.0 и новее, без root; на приставке он
   проверяет; файл читается частями, целиком в память не загружается. **Erase** стирает всю
   микросхему.
 - **Registers** и **Clear protection** — как в веб-режиме (SPI NOR через CH341A или CH347).
-- Приложение работает на том же коде C, что и microsnander (`src/`), собранном NDK, с libusb на
-  устройстве, которое открыл менеджер USB Android. Подписанный APK — в релизе:
+- Приложение работает на том же коде C, что и microsnander (`src/`), собранном NDK, с устройством,
+  которое открыл менеджер USB Android (через его файловый дескриптор и код usbfs, без libusb). Подписанный APK — в релизе:
   `microsnander-android.apk` в [latest](https://github.com/OpenIPC/microsnander/releases/latest).
 
 Сборка: `cd android && gradle assembleDebug` с Android SDK и NDK r27c.
@@ -378,12 +379,15 @@ GD5F..R, Winbond W25N..W, Macronix MX35UF, Micron MT29F..ABB, ESMT F50D, Dosilic
 
 ## Сборка
 
-Обычная сборка с системной libusb (Debian, Ubuntu):
+Обычная сборка (Debian, Ubuntu): библиотеки не нужны, к программаторам `src/usbfs.c`
+обращается через usbfs Linux:
 
 ```sh
-sudo apt-get install build-essential libusb-1.0-0-dev
+sudo apt-get install build-essential
 make -C src
 ```
+
+`make -C src LIBUSB=1` собирает с libusb-1.0 (`libusb-1.0-0-dev`) — для сравнения.
 
 Микросхемы EEPROM I2C (24Cxx) и Microwire (93Cxx) не поддерживаются: microsnander —
 программатор SPI NOR и SPI NAND. Часть EEPROM из оригинального SNANDer (`-E`, `-8`, `-f`)
@@ -391,7 +395,7 @@ make -C src
 
 Статические релизные файлы собирает `ci/build-musl.sh` (Docker или любой Linux
 x86_64 с `curl`, `make` и, для arm, `qemu-user`). Скрипт скачивает тулчейн musl и
-libusb, проверяет их по SHA256 и собирает libusb статически, без udev:
+проверяет его по SHA256:
 
 ```sh
 ci/build-musl.sh x86_64 dist    # dist/microsnander-linux-x86_64

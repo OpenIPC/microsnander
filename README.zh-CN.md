@@ -72,8 +72,8 @@ sudo ./microsnander -w firmware.bin -v
 
   只连接一个编程器时 microsnander 直接使用它；连接多个时请用 `-P ch341a`、`-P ch347` 或 `-P ezp`
   选择。占用编程器的内核驱动（例如 `spi-ch341`）会在运行期间分离，结束后重新绑定。
-- x86_64 或 32 位 ARM（ARMv5TE 及以上）上的 Linux。发布的二进制文件为静态链接（musl，
-  内置 libusb），无需安装任何东西。
+- x86_64 或 32 位 ARM（ARMv5TE 及以上）上的 Linux。发布的二进制文件为静态链接（musl），
+  不使用 libusb：microsnander 自己通过 Linux usbfs（`/dev/bus/usb`）访问编程器。无需安装任何东西。
 - USB 设备访问权限：以 root 运行，或用 udev 规则授权给某个用户组（之后重新插拔编程器）：
 
   ```sh
@@ -279,8 +279,8 @@ root；在电视盒子上会出现在主屏幕，可用遥控器操作）。
   可发送给其他应用。
 - **Write** 通过文件选择器选取文件，从地址 0 写入已擦除的芯片，然后校验；文件分段读取，不会整个载入内存。**Erase** 擦除整片芯片。
 - **Registers** 和 **Clear protection** 与 Web 模式相同（通过 CH341A 或 CH347 操作 SPI NOR）。
-- 应用使用与 microsnander 相同的 C 代码（`src/`），由 NDK 编译，libusb 使用 Android USB 管理器
-  打开的设备。签名的 APK 在发布版中：[latest](https://github.com/OpenIPC/microsnander/releases/latest) 里的 `microsnander-android.apk`。
+- 应用使用与 microsnander 相同的 C 代码（`src/`），由 NDK 编译，访问 Android USB 管理器打开的
+  设备（通过其文件描述符和 usbfs 代码，不使用 libusb）。签名的 APK 在发布版中：[latest](https://github.com/OpenIPC/microsnander/releases/latest) 里的 `microsnander-android.apk`。
 
 构建：在安装了 Android SDK 和 NDK r27c 的环境中运行 `cd android && gradle assembleDebug`。
 
@@ -340,19 +340,20 @@ OOB 大小只影响使用 `-d` 的原始转储（每页连同 spare 区一起读
 
 ## 构建
 
-使用系统 libusb 的本机构建（Debian、Ubuntu）：
+本机构建（Debian、Ubuntu）：不需要任何库，`src/usbfs.c` 通过 Linux usbfs 访问编程器：
 
 ```sh
-sudo apt-get install build-essential libusb-1.0-0-dev
+sudo apt-get install build-essential
 make -C src
 ```
+
+`make -C src LIBUSB=1` 改为基于 libusb-1.0 构建（`libusb-1.0-0-dev`），用于对比。
 
 不支持 I2C（24Cxx）和 Microwire（93Cxx）EEPROM 芯片：microsnander 用于 SPI NOR 和 SPI NAND
 闪存。原版 SNANDer 的 EEPROM 部分（`-E`、`-8`、`-f`）已删除。
 
 静态发布文件由 `ci/build-musl.sh` 构建（Docker 或任何带 `curl`、`make` 的 x86_64
-Linux，arm 还需要 `qemu-user`）。脚本会下载 musl 工具链和 libusb，按 SHA256 校验，
-并以静态方式、不带 udev 构建 libusb：
+Linux，arm 还需要 `qemu-user`）。脚本会下载 musl 工具链并按 SHA256 校验：
 
 ```sh
 ci/build-musl.sh x86_64 dist    # dist/microsnander-linux-x86_64

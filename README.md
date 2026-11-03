@@ -82,7 +82,8 @@ sudo ./microsnander -w firmware.bin -v
   `-P ch341a`, `-P ch347` or `-P ezp`. A kernel driver that has taken the programmer (for
   example `spi-ch341`) is detached for the run and attached back after it.
 - Linux on x86_64 or 32-bit ARM (ARMv5TE and later). The release binaries are
-  static (musl, libusb built in), nothing to install.
+  static (musl), without libusb: microsnander talks to the programmers through the Linux
+  usbfs (`/dev/bus/usb`) itself. Nothing to install.
 - Access to the USB device: run as root, or allow it to a group with a udev rule
   (then replug the programmer):
 
@@ -305,8 +306,8 @@ with the remote).
   then verifies it; the file is read in parts, not held in memory. **Erase** erases the whole chip.
 - **Registers** and **Clear protection** as in the web mode (SPI NOR through the CH341A or the
   CH347).
-- The app runs the same C code as microsnander (`src/`), built with the NDK, with libusb on the
-  device the Android USB manager opened. The signed APK is in the release:
+- The app runs the same C code as microsnander (`src/`), built with the NDK, on the device the
+  Android USB manager opened (its file descriptor, through the usbfs code, no libusb). The signed APK is in the release:
   `microsnander-android.apk` in [latest](https://github.com/OpenIPC/microsnander/releases/latest).
 
 Build: `cd android && gradle assembleDebug` with the Android SDK and NDK r27c.
@@ -373,12 +374,15 @@ pages with `0xFF` to the new OOB size first.
 
 ## Build
 
-Native build against the system libusb (Debian, Ubuntu):
+Native build (Debian, Ubuntu): no libraries are needed, the programmers are reached through
+the Linux usbfs by `src/usbfs.c`:
 
 ```sh
-sudo apt-get install build-essential libusb-1.0-0-dev
+sudo apt-get install build-essential
 make -C src
 ```
+
+`make -C src LIBUSB=1` builds against libusb-1.0 instead (`libusb-1.0-0-dev`), for comparison.
 
 I2C (24Cxx) and Microwire (93Cxx) EEPROM chips are not supported: microsnander is for
 SPI NOR and SPI NAND flash. The EEPROM part of the original SNANDer (`-E`, `-8`, `-f`)
@@ -386,7 +390,7 @@ was removed.
 
 The static release binaries are built by `ci/build-musl.sh` (Docker or any Linux
 x86_64 host with `curl`, `make` and, for arm, `qemu-user`). It downloads the musl
-toolchain and libusb, checks them by SHA256, and builds libusb static without udev:
+toolchain and checks it by SHA256:
 
 ```sh
 ci/build-musl.sh x86_64 dist    # dist/microsnander-linux-x86_64

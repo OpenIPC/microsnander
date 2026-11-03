@@ -26,6 +26,7 @@ ${CC:-cc} -std=gnu99 -Wall -Werror -O1 -o "$W/norsim" "$T/norsim.c" "$T/../src/t
 ${CC:-cc} -std=gnu99 -Wall -Werror -O1 -I"$T/../src" ${LIBUSB_CFLAGS:-} -o "$W/ch347sim" "$T/ch347sim.c" || exit 1
 ${CC:-cc} -std=gnu99 -Wall -Werror -O1 -I"$T/../src" ${LIBUSB_CFLAGS:-} -o "$W/ezpsim" "$T/ezpsim.c" "$T/../src/timer.c" || exit 1
 ${CC:-cc} -std=gnu99 -Wall -Werror -O1 -I"$T/../src" -o "$W/spisim" "$T/spisim.c" || exit 1
+${CC:-cc} -std=gnu99 -Wall -Werror -O1 -I"$T/../src" -o "$W/usbfssim" "$T/usbfssim.c" || exit 1
 make -s -C "$T/../src" web_page.h || exit 1
 ${CC:-cc} -std=gnu99 -Wall -Werror -O1 -I"$T/../src" -o "$W/websim" "$T/websim.c" -pthread || exit 1
 cd "$W"; B=./ms; fail=0
@@ -105,6 +106,8 @@ grep -a '^ok\|^FAIL' ch347sim.log
 grep -a '^ok\|^FAIL' ezpsim.log
 ./spisim > spisim.log 2>&1 || fail=1
 grep -a '^ok\|^FAIL' spisim.log
+./usbfssim > usbfssim.log 2>&1 || fail=1
+grep -a '^ok\|^FAIL' usbfssim.log
 ./websim > websim.log 2>&1 || fail=1
 grep -a '^ok\|^FAIL' websim.log
 [ "$fail" = 0 ] && echo "all tests passed"

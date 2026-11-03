@@ -10,7 +10,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
-#include <libusb-1.0/libusb.h>
 #include "programmer.h"
 #include "ch341a_spi.h"
 #include "ch347_spi.h"
