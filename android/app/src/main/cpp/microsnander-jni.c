@@ -121,16 +121,16 @@ JNIEXPORT jobject JNICALL FN(erase)(JNIEnv *env, jclass cls, jint fd, jint vid, 
 JNIEXPORT jobject JNICALL FN(selftest)(JNIEnv *env, jclass cls, jint fd, jint vid, jint pid, jstring jdir)
 {
 	struct ms_chip c;
-	char msg[512] = "";
+	char msg[512] = "", saved[160] = "";
 	const char *dir = (*env)->GetStringUTFChars(env, jdir, NULL);
 	int ret;
 	(void)cls;
 
 	use_device(fd, vid, pid);
 	mkdir(dir, 0700);
-	ret = ms_selftest(&c, dir, msg, sizeof(msg));
+	ret = ms_selftest(&c, dir, saved, sizeof(saved), msg, sizeof(msg));
 	(*env)->ReleaseStringUTFChars(env, jdir, dir);
-	return result(env, ret == 0, msg, &c, NULL);
+	return result(env, ret == 0, msg, &c, saved);	/* name: the block saved in dir, "" */
 }
 
 /* the chip the next operation must find (the one the user confirmed) */

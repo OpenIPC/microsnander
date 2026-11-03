@@ -23,6 +23,8 @@ struct selftest {
 	const char *save_dir;		/* where the block goes if it does not come back; NULL: here */
 	char *out;			/* NULL, or the result lines are kept here too */
 	size_t out_size;
+	char *saved;			/* NULL, or the name (no directory) of the block saved there */
+	size_t saved_size;
 	int block_locks;		/* SPI NOR of the SST26 type: blocks locked at power-up, not in SR */
 };
 

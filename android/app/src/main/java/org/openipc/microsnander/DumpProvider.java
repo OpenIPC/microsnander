@@ -22,7 +22,7 @@ public class DumpProvider extends ContentProvider {
     /** a dump of files/dumps by its name only, no other file */
     private File file(Uri u) throws FileNotFoundException {
         String name = u.getLastPathSegment();
-        if (name == null || name.contains("/") || !name.startsWith("flash-") || !name.endsWith(".bin"))
+        if (name == null || name.contains("/") || !MainActivity.isDump(name))
             throw new FileNotFoundException();
         File f = new File(new File(getContext().getFilesDir(), "dumps"), name);
         if (!f.isFile())

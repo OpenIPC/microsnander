@@ -229,8 +229,18 @@ static void *worker(void *arg)
 			   ret = ms_write_file(&c, upload, on_progress, NULL, msg, sizeof(msg)); break;
 	case OP_REGISTERS: ret = ms_registers(&c, msg, sizeof(msg)); break;
 	case OP_UNPROTECT: ret = ms_unprotect(&c, msg, sizeof(msg)); break;
-	case OP_SELFTEST:  ms_expect(want_chip, want_size);	/* it erases the first block */
-			   ret = ms_selftest(&c, web_dir, msg, sizeof(msg)); break;
+	case OP_SELFTEST: {
+		char saved[160];
+
+		ms_expect(want_chip, want_size);		/* it erases the first block */
+		ret = ms_selftest(&c, web_dir, saved, sizeof(saved), msg, sizeof(msg));
+		if (saved[0]) {					/* the block that did not come back */
+			pthread_mutex_lock(&st.lock);
+			snprintf(st.file, sizeof(st.file), "%s", saved);
+			pthread_mutex_unlock(&st.lock);
+		}
+		break;
+	}
 	}
 	keep_chip(&c, op == OP_DETECT || op == OP_REGISTERS || op == OP_UNPROTECT || op == OP_SELFTEST);
 	set_msg("%s", msg);
@@ -436,12 +446,14 @@ static int host_ok(const char *headers)
 	return 0;
 }
 
-/* a dump name made by Read: no path, flash-*.bin */
+/* a dump name made by Read (flash-*.bin) or the block a self-test saved
+   (selftest-*.bin): no path */
 static int dump_ok(const char *name)
 {
 	size_t n = strlen(name);
+	int read = n > 10 && !strncmp(name, "flash-", 6), saved = n > 13 && !strncmp(name, "selftest-", 9);
 
-	return n > 10 && !strncmp(name, "flash-", 6) && !strcmp(name + n - 4, ".bin") && !strchr(name, '/') && !strstr(name, "..");
+	return (read || saved) && !strcmp(name + n - 4, ".bin") && !strchr(name, '/') && !strstr(name, "..");
 }
 
 static void send_dump(int fd, const char *name)
@@ -638,6 +650,10 @@ static void handle(int fd)
 			want[k++] = *h++;
 		want[k] = 0;
 		want_sz = *h == ';' ? strtoll(h + 1, NULL, 10) : 0;
+	}
+	if (op == OP_SELFTEST && (!want[0] || want_sz <= 0)) {	/* the page always names the chip */
+		reply_text(fd, "400 Bad Request", "A self-test needs the chip confirmed: X-MicroSNANDer-Chip: NAME;SIZE.\n");
+		return;
 	}
 	unsigned int seq;
 

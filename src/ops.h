@@ -39,8 +39,9 @@ int ms_write_file(struct ms_chip *chip, FILE *f, ms_progress cb, void *ctx, char
 int ms_registers(struct ms_chip *chip, char *msg, size_t n);
 /* -t on the first block of the chip ms_expect() names: 0 OK, 2 protected,
    1 failed, -1 no chip; msg gets the protection and the verdict. A block
-   that does not come back is saved in save_dir (NULL: the current one). */
-int ms_selftest(struct ms_chip *chip, const char *save_dir, char *msg, size_t n);
+   that does not come back is saved in save_dir (NULL: the current one),
+   and its name (no directory) goes to saved, "" when nothing is saved. */
+int ms_selftest(struct ms_chip *chip, const char *save_dir, char *saved, size_t saved_n, char *msg, size_t n);
 int ms_unprotect(struct ms_chip *chip, char *msg, size_t n);
 
 /* the chip (name and size of a Detect) the next operation must find, or

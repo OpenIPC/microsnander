@@ -294,7 +294,7 @@ out:
 	return ret;
 }
 
-int ms_selftest(struct ms_chip *c, const char *save_dir, char *msg, size_t n)
+int ms_selftest(struct ms_chip *c, const char *save_dir, char *saved, size_t saved_n, char *msg, size_t n)
 {
 	struct selftest t = { 0 };
 	int ret;
@@ -318,6 +318,10 @@ int ms_selftest(struct ms_chip *c, const char *save_dir, char *msg, size_t n)
 	t.save_dir = save_dir;
 	t.out = msg;
 	t.out_size = n;
+	t.saved = saved;
+	t.saved_size = saved_n;
+	if (saved && saved_n)
+		saved[0] = 0;
 	msg[0] = 0;
 	ret = selftest(&t);
 	/* the lines one after the other: keep the last (the verdict) and the protection */

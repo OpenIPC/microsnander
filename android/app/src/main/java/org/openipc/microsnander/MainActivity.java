@@ -197,9 +197,14 @@ public class MainActivity extends Activity {
         super.onDestroy();
     }
 
+    /** a file of files/dumps: a Read (flash-*.bin) or a block a self-test saved (selftest-*.bin) */
+    static boolean isDump(String n) {
+        return (n.startsWith("flash-") || n.startsWith("selftest-")) && n.endsWith(".bin");
+    }
+
     /** the newest dump the app keeps (files/dumps), or null */
     private File lastDump() {
-        File[] l = new File(getFilesDir(), "dumps").listFiles((d, n) -> n.startsWith("flash-") && n.endsWith(".bin"));
+        File[] l = new File(getFilesDir(), "dumps").listFiles((d, n) -> isDump(n));
         File last = null;
         if (l != null)
             for (File f : l)
@@ -304,10 +309,18 @@ public class MainActivity extends Activity {
 
     /** -t on the first block, only if it is still the chip r found */
     private void selftest(Native.Result r) {
-        String dir = new File(getFilesDir(), "dumps").getPath();	// a block that does not come back goes there
+        Context app = getApplicationContext();
+        File dir = new File(getFilesDir(), "dumps");	// a block that does not come back goes there
         run(R.string.selftesting, true, (fd, vid, pid, p) -> {
             Native.expect(r.chip, r.size);
-            return Native.selftest(fd, vid, pid, dir);
+            Native.Result t = Native.selftest(fd, vid, pid, dir.getPath());
+            if (t == null || t.name.isEmpty())
+                return t;
+            // the old data of that block: a copy in Downloads too, for the Write picker
+            String where = toDownloads(app, new File(dir, t.name));
+            String more = where != null ? app.getString(R.string.dump_is, where) : app.getString(R.string.dump_kept);
+            return new Native.Result(t.ok, t.message + "\n" + more, t.programmer, t.chip, t.size, t.sr, t.name,
+                    t.voltage, t.warning);
         });
     }
 

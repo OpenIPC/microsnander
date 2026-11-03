@@ -218,24 +218,33 @@ restore:
 		if (t->cmd->flash_erase(a, n) ||
 		    (!blank && t->cmd->flash_write(orig, a, n) != (int)n) ||
 		    t->cmd->flash_read(buf, a, n) != (int)n || memcmp(buf, orig, n)) {
-			char name[240];
-			FILE *f;
-
-			char base[120];
+			char base[120], *name;
+			FILE *f = NULL;
 
 			snprintf(base, sizeof(base), "selftest-%s-0x%llx.bin", t->chip, a);
 			for (char *p = base; *p; p++)
 				if (*p == ' ' || *p == '/')
 					*p = '_';
-			if (t->save_dir)
-				snprintf(name, sizeof(name), "%.100s/%s", t->save_dir, base);
-			else
-				snprintf(name, sizeof(name), "%s", base);
-			if ((f = fopen(name, "wb")) && fwrite(orig, 1, n, f) == n && !fclose(f))
+			/* the whole directory, never a shortened one */
+			name = malloc((t->save_dir ? strlen(t->save_dir) + 1 : 0) + strlen(base) + 1);
+			if (name) {
+				sprintf(name, "%s%s%s", t->save_dir ? t->save_dir : "", t->save_dir ? "/" : "", base);
+				f = fopen(name, "wb");
+			}
+			int kept = f && fwrite(orig, 1, n, f) == n;
+
+			if (f && fclose(f))
+				kept = 0;
+			if (kept) {
 				report(t, "Self-test: the block did not come back as it was: its old data is in %s "
 				       "(write it with -a 0x%llx -w %s).\n", name, a, name);
-			else
-				report(t, "Self-test: the block did not come back as it was, and %s cannot be written.\n", name);
+				if (t->saved)
+					snprintf(t->saved, t->saved_size, "%s", base);
+			} else {
+				report(t, "Self-test: the block did not come back as it was, and %s cannot be written.\n",
+				       name ? name : base);
+			}
+			free(name);
 			ret = 1;
 			goto out;
 		}

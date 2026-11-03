@@ -22,7 +22,8 @@ final class Native {
         final long size;
         /** SR1 << 16 | SR2 << 8 | SR3, or -1 when they cannot be read */
         final int sr;
-        /** for a read: the dump name, flash-YYYYMMDDHHMM-CHIP.bin */
+        /** for a read: the dump name, flash-YYYYMMDDHHMM-CHIP.bin; for a self-test: the block
+         *  that did not come back, selftest-CHIP-0x0.bin, or "" */
         final String name;
         /** the chip's supply: "3.3", "1.8", "1.65-3.6"; "" without a chip */
         final String voltage;

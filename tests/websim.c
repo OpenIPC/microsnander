@@ -24,7 +24,8 @@ const struct programmer *programmer;
 int programmer_init(bool need_clock) { (void)need_clock; if (fail_open) return -1; programmer = use_ch341a ? &fake341 : &fake; opens++; return 0; }
 int programmer_shutdown(void) { programmer = NULL; return 0; }
 static int f_read(unsigned char *b, unsigned long from, unsigned long len) { memcpy(b, mem + from, len); return len; }
-static int f_write(unsigned char *b, unsigned long to, unsigned long len) { for (unsigned long i = 0; i < len; i++) mem[to + i] &= b[i]; return len; }
+static int write_no, fail_write;	/* fail_write: the write of that number (from 1) fails */
+static int f_write(unsigned char *b, unsigned long to, unsigned long len) { if (fail_write && ++write_no == fail_write) return -1; for (unsigned long i = 0; i < len; i++) mem[to + i] &= b[i]; return len; }
 static int f_erase(unsigned long offs, unsigned long len) { memset(mem + offs, 0xff, len); return 0; }
 static int f_unprotect(void) { unprotects++; return 0; }
 static int swap_chip, inits;		/* swap_chip: another chip from the second open on */
@@ -303,6 +304,22 @@ int main(void)
 	wait_idle();
 	request("GET", "/api/state", NULL, NULL, 0);
 	check(strstr(body_of(), "not the W25Q16") != NULL, "  for another chip than the one in the socket: refused");
+	check(request("POST", "/api/selftest", NULL, NULL, 0) == 400 && !memcmp(mem, "loader", 6),
+	      "  without the chip confirmed: 400, nothing starts");
+	write_no = 0;
+	fail_write = 2;					/* the pattern goes in, the old data does not */
+	extra = "Host: 127.0.0.1:8080\r\nX-MicroSNANDer-Chip: W25Q80;1048576\r\n";
+	request("POST", "/api/selftest", NULL, NULL, 0);
+	extra = "";
+	wait_idle();
+	fail_write = 0;
+	request("GET", "/api/state", NULL, NULL, 0);
+	check(strstr(body_of(), "\"ok\":false") && strstr(body_of(), "\"file\":\"selftest-W25Q80-0x0.bin\"") &&
+	      strstr(body_of(), "did not come back as it was: its old data is in /tmp/websim"),
+	      "  a block that does not come back: saved in the dump directory, its name in the state");
+	check(request("GET", "/dumps/selftest-W25Q80-0x0.bin", NULL, NULL, 0) == 200 && !memcmp(body_of(), "loader", 6),
+	      "  and the page can download it");
+	memcpy(mem, "loader", 6);
 	sim_sr1 = 0x1c;
 	check(strstr(web_page, "id=\"b-selftest\" disabled") != NULL, "  the page has the Self-test button, off without a chip");
 
