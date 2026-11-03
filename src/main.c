@@ -65,12 +65,12 @@ void usage(int code)
 	const char use[] =
 		"  Usage:\n"\
 		" -h             display this message\n"\
-		" -d             disable internal ECC(use read and write page size + OOB size)\n"\
-		" -I             ECC ignore errors(for read test only)\n"\
+		" -d             disable internal ECC (use read and write page size + OOB size)\n"\
+		" -I             ECC ignore errors (for read test only)\n"\
 		" -k             skip BAD pages (SPI NAND): use the next page instead\n"\
 		" -L             print list support chips\n"\
 		" -i             read the chip ID info\n"\
-		" -e             erase chip(full or use with -a [-l])\n"\
+		" -e             erase chip (full or use with -a [-l])\n"\
 		" -l <bytes>     manually set length\n"\
 		" -a <address>   manually set address\n"\
 		" -w <filename>  write chip with data from filename\n"\
