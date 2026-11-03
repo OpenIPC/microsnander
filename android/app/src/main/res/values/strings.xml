@@ -35,6 +35,9 @@
     <string name="saved_as">Saved.</string>
     <string name="cannot_save">The dump could not be saved there.</string>
     <string name="cannot_open">The file could not be opened.</string>
+    <string name="pick_file">A file to write (Downloads)</string>
+    <string name="no_files">No .bin file in Downloads: copy the image there first.</string>
+    <string name="no_picker_save">This device has no file picker: the dump is in Downloads, or use Share.</string>
     <string name="status_registers">STATUS REGISTERS</string>
     <string name="registers_hex">SR %1$02X %2$02X %3$02X</string>
     <string name="sr_n">SR%1$d</string>

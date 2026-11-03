@@ -5,6 +5,7 @@ import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.PendingIntent;
+import android.content.ActivityNotFoundException;
 import android.content.BroadcastReceiver;
 import android.content.ContentValues;
 import android.content.Context;
@@ -32,6 +33,9 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -42,7 +46,7 @@ import java.util.concurrent.Executors;
  */
 public class MainActivity extends Activity {
     private static final String ACTION_USB_PERMISSION = "org.openipc.microsnander.USB_PERMISSION";
-    private static final int PICK_WRITE = 1, SAVE_AS = 2, ASK_STORAGE = 3;
+    private static final int PICK_WRITE = 1, SAVE_AS = 2, ASK_STORAGE = 3, ASK_READ = 4;
 
     /** vendor, product of the programmers microsnander drives */
     private static final int[][] PROGRAMMERS = {
@@ -65,7 +69,7 @@ public class MainActivity extends Activity {
     private Button[] buttons;
     private Button saveAs, share;
     private File lastDump;
-    private boolean busy;
+    private boolean busy, registersOp;
     private Runnable afterPermission;
 
     @Override
@@ -86,24 +90,25 @@ public class MainActivity extends Activity {
             findViewById(R.id.b_detect), findViewById(R.id.b_read), findViewById(R.id.b_erase),
             findViewById(R.id.b_write), findViewById(R.id.b_registers), findViewById(R.id.b_unprotect),
         };
-        buttons[0].setOnClickListener(v -> run(R.string.detecting, Native::detect));
+        buttons[0].setOnClickListener(v -> run(R.string.detecting, Native::detect, true));
         buttons[1].setOnClickListener(v -> read());
         buttons[2].setOnClickListener(v -> new AlertDialog.Builder(this)
                 .setMessage(R.string.erase_confirm)
                 .setPositiveButton(R.string.erase, (d, w) -> runProgress(R.string.erasing,
                         (fd, vid, pid, p) -> Native.erase(fd, vid, pid, p)))
                 .setNegativeButton(android.R.string.cancel, null).show());
-        buttons[3].setOnClickListener(v -> {
-            Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*");
-            startActivityForResult(i, PICK_WRITE);
-        });
-        buttons[4].setOnClickListener(v -> run(R.string.reading_registers, Native::registers));
-        buttons[5].setOnClickListener(v -> run(R.string.unprotecting, Native::unprotect));
+        buttons[3].setOnClickListener(v -> pickWrite());
+        buttons[4].setOnClickListener(v -> run(R.string.reading_registers, Native::registers, true));
+        buttons[5].setOnClickListener(v -> run(R.string.unprotecting, Native::unprotect, true));
         saveAs.setOnClickListener(v -> {
             if (lastDump == null) return;
             Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
                     .setType("application/octet-stream").putExtra(Intent.EXTRA_TITLE, lastDump.getName());
-            startActivityForResult(i, SAVE_AS);
+            try {
+                startActivityForResult(i, SAVE_AS);
+            } catch (ActivityNotFoundException e) {
+                meta.append("\n" + getString(R.string.no_picker_save));
+            }
         });
         share.setOnClickListener(v -> {
             if (lastDump == null) return;
@@ -191,12 +196,17 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void run(int phase, Op op) {
-        runProgress(phase, (fd, vid, pid, p) -> op.run(fd, vid, pid));
+    private void run(int phase, Op op, boolean regs) {
+        runProgress(phase, (fd, vid, pid, p) -> op.run(fd, vid, pid), regs);
     }
 
     private void runProgress(int phase, ProgressOp op) {
+        runProgress(phase, op, false);
+    }
+
+    private void runProgress(int phase, ProgressOp op, boolean regs) {
         if (busy) return;
+        registersOp = regs;
         withDevice(() -> {
             setBusy(true, getString(phase), -1);
             worker.execute(() -> {
@@ -217,6 +227,7 @@ public class MainActivity extends Activity {
 
     private void read() {
         if (busy) return;
+        registersOp = false;
         if (Build.VERSION.SDK_INT >= 23 && Build.VERSION.SDK_INT < 29
                 && checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[] {Manifest.permission.WRITE_EXTERNAL_STORAGE}, ASK_STORAGE);
@@ -246,10 +257,15 @@ public class MainActivity extends Activity {
 
     @Override
     public void onRequestPermissionsResult(int code, String[] perms, int[] results) {
-        if (code == ASK_STORAGE && results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED)
+        boolean granted = results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED;
+        if (code == ASK_STORAGE && granted)
             read();
         else if (code == ASK_STORAGE)
             showFailed(getString(R.string.no_storage));
+        else if (code == ASK_READ && granted)
+            pickWrite();
+        else if (code == ASK_READ)
+            showFailed(getString(R.string.no_files));
     }
 
     /** a second read in the same minute does not replace the first: -2, -3, ... */
@@ -312,11 +328,46 @@ public class MainActivity extends Activity {
                 showFailed(getString(R.string.cannot_save));
             }
         } else if (code == PICK_WRITE) {
-            new AlertDialog.Builder(this)
-                    .setMessage(R.string.write_confirm)
-                    .setPositiveButton(R.string.write, (d, w) -> write(u))
-                    .setNegativeButton(android.R.string.cancel, null).show();
+            confirmWrite(u);
         }
+    }
+
+    /** the file picker; a TV box without one gets the .bin files of Downloads and the app's dumps */
+    private void pickWrite() {
+        Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*");
+        try {
+            startActivityForResult(i, PICK_WRITE);
+            return;
+        } catch (ActivityNotFoundException e) {
+            // no picker on this device
+        }
+        if (Build.VERSION.SDK_INT >= 23 && Build.VERSION.SDK_INT <= 32
+                && checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[] {Manifest.permission.READ_EXTERNAL_STORAGE}, ASK_READ);
+            return;
+        }
+        List<File> files = new ArrayList<>();
+        for (File dir : new File[] {Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+                new File(getFilesDir(), "dumps")}) {
+            File[] l = dir.listFiles((d, n) -> n.endsWith(".bin"));
+            if (l != null) files.addAll(Arrays.asList(l));
+        }
+        if (files.isEmpty()) {
+            showFailed(getString(R.string.no_files));
+            return;
+        }
+        String[] names = new String[files.size()];
+        for (int k = 0; k < names.length; k++) names[k] = files.get(k).getName();
+        new AlertDialog.Builder(this).setTitle(R.string.pick_file)
+                .setItems(names, (d, w) -> confirmWrite(Uri.fromFile(files.get(w))))
+                .setNegativeButton(android.R.string.cancel, null).show();
+    }
+
+    private void confirmWrite(Uri u) {
+        new AlertDialog.Builder(this)
+                .setMessage(R.string.write_confirm)
+                .setPositiveButton(R.string.write, (d, w) -> write(u))
+                .setNegativeButton(android.R.string.cancel, null).show();
     }
 
     private void write(Uri u) {
@@ -387,7 +438,8 @@ public class MainActivity extends Activity {
         meta.setText(m);
         state.setTextColor(col(r.ok ? R.color.amber : R.color.red));
         state.setText(r.ok ? R.string.done : R.string.failed);
-        showRegisters(r.sr);
+        if (r.sr >= 0 || registersOp)
+            showRegisters(r.sr);	// Read, Erase and Write leave the last registers shown
         saveAs.setEnabled(lastDump != null);
         share.setEnabled(lastDump != null);
     }

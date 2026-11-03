@@ -10,11 +10,16 @@
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
+    <!-- Write on a TV box without a file picker: the .bin files of Downloads -->
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
 
     <application
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction"
         android:fullBackupContent="false"
+        android:requestLegacyExternalStorage="true"
         android:supportsRtl="true"
         tools:targetApi="31"
         android:banner="@drawable/banner"

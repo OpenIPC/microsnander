@@ -10,3 +10,4 @@ android/app/.cxx/
 android/local.properties
 android/.preview/
 android/.emu/
+android/.ci/
