@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "flashcmd_api.h"
-int ECC_fcheck = 1, ECC_ignore = 0; unsigned char _ondie_ecc_flag = 1; unsigned int bsize = 4096;
+int ECC_fcheck = 1, ECC_ignore = 0, Skip_BAD_page = 0; unsigned char _ondie_ecc_flag = 1; unsigned int bsize = 4096;
 static unsigned char chip[65536];
 static const char *env(const char *n) { const char *v = getenv(n); return v ? v : ""; }
 static int r(unsigned char *b, unsigned long f, unsigned long l) { if (!strcmp(env("MS_FAIL"),"read")) return -1; if (!strcmp(env("MS_FAIL"),"shortread")) { memcpy(b, chip + f, l / 2); return l / 2; } memcpy(b, chip + f, l); return l; }

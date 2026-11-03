@@ -48,7 +48,7 @@ extern int org;
 #define EHELP	""
 #endif
 
-#define _VER	"1.8.2"
+#define _VER	"1.9.0"
 
 void title(void)
 {
@@ -67,7 +67,7 @@ void usage(int code)
 		" -h             display this message\n"\
 		" -d             disable internal ECC(use read and write page size + OOB size)\n"\
 		" -I             ECC ignore errors(for read test only)\n"\
-		" -k             Skip BAD pages, try read or write in to next page\n"\
+		" -k             skip BAD pages (SPI NAND): use the next page instead\n"\
 		" -L             print list support chips\n"\
 		" -i             read the chip ID info\n"\
 		"" EHELP ""\

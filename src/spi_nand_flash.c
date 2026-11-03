@@ -3181,6 +3181,8 @@ static SPI_NAND_FLASH_RTN_T spi_nand_write_page( u32 page_number, u32 data_offse
 		if (Skip_BAD_page && (rtn_status == SPI_NAND_FLASH_RTN_DETECTED_BAD_BLOCK)) { /* skip BAD page, go to next page */
 			return SPI_NAND_FLASH_RTN_DETECTED_BAD_BLOCK;
 		}
+		/* without -k the result of this read does not decide the write */
+		rtn_status = SPI_NAND_FLASH_RTN_NO_ERROR;
 
 		/* Rewirte the software cahe buffer */
 		if(data_len > 0)
@@ -3356,9 +3358,11 @@ static SPI_NAND_FLASH_RTN_T spi_nand_write_internal( u32 dst_addr, u32 len, u32 
 		rtn_status = spi_nand_write_page(page_number, addr_offset, &(ptr_buf[len - remain_len]), data_len, 0, NULL, 0 , speed_mode);
 		/* skip BAD page or internal error on write page, go to next page */
 		if( Skip_BAD_page && ((rtn_status == SPI_NAND_FLASH_RTN_PROGRAM_FAIL) || (rtn_status == SPI_NAND_FLASH_RTN_DETECTED_BAD_BLOCK)) ) {
-			if( ((addr_offset + remain_len ) < (ptr_dev_info_t->page_size)) )
-				break;
+			printf("\nSkip BAD page 0x%x\n", page_number);
 			write_addr += data_len;
+			/* the rest of the data goes to the next pages, but never past the chip end */
+			if( write_addr + remain_len > ptr_dev_info_t->device_size )
+				break;
 			continue;
 		}
 		/* a failed page stops the write: *ptr_rtn_len counts what was written */
@@ -3439,10 +3443,14 @@ static SPI_NAND_FLASH_RTN_T spi_nand_read_internal ( u32 addr, u32 len, u8 *ptr_
 				*status = SPI_NAND_FLASH_RTN_DETECTED_BAD_BLOCK;
 				return (rtn_status);
 			}
-			/* skip BAD page, go to next page */
-			if( (data_offset + remain_len) < ptr_dev_info_t->page_size )
-				break;
+			/* skip BAD page, go to next page, but never past the chip end */
+			printf("\nSkip BAD page 0x%x\n", page_number);
 			read_addr += (ptr_dev_info_t->page_size - data_offset);
+			if( read_addr + remain_len > ptr_dev_info_t->device_size ) {
+				*status = SPI_NAND_FLASH_RTN_DETECTED_BAD_BLOCK;
+				_SPI_NAND_SEMAPHORE_UNLOCK();
+				return (rtn_status);
+			}
 			continue;
 		}
 

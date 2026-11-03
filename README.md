@@ -13,7 +13,7 @@
 MicroSNANDer is a command-line programmer for SPI NOR and SPI NAND flash chips
 with the cheap CH341A USB programmer. It reads, writes, erases and verifies the
 flash of cameras, routers and other boards, removes the write protection of SPI
-NOR chips, and knows 127 SPI NOR and 78 SPI NAND chips.
+NOR chips, and knows 127 SPI NOR and 81 SPI NAND chips.
 
 It is a stripped-down and extended version of
 [SNANDer](https://github.com/McMCCRU/SNANDer) 1.7.4 by McMCC: Linux only, without
@@ -90,6 +90,7 @@ microsnander [options]
  -h             display this message
  -d             disable internal ECC (use read and write page size + OOB size)
  -I             ECC ignore errors (for read test only)
+ -k             skip BAD pages (SPI NAND): use the next page instead
  -L             print list support chips
  -i             read the chip ID info
  -e             erase chip (full or use with -a [-l])
@@ -109,6 +110,11 @@ the chip reports.
 SPI NAND chips are read and written with their internal ECC by default: the file
 holds the data pages only. With `-d` the ECC is off and every page is read and
 written with its OOB (spare) area, for a raw dump.
+
+With `-k` a page that fails ECC on read or fails to program is skipped and the
+data goes on in the next page, so everything after it shifts by a page; each
+skipped page is printed. An operation that would need a page past the chip end
+fails.
 
 ## Examples
 
@@ -142,7 +148,7 @@ microsnander -d -r raw.bin
 
 `microsnander -L` prints the list: 127 SPI NOR chips (Winbond, Eon, Fudan
 Microelectronics FM25Q, GigaDevice, Macronix, Spansion, XMC, XTX, Zbit, Giantec
-GM25Q and others) and 78 SPI NAND chips (Etron, GigaDevice, Heyang, Foresee, ESMT,
+GM25Q and others) and 81 SPI NAND chips (Etron, GigaDevice, Heyang, Foresee, ESMT,
 Micron, Toshiba/Kioxia, Winbond, Macronix and others).
 A chip that is not on the list is reported as not detected; its ID from the
 output helps to add it.
