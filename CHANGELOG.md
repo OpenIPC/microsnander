@@ -4,6 +4,25 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.12.2 — 2026-11-03
+
+- SPI NOR: the chip is ready when the write-in-progress bit of the status register is
+  clear, whatever the other bits are. Before, a status with only the write enable latch
+  set counted as busy, and a busy chip with a protection or quad enable bit set counted
+  as ready, so a command could go to a chip still erasing or programming (#27).
+- SPI NOR: the busy timeouts are wall-clock time. They were a count of status reads,
+  and a status read over USB takes much longer than the delay between them, so a sector
+  erase on a chip that never got ready waited many minutes. A timeout now fails the
+  erase, and the write reports only the pages that finished.
+- SPI NOR unprotect (`-u`, and before an erase or write): a status register 2 or 3 that
+  reads `0xFF` is taken as missing and left alone. On chips without them (XM25QH64A) the
+  unprotect wrote to a register that does not exist, the chip ignored it, and the write
+  enable latch stayed set, so `-u` printed a timeout and the next erase hung. Found on
+  hardware: CH341A, XM25QH64A. The latch is also cleared after every unprotect write.
+- `tests/norsim.c`: a chip without status registers 2 and 3, a chip with the quad
+  enable bit set and busy after every erase and program, a chip that never gets ready;
+  every simulated chip checks that only status reads go to it while it is busy.
+
 ## 1.12.1 — 2026-11-03
 
 - CH341A: the static release binaries detach the kernel driver again. The detach was

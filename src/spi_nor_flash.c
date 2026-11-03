@@ -20,6 +20,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <stdbool.h>
+#include <time.h>
 #include "spi_controller.h"
 #include "snorcmd_api.h"
 #include "types.h"
@@ -152,6 +153,21 @@ static inline void snor_write_disable(void)
 	SPI_CONTROLLER_Chip_Select_High();
 }
 
+/* One status register write of the unprotect. A chip that does not take it
+   keeps the write enable latch set: clear it, the callers send their own
+   write enable right before the next erase or program. */
+static int snor_unprotect_write(u8 opcode, u8 *val)
+{
+	if (snor_wait_ready(1))
+		return -1;
+	snor_write_enable();
+	snor_write_sr(opcode, val);
+	if (snor_wait_busy())	/* the status register write takes time */
+		return -1;
+	snor_write_disable();
+	return 0;
+}
+
 /*
  * Set all sectors (global) unprotected if they are protected.
  * Returns negative if error occurred.
@@ -184,10 +200,7 @@ int snor_unprotect(void)
 
 	if ((sr & (SR_BP0 | SR_BP1 | SR_BP2)) != 0 || (snor_is_sst25_aai() && (sr & 0xbc))) {
 		sr = 0;
-		snor_wait_ready(1);
-		snor_write_enable();
-		snor_write_sr(OPCODE_WRSR, &sr);
-		if (snor_wait_busy())	/* the status register write takes time */
+		if (snor_unprotect_write(OPCODE_WRSR, &sr))
 			return -1;
 	}
 
@@ -195,17 +208,17 @@ int snor_unprotect(void)
 	if (snor_is_sst25_aai())
 		return 0;
 
+	/* Status registers 2 and 3: a chip without them leaves MISO high and
+	   reads 0xff, and ignores the write, which would leave the write enable
+	   latch set. A real register 2 or 3 has reserved bits that read 0. */
 	if (snor_read_sr(OPCODE_RDSR2, &sr) < 0) {
 		printf("%s: read_sr2 fail: %x\n", __func__, sr);
 		return -1;
 	}
 
-	if ((sr & (SR2_QE | SR2_SRP1 | SR2_CMP))) {
+	if (sr != 0xff && (sr & (SR2_QE | SR2_SRP1 | SR2_CMP))) {
 		sr = 0;
-		snor_wait_ready(1);
-		snor_write_enable();
-		snor_write_sr(OPCODE_WRSR2, &sr);
-		if (snor_wait_busy())	/* the status register write takes time */
+		if (snor_unprotect_write(OPCODE_WRSR2, &sr))
 			return -1;
 	}
 
@@ -214,12 +227,9 @@ int snor_unprotect(void)
 		return -1;
 	}
 
-	if ((sr & SR3_WPS)) {
+	if (sr != 0xff && (sr & SR3_WPS)) {
 		sr ^= SR3_WPS;
-		snor_wait_ready(1);
-		snor_write_enable();
-		snor_write_sr(OPCODE_WRSR3, &sr);
-		if (snor_wait_busy())	/* the status register write takes time */
+		if (snor_unprotect_write(OPCODE_WRSR3, &sr))
 			return -1;
 	}
 
@@ -227,27 +237,38 @@ int snor_unprotect(void)
 }
 
 /*
- * Service routine to read status register until ready, or timeout occurs.
+ * Read the status register until the write in progress bit is clear: the
+ * chip is ready. The other bits (block protection, write enable latch, quad
+ * enable) say nothing about it. Gives up after (sleep_ms + 1) / 2 seconds of
+ * wall-clock time, whatever a status read costs over USB.
  * Returns non-zero if error.
  */
+static long snor_ms_since(const struct timespec *t0)
+{
+	struct timespec t;
+
+	clock_gettime(CLOCK_MONOTONIC, &t);
+	return (t.tv_sec - t0->tv_sec) * 1000L + (t.tv_nsec - t0->tv_nsec) / 1000000L;
+}
+
 static int snor_wait_ready(int sleep_ms)
 {
-	int count;
-	int sr = 0;
+	struct timespec t0;
+	u8 sr = 0;
 
-	/* one chip guarantees max 5 msec wait here after page writes,
-	 * but potentially three seconds (!) after page erase.
-	 */
-	for (count = 0; count < ((sleep_ms + 1) * 1000); count++) {
-		if ((snor_read_sr(OPCODE_RDSR,(u8 *)&sr)) < 0)
-			break;
-		else if ((sr & (SR_WIP | SR_EPE | SR_WEL)) != sr || !sr) {
-			return 0;
+	clock_gettime(CLOCK_MONOTONIC, &t0);
+	for (;;) {
+		if (snor_read_sr(OPCODE_RDSR, &sr) < 0) {
+			printf("%s: status read failed\n", __func__);
+			return -1;
 		}
+		if (!(sr & SR_WIP))
+			return 0;
+		if (snor_ms_since(&t0) > (sleep_ms + 1) * 500L)
+			break;
 		udelay(500);
-		/* REVISIT sometimes sleeping would be best */
 	}
-	printf("%s: read_sr fail: %x\n", __func__, sr);
+	printf("%s: the chip is still busy (status %02x)\n", __func__, sr);
 	return -1;
 }
 
@@ -335,6 +356,8 @@ static int snor_4byte_mode(int enable)
  */
 static int snor_erase_sector(unsigned long offset)
 {
+	int ret;
+
 	snor_dbg("%s: offset:%x\n", __func__, offset);
 
 	/* Wait until finished previous write command. */
@@ -359,16 +382,18 @@ static int snor_erase_sector(unsigned long offset)
 
 	SPI_CONTROLLER_Chip_Select_High();
 
-	snor_wait_ready(950);
+	ret = snor_wait_ready(950);
 
 	if (spi_chip_info->addr4b)
 		snor_4byte_mode(0);
 
-	return 0;
+	return ret;
 }
 
 static int full_erase_chip(void)
 {
+	int ret;
+
 	timer_start();
 	/* Wait until finished previous write command. */
 	if (snor_wait_ready(3))
@@ -386,11 +411,12 @@ static int full_erase_chip(void)
 	SPI_CONTROLLER_Write_One_Byte(OPCODE_BE1);
 	SPI_CONTROLLER_Chip_Select_High();
 
-	snor_wait_ready(950);
+	/* up to some minutes on the big chips: give it about 17 */
+	ret = snor_wait_ready(2000);
 	snor_write_disable();
 	timer_end();
 
-	return 0;
+	return ret;
 }
 
 static struct chip_info chips_data [] = {
@@ -1086,7 +1112,11 @@ int snor_write(unsigned char *buf, unsigned long to, unsigned long len)
 		page_offset = 0;
 		/* write the next page to flash */
 
-		snor_wait_ready(3);
+		/* the page before is not written until the chip is ready */
+		if (snor_wait_ready(3)) {
+			retlen -= rc;
+			break;
+		}
 		if (snor_unprotect() < 0)
 			break;		/* retlen has what was written */
 		snor_write_enable();	/* after the unprotect, which clears the latch */
@@ -1130,6 +1160,9 @@ int snor_write(unsigned char *buf, unsigned long to, unsigned long len)
 		to += page_size;
 		buf += page_size;
 	}
+
+	if (len == 0 && snor_wait_ready(3))	/* the last page */
+		retlen -= rc;
 
 	if (spi_chip_info->addr4b)
 		snor_4byte_mode(0);

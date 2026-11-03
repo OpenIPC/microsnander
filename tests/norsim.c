@@ -3,20 +3,37 @@
    Then three kinds of chips are written, read back and erased: an ordinary one
    (256-byte page program), an SST25VF-type one (0x02 programs a single byte,
    AAI word program, protected at power-up) and an SST26-type one (blocks
-   locked until ULBPR, 8 KB blocks at the start). The driver is built into
+   locked until ULBPR, 8 KB blocks at the start). Two more: a chip without
+   status registers 2 and 3 (they read 0xff, a write to them is ignored) and
+   one with the quad enable bit set in its only status register, busy for a
+   while after every erase and program. The driver is built into
    this file, so the checks can walk its chip table. */
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 #include "../src/types.h"
 #include "../src/spi_controller.h"
+/* the driver's busy timeouts run on a clock that goes 100 ms ahead at every
+   look, so a chip that never gets ready fails in a moment */
+static int fast_clock(clockid_t id, struct timespec *t)
+{
+	static long long ms;
+	(void)id;
+	ms += 100;
+	t->tv_sec = ms / 1000;
+	t->tv_nsec = (ms % 1000) * 1000000L;
+	return 0;
+}
+#define clock_gettime fast_clock
 #include "../src/spi_nor_flash.c"
+#undef clock_gettime
 
 unsigned int bsize;
 
-enum { ORDINARY, SST25, SST26 };
+enum { ORDINARY, SST25, SST26, NO_SR23, QE_SR1 };
 static int kind;
 static unsigned char id[5];
-static unsigned char mem[4 << 20];
+static unsigned char mem[8 << 20];
 static unsigned char cmd[300];
 static int ncmd, nread;
 static int wel, aai, locked;
@@ -25,6 +42,7 @@ static unsigned char sr;			/* BP bits */
 static unsigned long aai_addr;
 static int spi_fail_at = -1;		/* the Nth AAI command fails on the wire */
 static int naai;
+static int busy_cmds;			/* commands other than RDSR sent while busy */
 
 static unsigned long addr(void) { return ((unsigned long)cmd[1] << 16) | (cmd[2] << 8) | cmd[3]; }
 static int writable(void) { return wel && !(kind == SST26 ? locked : (sr & 0x3c)); }
@@ -52,6 +70,7 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Read_NByte(u8 *d, u32 len, SPI_CONTROLLER_SP
 		switch (cmd[0]) {
 		case OPCODE_RDID: d[i] = nread < 5 ? id[nread] : 0; break;
 		case OPCODE_RDSR: d[i] = sr | (wel ? SR_WEL : 0) | (aai ? 0x40 : 0) | (busy ? SR_WIP : 0); if (busy) busy--; break;
+		case OPCODE_RDSR2: case OPCODE_RDSR3: d[i] = kind == NO_SR23 ? 0xff : 0; break;
 		case OPCODE_READ: d[i] = mem[(addr() + nread) % sizeof(mem)]; break;
 		default: d[i] = 0;
 		}
@@ -64,14 +83,18 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Chip_Select_High(void)
 		ncmd = 0;
 		return SPI_CONTROLLER_RTN_NO_ERROR;
 	}
+	if (busy && cmd[0] != OPCODE_RDSR && cmd[0] != OPCODE_RDSR2 && cmd[0] != OPCODE_RDSR3)
+		busy_cmds++;			/* only status reads are allowed while busy */
 	switch (cmd[0]) {
 	case OPCODE_WREN: if (!busy) wel = 1; break;		/* ignored while the chip is busy */
 	case OPCODE_WRDI: wel = 0; aai = 0; break;
-	case OPCODE_WRSR: if (wel && ncmd > 1) { sr = cmd[1] & 0xbc; busy = 3; } wel = 0; break;
+	case OPCODE_WRSR: if (wel && ncmd > 1) { sr = (cmd[1] & 0xbc) | (kind == QE_SR1 ? 0x40 : 0); busy = 3; } wel = 0; break;
 	case OPCODE_ULBPR: if (wel && kind == SST26) { locked = 0; busy = 3; } wel = 0; break;
 	case OPCODE_PP:
-		if (writable() && ncmd > 4)
+		if (writable() && ncmd > 4) {
 			program(addr(), cmd + 4, kind == SST25 ? 1 : ncmd - 4);	/* SST25: one byte only */
+			if (kind == QE_SR1) busy = 2;
+		}
 		wel = 0;
 		break;
 	case OPCODE_AAI:
@@ -86,10 +109,16 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Chip_Select_High(void)
 	case OPCODE_P4E: if (writable()) erase(addr(), 4096); wel = 0; break;
 	case OPCODE_SE:
 		/* SST26: the first 32 KB are 8 KB blocks, so a 64 KB erase there takes one 8 KB block */
-		if (writable()) erase(addr(), kind == SST26 && addr() < 32768 ? 8192 : 65536);
+		if (writable()) {
+			erase(addr(), kind == SST26 && addr() < 32768 ? 8192 : 65536);
+			if (kind == QE_SR1) busy = 5;
+		}
 		wel = 0;
 		break;
-	case OPCODE_BE: case OPCODE_BE1: if (writable()) memset(mem, 0xff, sizeof(mem)); wel = 0; break;
+	case OPCODE_BE: case OPCODE_BE1:
+		if (writable()) { memset(mem, 0xff, sizeof(mem)); if (kind == QE_SR1) busy = 20; }
+		wel = 0;
+		break;
 	}
 	ncmd = 0;
 	return SPI_CONTROLLER_RTN_NO_ERROR;
@@ -116,9 +145,10 @@ static void chip(const struct chip_info *e, int k)
 {
 	id[0] = e->id;
 	id[1] = e->jedec_id >> 24; id[2] = e->jedec_id >> 16; id[3] = e->jedec_id >> 8; id[4] = e->jedec_id;
-	kind = k; wel = aai = busy = 0;
+	kind = k; wel = aai = busy = busy_cmds = 0;
 	locked = k == SST26;
-	sr = k == SST25 ? 0x1c : (k == ORDINARY ? 0x1c : 0);	/* BP bits set at power-up */
+	sr = k == SST26 ? 0 : 0x1c;		/* BP bits set at power-up */
+	if (k == QE_SR1) sr = 0x40;		/* quad enable, not protected */
 	memset(mem, 0x00, sizeof(mem));		/* not erased */
 }
 
@@ -150,6 +180,9 @@ static void write_read_erase(const char *name, int k)
 	snor_read(got, 0x1001, 4097);
 	snprintf(what, sizeof(what), "%s: write at an odd address, odd length, read back", name);
 	check(n == 4097 && !memcmp(got, buf, 4097) && mem[0x1000] == 0xff && mem[0x1001 + 4097] == 0xff, what);
+
+	snprintf(what, sizeof(what), "%s: nothing is sent while the chip is busy, the latch is clear at the end", name);
+	check(!busy_cmds && !wel, what);
 }
 
 int main(void)
@@ -178,6 +211,30 @@ int main(void)
 	write_read_erase("W25Q32BV", ORDINARY);
 	write_read_erase("PCT25VF016B", SST25);
 	write_read_erase("PCT26VF016", SST26);
+	write_read_erase("XM25QH64A", NO_SR23);
+	write_read_erase("MX25L3205D", QE_SR1);
+
+	/* unprotect of a chip without status registers 2 and 3 */
+	{
+		chip(find("XM25QH64A"), NO_SR23);
+		snor_init();
+		time_t t0 = time(NULL);
+		int ret = snor_unprotect();
+		check(ret == 0 && !(sr & 0x1c) && !wel, "XM25QH64A: unprotect clears BP, leaves no write enable latch");
+		memset(mem, 0, 65536);
+		ret = snor_erase(0, 65536);
+		check(ret == 0 && mem[0] == 0xff && time(NULL) - t0 < 5, "XM25QH64A: the next erase does not wait for a timeout");
+	}
+
+	/* a chip that stays busy: the erase reports a failure */
+	{
+		chip(find("W25Q32BV"), ORDINARY);
+		snor_init();
+		snor_unprotect();
+		busy = 1 << 30;
+		check(snor_erase(0, 65536) != 0, "W25Q32BV: a chip that never gets ready fails the erase");
+		busy = 0;
+	}
 
 	/* an AAI command that fails on the wire stops the write with the bytes written so far */
 	{
