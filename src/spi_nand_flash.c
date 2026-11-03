@@ -118,7 +118,6 @@
 #define _SPI_NAND_MANUFACTURER_ID_TYM			0x19
 #define _SPI_NAND_MANUFACTURER_ID_HEYANG_2		0x01
 #define _SPI_NAND_MANUFACTURER_ID_XINCUN		0x9C
-#define _SPI_NAND_MANUFACTURER_ID_UNIM		0xB0
 
 /* SPI NAND Device ID */
 #define _SPI_NAND_DEVICE_ID_GD5F1GQ4UAYIG	0xF1
@@ -274,7 +273,6 @@
 #define _SPI_NAND_DEVICE_ID_DS35M2GB		0xA2
 #define _SPI_NAND_DEVICE_ID_DS35M2GBS		0x62
 #define _SPI_NAND_DEVICE_ID_XCSP1AAWHNT		0x01
-#define _SPI_NAND_DEVICE_ID_UM19C0HISW		0x1C
 #define _SPI_NAND_DEVICE_ID_TH58CVG3S0HRAIJ		0xE4
 
 /* Others Define */
@@ -2150,7 +2148,7 @@ static const struct SPI_NAND_FLASH_INFO_T spi_nand_flash_tables[] = {
 		dummy_mode:				SPI_NAND_FLASH_READ_DUMMY_BYTE_APPEND,
 		read_mode:				SPI_NAND_FLASH_READ_SPEED_MODE_DUAL,
 		write_mode:				SPI_NAND_FLASH_WRITE_SPEED_MODE_SINGLE,
-		oob_free_layout:			&ooblayout_esmt,
+		oob_free_layout:			&ooblayout_esmt_41lb,
 		feature:				SPI_NAND_FLASH_FEATURE_NONE,
 	},
 
@@ -2632,20 +2630,6 @@ static const struct SPI_NAND_FLASH_INFO_T spi_nand_flash_tables[] = {
 		feature:				SPI_NAND_FLASH_FEATURE_NONE,
 	},
 
-	{
-		mfr_id:					_SPI_NAND_MANUFACTURER_ID_UNIM,
-		dev_id:					_SPI_NAND_DEVICE_ID_UM19C0HISW,
-		ptr_name:				"UNIM UM19C0HISW",
-		device_size:				_SPI_NAND_CHIP_SIZE_1GBIT + (64 * 64 * 1024),
-		page_size:				_SPI_NAND_PAGE_SIZE_2KBYTE + _SPI_NAND_OOB_SIZE_64BYTE,
-		oob_size:				88,
-		erase_size:				_SPI_NAND_BLOCK_SIZE_128KBYTE + (64 * 64),
-		dummy_mode:				SPI_NAND_FLASH_READ_DUMMY_BYTE_APPEND,
-		read_mode:				SPI_NAND_FLASH_READ_SPEED_MODE_SINGLE,
-		write_mode:				SPI_NAND_FLASH_WRITE_SPEED_MODE_SINGLE,
-		oob_free_layout:			&ooblayout_type1,
-		feature:				SPI_NAND_FLASH_FEATURE_NONE,
-	},
 	{
 		mfr_id: 				_SPI_NAND_MANUFACTURER_ID_TYM,
 		dev_id: 				_SPI_NAND_DEVICE_ID_TYM25D1GA03,
@@ -3815,8 +3799,7 @@ static SPI_NAND_FLASH_RTN_T ecc_fail_check( u32 page_number )
 	}
 	else if(((ptr_dev_info_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_FISON) && (ptr_dev_info_t->dev_id == _SPI_NAND_DEVICE_ID_CS11G0T0A0AA)) ||
 		((ptr_dev_info_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_FISON) && (ptr_dev_info_t->dev_id == _SPI_NAND_DEVICE_ID_CS11G1T0A0AA)) ||
-		((ptr_dev_info_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_FISON) && (ptr_dev_info_t->dev_id == _SPI_NAND_DEVICE_ID_CS11G0G0A0AA)) ||
-		((ptr_dev_info_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_UNIM) && (ptr_dev_info_t->dev_id == _SPI_NAND_DEVICE_ID_UM19C0HISW)))
+		((ptr_dev_info_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_FISON) && (ptr_dev_info_t->dev_id == _SPI_NAND_DEVICE_ID_CS11G0G0A0AA)))
 	{
 		if(((status & 0x70) >> 4) == 0x7)
 		{
@@ -4975,18 +4958,6 @@ static void spi_nand_manufacute_init( struct SPI_NAND_FLASH_INFO_T *ptr_device_t
 
 		spi_nand_protocol_get_status_reg_1(&feature);
 		_SPI_NAND_DEBUG_PRINTF(SPI_NAND_FLASH_DEBUG_LEVEL_1, "After Unlock all block setup, the status register1 = 0x%x\n", feature);
-	}
-	else if((ptr_device_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_UNIM) && (ptr_device_t->dev_id == _SPI_NAND_DEVICE_ID_UM19C0HISW))
-	{
-		/* 1. Unlock All block */
-		spi_nand_protocol_get_status_reg_1(&feature);
-		feature &= 0xC7;
-		spi_nand_protocol_set_status_reg_1(feature);
-
-		/* 2. Enable Qual mode */
-		spi_nand_protocol_get_status_reg_2(&feature);
-		feature |= 0x1;
-		spi_nand_protocol_set_status_reg_2(feature);
 	}
 	else if((ptr_device_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_FORESEE) && (ptr_device_t->dev_id == _SPI_NAND_DEVICE_ID_F35SQA512M))
 	{
