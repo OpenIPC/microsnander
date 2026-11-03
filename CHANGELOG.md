@@ -9,7 +9,8 @@ from every push to `main`; this file is the change history.
 - CH341A: the static release binaries detach the kernel driver again. The detach was
   under `__gnu_linux__`, which the musl toolchain does not define, so on kernels where
   `spi-ch341` binds the programmer the release binaries stopped with
-  `LIBUSB_ERROR_BUSY` (#24). Found on hardware: CH341A, kernel 7.0.
+  `LIBUSB_ERROR_BUSY` (#24). Found on hardware: CH341A, kernel 7.0. The kernel driver is
+  attached again when microsnander exits.
 
 ## 1.12.0 — 2026-11-03
 

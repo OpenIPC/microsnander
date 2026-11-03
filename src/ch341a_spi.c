@@ -94,6 +94,7 @@ struct dev_entry {
  * because USB spec says that transfers end on non-full packets and the device sends the 31 reply
  * data bytes to each 32-byte packet with command + 31 bytes of data... */
 static struct libusb_transfer *transfer_out = NULL;
+static int kernel_driver_detached;	/* reattach it at shutdown */
 static struct libusb_transfer *transfer_ins[USB_IN_TRANSFERS] = {0};
 struct libusb_device_handle *handle = NULL;
 
@@ -430,6 +431,10 @@ int ch341a_spi_shutdown(void)
 		transfer_ins[i] = NULL;
 	}
 	libusb_release_interface(handle, 0);
+	if (kernel_driver_detached) {
+		libusb_attach_kernel_driver(handle, 0);	/* give the device back to the kernel driver */
+		kernel_driver_detached = 0;
+	}
 	libusb_close(handle);
 	libusb_exit(NULL);
 	handle = NULL;
@@ -467,6 +472,7 @@ int ch341a_spi_init(void)
 	 * define __gnu_linux__, so the static release builds skipped this). We simply try to detach on Linux
 	 * without a lot of passion here. If that works fine else we will fail on claiming the interface anyway. */
 	ret = libusb_detach_kernel_driver(handle, 0);
+	kernel_driver_detached = (ret == 0);
 	if (ret == LIBUSB_ERROR_NOT_SUPPORTED) {
 		printf("Detaching kernel drivers is not supported. Further accesses may fail.\n");
 	} else if (ret != 0 && ret != LIBUSB_ERROR_NOT_FOUND) {
@@ -535,6 +541,10 @@ dealloc_transfers:
 release_interface:
 	libusb_release_interface(handle, 0);
 close_handle:
+	if (kernel_driver_detached) {
+		libusb_attach_kernel_driver(handle, 0);
+		kernel_driver_detached = 0;
+	}
 	libusb_close(handle);
 	handle = NULL;
 	return -1;
