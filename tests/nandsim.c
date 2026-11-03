@@ -30,7 +30,8 @@ static unsigned char feat[256];
 static unsigned char cmd[16];
 static unsigned int ncmd, nread;
 static long ecc_bad[MAXBAD], prog_fail[MAXBAD];
-static unsigned int nprog;		/* program executes (0x10) */
+static unsigned int nprog;
+static int col_hi_read = -1, col_hi_load = -1;	/* high column byte of the last read from cache / program load */		/* program executes (0x10) */
 static int stuck_busy;			/* the status register always shows OIP */
 static int busy_after = -1;		/* stay busy from this program execute on */
 
@@ -86,6 +87,8 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Chip_Select_High(void)
 {
 	unsigned char *p;
 	switch (cmd[0]) {
+	case 0x03: case 0x0b: case 0x3b: case 0x6b: col_hi_read = cmd[1]; break;
+	case 0x02: case 0x32: case 0x84: case 0x34: col_hi_load = cmd[1]; break;
 	case 0x1f: feat[cmd[1]] = cmd[2]; break;
 	case 0x06: feat[0xc0] |= 0x02; break;
 	case 0x04: feat[0xc0] &= ~0x02; break;
@@ -259,6 +262,21 @@ int main(void)
 	check(snand_write(buf, 60L * PAGE, 4 * PAGE) == 4 * PAGE && !memcmp(page(64), buf + 3 * PAGE, PAGE),
 	      "-k write with room left in -a/-l uses it");
 	Skip_BAD_end = 0;
+
+	/* two planes: the plane bit is column bit 12 on a 2 KB page, bit 13 on a 4 KB page */
+	chip(0xc2, 0x35, 0x03);			/* MX35LF4G24AD: 4 KB page, two planes */
+	snand_init();
+	snand_read(got, 0, 16);
+	check(col_hi_read == 0x00, "4 KB page, plane 0: no plane bit in the column");
+	snand_read(got, 64L * 4096, 16);
+	check(col_hi_read == 0x20, "4 KB page, plane 1: plane bit is column bit 13");
+	fill(buf, 1, 12);
+	snand_write(buf, 64L * 4096, 16);
+	check(col_hi_load == 0x20, "  and the same on program load");
+	chip(0xc2, 0x22, 0x00);			/* MX35LF2GE4AB: 2 KB page, two planes */
+	snand_init();
+	snand_read(got, 64L * 2048, 16);
+	check(col_hi_read == 0x10, "2 KB page, plane 1: plane bit is column bit 12");
 
 	/* a page with an ECC error is not served from the driver cache on the next read */
 	chip(0xef, 0xaa, 0x21);

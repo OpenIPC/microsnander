@@ -327,7 +327,8 @@ int Skip_BAD_page = 0;
 #ifndef SPI_NAND_OIP_TIMEOUT_MS
 #define SPI_NAND_OIP_TIMEOUT_MS		3000
 #endif
-unsigned long long Skip_BAD_end = 0;	/* -k keeps the data below this address; 0: the chip end */
+unsigned long long Skip_BAD_end = 0;
+static u8 plane_column_high( u32 column, u32 page_size );	/* -k keeps the data below this address; 0: the chip end */
 
 static unsigned long long skip_limit(const struct SPI_NAND_FLASH_INFO_T *ptr_dev_info_t)
 {
@@ -3274,14 +3275,7 @@ static SPI_NAND_FLASH_RTN_T spi_nand_protocol_read_from_cache( u32 data_offset, 
 
 	if( ((ptr_dev_info_t->feature) & SPI_NAND_FLASH_PLANE_SELECT_HAVE) )
 	{
-		if( _plane_select_bit == 0)
-		{
-			_SPI_NAND_WRITE_ONE_BYTE( ((data_offset >> 8 ) &(0xef)) );
-		}
-		if( _plane_select_bit == 1)
-		{
-			_SPI_NAND_WRITE_ONE_BYTE( ((data_offset >> 8 ) | (0x10)) );
-		}
+		_SPI_NAND_WRITE_ONE_BYTE( plane_column_high( data_offset, ptr_dev_info_t->page_size ) );
 	}
 	else
 	{
@@ -3384,14 +3378,7 @@ static SPI_NAND_FLASH_RTN_T spi_nand_protocol_program_load ( u32 addr, u8 *ptr_d
 	/* 3. Send address offset */
 	if( ((ptr_dev_info_t->feature) & SPI_NAND_FLASH_PLANE_SELECT_HAVE) )
 	{
-		if( _plane_select_bit == 0)
-		{
-			_SPI_NAND_WRITE_ONE_BYTE( ((addr >> 8 ) & (0xef)) );
-		}
-		if( _plane_select_bit == 1)
-		{
-			_SPI_NAND_WRITE_ONE_BYTE( ((addr >> 8 ) | (0x10)) );
-		}
+		_SPI_NAND_WRITE_ONE_BYTE( plane_column_high( addr, ptr_dev_info_t->page_size ) );
 	}
 	else
 	{
@@ -3841,6 +3828,19 @@ static SPI_NAND_FLASH_RTN_T ecc_fail_check( u32 page_number )
  *
  *------------------------------------------------------------------------------------
  */
+/* High byte of the column address on a chip with two planes: the plane bit is
+   the column bit just above the data area (bit 12 for a 2 KB page, bit 13 for
+   a 4 KB page); page_size may include the OOB area (ECC off). */
+static u8 plane_column_high( u32 column, u32 page_size )
+{
+	u32 plane_bit = (page_size >= _SPI_NAND_PAGE_SIZE_4KBYTE) ? (1 << 13) : (1 << 12);
+
+	column &= ~plane_bit;
+	if( _plane_select_bit )
+		column |= plane_bit;
+	return (u8)(column >> 8);
+}
+
 static int all_ff(const u8 *p, u32 len)
 {
 	u32 i;
