@@ -4,6 +4,21 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.16.1 — 2026-11-03
+
+- The Android app is in the release: `microsnander-android.apk`, signed with the
+  project's own release key (a CI secret), next to the Linux binaries; the release checks
+  its signature and version. The debug APK stays a CI artifact.
+- The release key is a secret of the `release` environment, which only `main` may use:
+  branch and pull request builds never reach it. The release checks that the APK is
+  signed with the project's certificate; a fork without the key still publishes the
+  Linux binaries.
+- Android TV banner: the name on two lines, "Micro" / "SNANDer", in a larger size
+  (OpenIPC brand 0.5.0).
+- Checked on hardware: write of a 1 MB file from the file picker with verify, on an
+  Android 10 TV box with a CH341A and a 3.3 V W25Q128 (erase 55 s, write and verify 52 s);
+  two full reads identical.
+
 ## 1.16.0 — 2026-11-03
 
 - Android app (`android/`, minSdk 21): Detect, Read, Erase, Write and Registers as in

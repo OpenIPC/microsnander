@@ -116,7 +116,8 @@ jobs:
   # The one release, "latest": rebuilt from every push to main after all
   # builds pass, from the static binaries built and checked above.
   # The Android app (android/): NDK build of src/ with libusb, lint without
-  # warnings, a debug-signed APK as an artifact. Not in the release yet.
+  # warnings, a debug APK (the fixed debug key of the repository). The
+  # release APK is the android-release job, on main only.
   android:
     name: Android app (APK)
     runs-on: ubuntu-latest
@@ -144,17 +145,86 @@ jobs:
           gradle --no-daemon assembleDebug lintDebug
           cp app/build/outputs/apk/debug/app-debug.apk microsnander-android-debug.apk
 
-      - name: Upload APK
+      - name: Upload the debug APK
         uses: actions/upload-artifact@v5
         with:
           name: microsnander-android-debug
           path: android/microsnander-android-debug.apk
           if-no-files-found: error
 
+  # The release APK, signed with the project's release key. The key is a
+  # secret of the "release" environment, which only main may use, so a
+  # branch or a pull request never reaches it; forks have none and publish
+  # the Linux binaries alone. The signer has to be the project's
+  # certificate, or users could not update the app.
+  android-release:
+    name: Android app (release APK)
+    needs: android
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: release
+    outputs:
+      signed: ${{ steps.build.outputs.signed }}
+    env:
+      CERT_SHA256: c5fe3a5b65e5ecb00e684d6493cc55022af01a91104d3524e16a980c82617b8d
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Java 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Gradle 8.11.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+
+      - name: NDK r27c
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;27.2.12479018" > /dev/null
+
+      - name: Build and sign
+        id: build
+        env:
+          KEYSTORE_BASE64: ${{ secrets.MICROSNANDER_KEYSTORE_BASE64 }}
+          MICROSNANDER_KEYSTORE_PASSWORD: ${{ secrets.MICROSNANDER_KEYSTORE_PASSWORD }}
+          MICROSNANDER_KEY_ALIAS: ${{ secrets.MICROSNANDER_KEY_ALIAS }}
+          MICROSNANDER_KEY_PASSWORD: ${{ secrets.MICROSNANDER_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::notice::no release key here (a fork): no release APK"
+            echo "signed=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          mkdir -p "$RUNNER_TEMP/keys"
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/keys/microsnander-release.jks"
+          export MICROSNANDER_KEYSTORE_FILE="$RUNNER_TEMP/keys/microsnander-release.jks"
+          (cd android && gradle --no-daemon assembleRelease)
+          rm -rf "$RUNNER_TEMP/keys"
+          cp android/app/build/outputs/apk/release/app-release.apk microsnander-android.apk
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          signer=$("$BT/apksigner" verify --print-certs microsnander-android.apk | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+          [ "$signer" = "$CERT_SHA256" ] ||
+            { echo "::error::signed by $signer, not the project's certificate $CERT_SHA256"; exit 1; }
+          echo "signed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Upload the release APK
+        if: steps.build.outputs.signed == 'true'
+        uses: actions/upload-artifact@v5
+        with:
+          name: microsnander-android
+          path: microsnander-android.apk
+          if-no-files-found: error
+
   release:
     name: Publish "latest"
-    needs: [native, static]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [native, static, android-release]
+    # android-release skipped or without a key (a fork): the Linux binaries alone
+    if: >-
+      always() && github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+      needs.native.result == 'success' && needs.static.result == 'success' &&
+      (needs.android-release.result == 'success' || needs.android-release.result == 'skipped')
     runs-on: ubuntu-latest
     permissions:
       contents: write   # replace the release
@@ -169,15 +239,36 @@ jobs:
           merge-multiple: true
           path: dist
 
+      - name: Download the Android app
+        if: needs.android-release.outputs.signed == 'true'
+        uses: actions/download-artifact@v5
+        with:
+          name: microsnander-android
+          path: dist
+
       - name: Check the files
+        env:
+          SIGNED: ${{ needs.android-release.outputs.signed }}
+          CERT_SHA256: c5fe3a5b65e5ecb00e684d6493cc55022af01a91104d3524e16a980c82617b8d
         run: |
           ver=$(sed -n 's/^#define[[:space:]]*_VER[[:space:]]*"\([^"]*\)".*/\1/p' src/main.c)
           [ -n "$ver" ] || { echo "::error::no _VER in src/main.c"; exit 1; }
           ls -l dist
-          [ "$(ls dist | wc -l)" = 2 ] || { echo "::error::expected 2 binaries"; exit 1; }
+          want=2
+          if [ "$SIGNED" = true ]; then
+            want=3
+            # the project's certificate, or users of an earlier release cannot update
+            BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+            signer=$("$BT/apksigner" verify --print-certs dist/microsnander-android.apk | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+            [ "$signer" = "$CERT_SHA256" ] ||
+              { echo "::error::microsnander-android.apk is not signed with the project's certificate"; exit 1; }
+            "$BT/aapt" dump badging dist/microsnander-android.apk | grep -q "versionName='$ver'" ||
+              { echo "::error::the APK is not version $ver"; exit 1; }
+          fi
+          [ "$(ls dist | wc -l)" = "$want" ] || { echo "::error::expected $want files in the release"; exit 1; }
           file dist/microsnander-linux-arm | grep -q 'ARM.*statically linked' ||
             { echo "::error::microsnander-linux-arm is not a static ARM binary"; exit 1; }
-          chmod 755 dist/*
+          chmod 755 dist/microsnander-linux-*
           ./dist/microsnander-linux-x86_64 -h | grep -q " v\.$ver\$" ||
             { echo "::error::the binary does not print v.$ver"; exit 1; }
           echo "VER=$ver" >> "$GITHUB_ENV"
@@ -217,6 +308,11 @@ jobs:
 
           - \`microsnander-linux-x86_64\` — PCs and servers
           - \`microsnander-linux-arm\` — 32-bit ARM (ARMv5TE and later, soft-float): cameras, Raspberry Pi and other boards
+          NOTES
+          if [ -e dist/microsnander-android.apk ]; then
+            echo "- \`microsnander-android.apk\` — Android 5.0 and later, phones and TV boxes (USB host, no root)" >> notes.md
+          fi
+          cat >> notes.md <<NOTES
 
           Changes: [CHANGELOG.md](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/main/CHANGELOG.md); usage: [README](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}#readme).
           NOTES
@@ -242,9 +338,9 @@ jobs:
           if [ -z "$TG_TOKEN" ] || [ -z "$TG_CHANNEL" ]; then
             echo "::warning::Telegram secrets are not available, binaries not posted"; exit 0
           fi
-          caption=$(printf 'Microsnander %s for Linux\nCommit: %s\nTime: %s\n\n%s' "$VER" "${GITHUB_SHA::7}" \
+          caption=$(printf 'Microsnander %s\nCommit: %s\nTime: %s\n\n%s' "$VER" "${GITHUB_SHA::7}" \
             "$(date -u '+%Y-%m-%d %H:%M:%S UTC')" "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/latest")
-          files=(dist/microsnander-linux-*)
+          files=(dist/microsnander-*)
           media='[]' form=()
           for i in "${!files[@]}"; do
             item=$(jq -cn --arg m "attach://f$i" '{type: "document", media: $m}')

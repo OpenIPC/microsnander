@@ -128,6 +128,7 @@ CI пересобирает его при каждом push в `main`, когд�
 |---------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------|
 | [`microsnander-linux-x86_64`](https://github.com/OpenIPC/microsnander/releases/latest/download/microsnander-linux-x86_64) | ПК и серверы                                                                               |
 | [`microsnander-linux-arm`](https://github.com/OpenIPC/microsnander/releases/latest/download/microsnander-linux-arm)       | 32-битный ARM: камеры, Raspberry Pi и другие платы (soft-float, работает с FPU и без него) |
+| [`microsnander-android.apk`](https://github.com/OpenIPC/microsnander/releases/latest/download/microsnander-android.apk)   | Android 5.0 и новее: телефоны и приставки с USB host, без root                             |
 
 Страница релиза: `https://github.com/OpenIPC/microsnander/releases/latest`
 
@@ -293,7 +294,8 @@ Android TV (Android 5.0 и новее, без root; на приставке он
 управляется пультом).
 
 <p align="center">
-  <img src="screenshots/android-main.png" alt="MicroSNANDer для Android: дисплей, латунные кнопки" width="320">
+  <img src="screenshots/android-main.png" alt="MicroSNANDer для Android: дисплей, латунные кнопки" height="360">
+  <img src="screenshots/android-tv.png" alt="MicroSNANDer на приставке Android TV: найдены CH341A и W25Q128, лампы битов регистров" height="360">
 </p>
 
 - Подключите программатор (к телефону — через OTG-переходник; на приставке один из портов может
@@ -304,8 +306,8 @@ Android TV (Android 5.0 и новее, без root; на приставке он
   проверяет. **Erase** стирает всю микросхему.
 - **Registers** и **Clear protection** — как в веб-режиме (SPI NOR через CH341A или CH347).
 - Приложение работает на том же коде C, что и microsnander (`src/`), собранном NDK, с libusb на
-  устройстве, которое открыл менеджер USB Android. CI собирает отладочный APK (артефакт
-  `microsnander-android-debug`).
+  устройстве, которое открыл менеджер USB Android. Подписанный APK — в релизе:
+  `microsnander-android.apk` в [latest](https://github.com/OpenIPC/microsnander/releases/latest).
 
 Сборка: `cd android && gradle assembleDebug` с Android SDK и NDK r27c.
 
