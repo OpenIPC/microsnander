@@ -43,7 +43,7 @@ static unsigned long aai_addr;
 static int spi_fail_at = -1;		/* the Nth AAI command fails on the wire */
 static int naai;
 static unsigned char sr2;		/* status register 2: CMP 0x40, QE 0x02, SRP1 0x01 */
-static int sr2_writes;
+static int sr2_writes, sr2_reads;
 static int busy_cmds;			/* commands other than RDSR sent while busy */
 
 static unsigned long addr(void) { return ((unsigned long)cmd[1] << 16) | (cmd[2] << 8) | cmd[3]; }
@@ -73,7 +73,7 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Read_NByte(u8 *d, u32 len, SPI_CONTROLLER_SP
 		switch (cmd[0]) {
 		case OPCODE_RDID: d[i] = nread < 5 ? id[nread] : 0; break;
 		case OPCODE_RDSR: d[i] = sr | (wel ? SR_WEL : 0) | (aai ? 0x40 : 0) | (busy ? SR_WIP : 0); if (busy) busy--; break;
-		case OPCODE_RDSR2: d[i] = kind == NO_SR23 ? 0xff : sr2; break;
+		case OPCODE_RDSR2: d[i] = kind == NO_SR23 ? 0xff : sr2; sr2_reads++; break;
 		case OPCODE_RDSR3: d[i] = kind == NO_SR23 ? 0xff : 0; break;
 		case OPCODE_READ: d[i] = mem[(addr() + nread) % sizeof(mem)]; break;
 		default: d[i] = 0;
@@ -188,12 +188,18 @@ static void write_read_erase(const char *name, int k)
 	check(erased, what);
 
 	for (unsigned i = 0; i < sizeof(buf); i++) buf[i] = (unsigned char)(i * 7 + 3);
+	sr2_reads = 0;
 	int n = snor_write(buf, 0x1001, 4097);		/* odd start, odd length */
+	int unprotects = sr2_reads;
 	memset(got, 0, sizeof(got));
 	snor_read(got, 0x1001, 4097);
 	snprintf(what, sizeof(what), "%s: write at an odd address, odd length, read back", name);
 	check(n == 4097 && !memcmp(got, buf, 4097) && mem[0x1000] == 0xff && mem[0x1001 + 4097] == 0xff, what);
 
+	if (k != SST25 && k != SST26) {
+		snprintf(what, sizeof(what), "%s: the write of 17 pages clears the protection once", name);
+		check(unprotects == 1, what);
+	}
 	snprintf(what, sizeof(what), "%s: nothing is sent while the chip is busy, the latch is clear at the end", name);
 	check(!busy_cmds && !wel, what);
 }

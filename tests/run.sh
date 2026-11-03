@@ -8,7 +8,9 @@
 # (tests/ch341sim.c): long streams in parts inside the USB timeout. Then the
 # SPI NOR probe (tests/norsim.c): every chip of the table by its JEDEC ID;
 # ch347_spi.c against a fake libusb (tests/ch347sim.c): the CH347 packets;
-# ezp.c against a fake libusb (tests/ezpsim.c): the EZP commands and streams.
+# ezp.c against a fake libusb (tests/ezpsim.c): the EZP commands and streams;
+# spi_controller.c against a recording programmer (tests/spisim.c): short
+# writes held while CS is low go out in one transfer.
 #
 #   tests/run.sh            (CC=<compiler> to choose the compiler)
 #
@@ -22,6 +24,7 @@ ${CC:-cc} -std=gnu99 -Wall -Werror -O1 -I"$T/../src" ${LIBUSB_CFLAGS:-} -o "$W/c
 ${CC:-cc} -std=gnu99 -Wall -Werror -O1 -o "$W/norsim" "$T/norsim.c" "$T/../src/timer.c" || exit 1
 ${CC:-cc} -std=gnu99 -Wall -Werror -O1 -I"$T/../src" ${LIBUSB_CFLAGS:-} -o "$W/ch347sim" "$T/ch347sim.c" || exit 1
 ${CC:-cc} -std=gnu99 -Wall -Werror -O1 -I"$T/../src" ${LIBUSB_CFLAGS:-} -o "$W/ezpsim" "$T/ezpsim.c" "$T/../src/timer.c" || exit 1
+${CC:-cc} -std=gnu99 -Wall -Werror -O1 -I"$T/../src" -o "$W/spisim" "$T/spisim.c" || exit 1
 cd "$W"; B=./ms; fail=0
 # t <expected exit code> <description> [VAR=value ...] <command>
 t() { exp=$1; d=$2; shift 2; out=$(env "$@" 2>&1); got=$?
@@ -85,5 +88,7 @@ grep -a '^ok\|^FAIL' norsim.log
 grep -a '^ok\|^FAIL' ch347sim.log
 ./ezpsim > ezpsim.log 2>&1 || fail=1
 grep -a '^ok\|^FAIL' ezpsim.log
+./spisim > spisim.log 2>&1 || fail=1
+grep -a '^ok\|^FAIL' spisim.log
 [ "$fail" = 0 ] && echo "all tests passed"
 exit $fail

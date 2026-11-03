@@ -4,6 +4,26 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.14.1 — 2026-11-03
+
+- SPI NOR writes are 2–3 times faster on the CH341A and the CH347 (#29). Writing
+  was limited by USB round trips, not by the SPI clock:
+  - the protection is cleared once before a write, not before every 256-byte page
+    (three status register reads a page);
+  - short writes while CS is low (an opcode, an address) are held in
+    `spi_controller.c` and go out with the data, the read or the CS high that follows,
+    in one transfer: a page program or a status read is one transfer instead of up to
+    five;
+  - CH347: a short command and its answer (a status read) are one full-duplex
+    transfer;
+  - CH341A: chip select goes out with the next stream instead of as a USB transfer of
+    its own.
+- Measured on hardware with the same chip (W25Q128, 16 MB) and a full-chip write:
+  CH347 455 s → 152 s, CH341A 584 s → 256 s. Read-backs identical.
+- `tests/spisim.c` checks the held writes against a recording programmer;
+  `tests/norsim.c` checks that a write clears the protection once; `tests/ch347sim.c`
+  checks the full-duplex transfer.
+
 ## 1.14.0 — 2026-11-03
 
 - EZP2019, EZP2019+ and EZP2023 programmers (USB `1fc8:310b`, `310c` or `310d`; the
