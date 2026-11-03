@@ -30,8 +30,8 @@ static unsigned char feat[256];
 static unsigned char cmd[16];
 static unsigned int ncmd, nread;
 static long ecc_bad[MAXBAD], prog_fail[MAXBAD];
-static unsigned int nprog;
-static int col_hi_read = -1, col_hi_load = -1;	/* high column byte of the last read from cache / program load */		/* program executes (0x10) */
+static unsigned int nprog;		/* program executes (0x10) */
+static int col_hi_read = -1, col_hi_load = -1;	/* high column byte of the last read from cache / program load */
 static int stuck_busy;			/* the status register always shows OIP */
 static int busy_after = -1;		/* stay busy from this program execute on */
 
