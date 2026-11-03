@@ -291,7 +291,19 @@ int main(void)
 		check(snor_unprotect() != 0 && sr == 0x9c, "  with SRP0 and WP# low the register stays: unprotect fails, not 'cleared'");
 		wp_low = 0;
 		sr = 0x20;
-		check(snor_unprotect() == 0 && sr == 0, "  TB alone is cleared");
+		check(snor_unprotect() == 0, "  bit 5 alone (TB, or an error flag on some chips) does not fail the unprotect");
+	}
+
+	/* SRP0 with WP# low and no BP: the data is free, an erase is not
+	   stopped by the register lock (only -u wants SRP0 cleared) */
+	{
+		chip(find("W25Q32BV"), ORDINARY);
+		snor_init();
+		sr = 0x80; sr2 = 0x02; wp_low = 1;
+		memset(mem, 0, 65536);
+		check(snor_erase(0, 65536) == 0 && mem[0] == 0xff && sr == 0x80, "  SRP0 with WP# low, no BP: an erase still goes, SRP0 left");
+		check(snor_unprotect() == -2 && strstr(snor_unprotect_why, "WP#"), "  and -u says the register stays and why");
+		wp_low = 0; sr = 0;
 	}
 
 	/* unprotect of a chip without status registers 2 and 3 */

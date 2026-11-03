@@ -18,7 +18,8 @@
 int snor_read(unsigned char *buf, unsigned long from, unsigned long len);
 int snor_erase(unsigned long offs, unsigned long len);
 int snor_write(unsigned char *buf, unsigned long to, unsigned long len);
-int snor_unprotect(void);
+int snor_unprotect(void);	/* 0; -1: the chip does not answer; -2: a register stays (snor_unprotect_why) */
+extern char snor_unprotect_why[200];
 int snor_read_status(unsigned char sr[3]);
 extern const char *flash_chip_name;	/* name of the chip found, for file names */
 const char *snor_lookup(const unsigned char id[3], unsigned long *size, unsigned long *sector, int *addr4b);

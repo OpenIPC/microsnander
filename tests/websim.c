@@ -36,6 +36,8 @@ long flash_cmd_init(struct flash_cmd *c)
 	flash_chip_name = sim_chip ? sim_chip : swap_chip && inits++ ? "W25Q16" : "W25Q80";
 	return SIM_SIZE;
 }
+char snor_unprotect_why[200];
+int snor_unprotect(void) { return 0; }		/* the real driver is not in this test */
 int snor_read_status(unsigned char sr[3]) { sr[0] = 0x1c; sr[1] = 0x02; sr[2] = 0x60; return 0; }
 
 static char resp[1 << 21];

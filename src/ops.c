@@ -314,16 +314,13 @@ int ms_unprotect(struct ms_chip *c, char *msg, size_t n)
 		return -1;
 	if (!prog.flash_unprotect)
 		say(msg, n, "Clearing the protection is for SPI NOR through the CH341A or the CH347 only.");
-	else if (prog.flash_unprotect()) {
+	else if ((ret = prog.flash_unprotect())) {
 		read_registers(c);
-		if (!c->sr_valid)
-			say(msg, n, "Clearing the protection failed.");
+		if (ret == -2 && prog.flash_unprotect == snor_unprotect && snor_unprotect_why[0])
+			say(msg, n, "The protection stays: %s.", snor_unprotect_why);
 		else
-			say(msg, n, "The protection stays: SR %02x %02x %02x. %s", c->sr[0], c->sr[1], c->sr[2],
-			    c->sr[1] != 0xff && (c->sr[1] & 0x01) ? "SRP1 locks the registers until the chip is powered off and on." :
-			    c->sr[0] & 0x80 ? "SRP0 is set and the WP# pin of the chip is low, which locks the registers "
-					      "(in a socket it should be pulled up; on a board, the WP line)." :
-			    "The chip does not take the register write.");
+			say(msg, n, "Clearing the protection failed: the programmer or the chip did not answer.");
+		ret = -1;
 	}
 	else {
 		read_registers(c);
