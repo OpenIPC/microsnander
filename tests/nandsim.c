@@ -282,6 +282,7 @@ int main(void)
 		stuck_busy = 1;
 	}
 	check(snand_erase(0, 128 * 1024) != 0, "erase fails when the chip stays busy");
+	check(!(feat[0xc0] & 0x02), "  the write enable latch is cleared after the timeouts");
 	stuck_busy = 0;
 	check(snand_read(got, 0, PAGE) == PAGE, "  works again when the chip is ready");
 

@@ -3036,8 +3036,10 @@ SPI_NAND_FLASH_RTN_T spi_nand_erase_block ( u32 block_index)
 	spi_nand_protocol_block_erase( block_index );
 
 	/* 2.4 Checking status for erase complete */
-	if( spi_nand_wait_ready( &status, "Block erase", block_index ) != SPI_NAND_FLASH_RTN_NO_ERROR )
+	if( spi_nand_wait_ready( &status, "Block erase", block_index ) != SPI_NAND_FLASH_RTN_NO_ERROR ) {
+		spi_nand_protocol_write_disable();
 		return SPI_NAND_FLASH_RTN_TIMEOUT;
+	}
 
 	/* 2.5 Disable write_flash */
 	spi_nand_protocol_write_disable();
@@ -3366,8 +3368,10 @@ static SPI_NAND_FLASH_RTN_T spi_nand_write_page( u32 page_number, u32 data_offse
 		spi_nand_protocol_program_execute ( page_number );
 
 		/* Checking status for program complete */
-		if( spi_nand_wait_ready( &status, "Page program", page_number ) != SPI_NAND_FLASH_RTN_NO_ERROR )
+		if( spi_nand_wait_ready( &status, "Page program", page_number ) != SPI_NAND_FLASH_RTN_NO_ERROR ) {
+			spi_nand_protocol_write_disable();
 			return SPI_NAND_FLASH_RTN_TIMEOUT;
+		}
 
 		/*. Disable write_flash */
 		spi_nand_protocol_write_disable();

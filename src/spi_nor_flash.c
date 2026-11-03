@@ -717,6 +717,7 @@ int snor_read(unsigned char *buf, unsigned long from, unsigned long len)
 	}
 	if (failed) {
 		printf("\nRead failed at 0x%08x after [%lu] of [%lu] bytes\n", read_addr, len - remain_len, len);
+		timer_end();
 		return -1;
 	}
 	printf("Read 100%% [%lu] of [%lu] bytes      \n", len - remain_len, len);
