@@ -55,6 +55,7 @@ static const char *const op_names[] = { "", "detect", "read", "erase", "write", 
 static struct {
 	pthread_mutex_t lock;
 	int busy, op, ok;			/* ok: 1 done, 0 failed, -1 nothing yet */
+	int uploading;				/* a file to write is coming: one at a time */
 	unsigned long long done, total;
 	char phase[16];				/* "", "write", "verify" */
 	char message[256];
@@ -239,6 +240,8 @@ static int start(int op, FILE *body)
 		return -1;
 	}
 	upload = body;
+	if (body)
+		st.uploading = 0;		/* the upload is the operation's now */
 	st.busy = 1;
 	st.op = op;
 	st.ok = -1;
@@ -450,6 +453,14 @@ static void send_dump(int fd, const char *name)
 	fclose(f);
 }
 
+/* the upload slot is free again (the upload failed or was refused) */
+static void upload_done(void)
+{
+	pthread_mutex_lock(&st.lock);
+	st.uploading = 0;
+	pthread_mutex_unlock(&st.lock);
+}
+
 /* the file to write goes to the disk, not to memory: a SPI NAND image is up
    to 512 MB. It has no name, it goes when it is closed. */
 static FILE *upload_file(void)
@@ -461,7 +472,10 @@ static FILE *upload_file(void)
 	if (snprintf(path, sizeof(path), "%s/.microsnander-write-XXXXXX", web_dir) >= (int)sizeof(path) ||
 	    (fd = mkstemp(path)) < 0)
 		return NULL;
-	unlink(path);
+	if (unlink(path)) {			/* a name left would keep the image there */
+		close(fd);
+		return NULL;
+	}
 	if (!(f = fdopen(fd, "w+b")))
 		close(fd);
 	return f;
@@ -535,8 +549,11 @@ static void handle(int fd)
 		reply_text(fd, "404 Not Found", "Not found.\n");
 		return;
 	}
+	/* one upload at a time: the others are refused before they take space */
 	pthread_mutex_lock(&st.lock);
-	int busy = st.busy;
+	int busy = st.busy || (op == OP_WRITE && st.uploading);
+	if (!busy && op == OP_WRITE)
+		st.uploading = 1;
 	pthread_mutex_unlock(&st.lock);
 	if (busy) {
 		reply_text(fd, "409 Conflict", "An operation is running.\n");
@@ -548,10 +565,12 @@ static void handle(int fd)
 		size_t have = got - (end + 4 - head);
 
 		if (!clen || clen > WEB_MAX_BODY || have > clen) {
+			upload_done();
 			reply_text(fd, "413 Payload Too Large", "No file, or too large.\n");
 			return;
 		}
 		if (!(body = upload_file())) {
+			upload_done();
 			reply_text(fd, "500 Internal Server Error", "Cannot store the file in the dump directory.\n");
 			return;
 		}
@@ -561,6 +580,7 @@ static void handle(int fd)
 
 			if (r <= 0) {
 				fclose(body);
+				upload_done();
 				return;
 			}
 			bad = fwrite(part, 1, r, body) != (size_t)r;
@@ -568,13 +588,16 @@ static void handle(int fd)
 		}
 		if (bad || fflush(body)) {
 			fclose(body);
+			upload_done();
 			reply_text(fd, "507 Insufficient Storage", "Cannot store the file in the dump directory.\n");
 			return;
 		}
 	}
 	if (start(op, body)) {
-		if (body)
+		if (body) {
 			fclose(body);
+			upload_done();
+		}
 		reply_text(fd, "409 Conflict", "An operation is running.\n");
 		return;
 	}

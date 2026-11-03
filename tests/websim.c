@@ -206,9 +206,13 @@ int main(void)
 	wait_idle();
 	request("GET", "/api/state", NULL, NULL, 0);
 	check(strstr(body_of(), "\"ok\":false") && strstr(body_of(), "Verify failed"), "  a write that does not take fails the verify");
+	st.uploading = 1;				/* another upload is coming in */
+	check(request("POST", "/api/write", NULL, img, sizeof(img)) == 409, "  a second upload at the same time: 409, before it takes space");
+	st.uploading = 0;
 	web_dir = "/nonexistent-microsnander";
 	check(request("POST", "/api/write", NULL, img, sizeof(img)) == 500 && strstr(resp, "Cannot store the file"),
 	      "  no place for the file in the dump directory: 500, nothing starts");
+	check(!st.uploading, "  and the upload slot is free again");
 	web_dir = dir;
 
 	check(request("POST", "/api/unprotect", NULL, NULL, 0) == 202, "Clear protection starts");
