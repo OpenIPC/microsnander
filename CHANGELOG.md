@@ -4,6 +4,13 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## Unreleased
+
+- The EEPROM support is removed: the I2C (24Cxx) and Microwire (93Cxx) EEPROM code of
+  the original SNANDer (`make EEPROM_SUPPORT=y`, options `-E`, `-8`, `-f`) and the
+  build option (#14). The release binaries were built without it and do not change.
+  The READMEs say that EEPROM chips are not supported.
+
 ## 1.16.4 — 2026-11-03
 
 - Release: the signer check also reads the `V2 Signer: certificate SHA-256 digest` line

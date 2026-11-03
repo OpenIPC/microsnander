@@ -15,7 +15,7 @@ SPI NAND 闪存芯片。它可以读取、写入、擦除和校验摄像机、�
 解除 SPI NOR 芯片的写保护，支持 291 款 SPI NOR 和 135 款 SPI NAND 芯片。
 
 它是 McMCC 的 [SNANDer](https://github.com/McMCCRU/SNANDer) 1.7.4 经过精简、增强、深度修改和优化的版本：
-仅支持 Linux，发布版本不含 EEPROM 部分，增加了 `-u`（解除保护）命令以及 OpenIPC
+仅支持 Linux，不支持 EEPROM，增加了 `-u`（解除保护）命令以及 OpenIPC
 硬件上常见的闪存芯片。发布的二进制文件为静态链接、无任何依赖，同一个文件既可以在
 PC 上运行，也可以直接在 USB 口插着编程器的 ARM 摄像机上运行。
 
@@ -228,7 +228,7 @@ microsnander -P ch347 -W 8080 -o /srv/dumps
 - 只使用一个编程器，选择方式与不带 `-W` 时相同；连接了多个时请用 `-P`。
 - 每个操作开始时打开编程器、结束后关闭，因此两次操作之间可以重新插拔，或用普通方式运行 microsnander。
 - 每次只运行一个操作；操作进行中的请求会得到 `409`。操作进行时页面每秒查询两次状态。
-- `-d`、`-I`、`-k` 和 EEPROM 选项不能与 `-W` 一起使用：页面在开启 ECC 的情况下从地址 0 写入完整文件。
+- `-d`、`-I` 和 `-k` 不能与 `-W` 一起使用：页面在开启 ECC 的情况下从地址 0 写入完整文件。
 - 客户端断开时服务继续运行；慢速客户端不会阻塞其他客户端（最多同时 16 个连接）。
 
 访问：
@@ -328,8 +328,8 @@ sudo apt-get install build-essential libusb-1.0-0-dev
 make -C src
 ```
 
-`make -C src EEPROM_SUPPORT=y` 会加入原版 SNANDer 的 I2C（24Cxx）和 Microwire（93Cxx）
-EEPROM 支持（`-E`、`-8`、`-f`）；发布的二进制文件中不含该功能。
+不支持 I2C（24Cxx）和 Microwire（93Cxx）EEPROM 芯片：microsnander 用于 SPI NOR 和 SPI NAND
+闪存。原版 SNANDer 的 EEPROM 部分（`-E`、`-8`、`-f`）已删除。
 
 静态发布文件由 `ci/build-musl.sh` 构建（Docker 或任何带 `curl`、`make` 的 x86_64
 Linux，arm 还需要 `qemu-user`）。脚本会下载 musl 工具链和 libusb，按 SHA256 校验，

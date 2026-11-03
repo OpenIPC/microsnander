@@ -17,14 +17,6 @@
 #include "flashcmd_api.h"
 #include "programmer.h"
 
-#ifdef EEPROM_SUPPORT
-#define __EEPROM___	"or EEPROM"
-extern int eepromsize;
-extern int mw_eepromsize;
-#else
-#define __EEPROM___	""
-#endif
-
 const char *flash_chip_name;
 
 long flash_cmd_init(struct flash_cmd *cmd)
@@ -37,34 +29,17 @@ long flash_cmd_init(struct flash_cmd *cmd)
 		return flen;
 	}
 
-#ifdef EEPROM_SUPPORT
-	if ((eepromsize <= 0) && (mw_eepromsize <= 0)) {
-#endif
-		if ((flen = snand_init()) > 0) {
-			cmd->flash_erase = snand_erase;
-			cmd->flash_write = snand_write;
-			cmd->flash_read  = snand_read;
-		} else if ((flen = snor_init()) > 0) {
-			cmd->flash_unprotect = snor_unprotect;
-			cmd->flash_erase = snor_erase;
-			cmd->flash_write = snor_write;
-			cmd->flash_read  = snor_read;
-		}
-#ifdef EEPROM_SUPPORT
-	} else if ((eepromsize > 0) || (mw_eepromsize > 0)) {
-		if ((eepromsize > 0) && (flen = i2c_init()) > 0) {
-			cmd->flash_erase = i2c_eeprom_erase;
-			cmd->flash_write = i2c_eeprom_write;
-			cmd->flash_read  = i2c_eeprom_read;
-		} else if ((mw_eepromsize > 0) && (flen = mw_init()) > 0) {
-			cmd->flash_erase = mw_eeprom_erase;
-			cmd->flash_write = mw_eeprom_write;
-			cmd->flash_read  = mw_eeprom_read;
-		}
-	}
-#endif
-	else
-		printf("\nFlash" __EEPROM___ " not found!!!!\n\n");
+	if ((flen = snand_init()) > 0) {
+		cmd->flash_erase = snand_erase;
+		cmd->flash_write = snand_write;
+		cmd->flash_read  = snand_read;
+	} else if ((flen = snor_init()) > 0) {
+		cmd->flash_unprotect = snor_unprotect;
+		cmd->flash_erase = snor_erase;
+		cmd->flash_write = snor_write;
+		cmd->flash_read  = snor_read;
+	} else
+		printf("\nFlash not found!!!!\n\n");
 
 	return flen;
 }
@@ -74,11 +49,5 @@ void support_flash_list(void)
 	support_snand_list();
 	printf("\n");
 	support_snor_list();
-#ifdef EEPROM_SUPPORT
-	printf("\n");
-	support_i2c_eeprom_list();
-	printf("\n");
-	support_mw_eeprom_list();
-#endif
 }
 /* End of [flashcmd.c] package */
