@@ -16,6 +16,9 @@
 #include "flashcmd_api.h"
 #include "programmer.h"
 #include "voltage.h"
+#include "selftest.h"
+
+extern unsigned int bsize;		/* the erase block of the chip found */
 
 #define OPS_PART	(64 * 1024)		/* read, write and verify in parts: the progress */
 
@@ -287,6 +290,46 @@ int ms_write_file(struct ms_chip *c, FILE *f, ms_progress cb, void *ctx, char *m
 out:
 	free(part);
 	free(chunk);
+	chip_close();
+	return ret;
+}
+
+int ms_selftest(struct ms_chip *c, const char *save_dir, char *saved, size_t saved_n, char *msg, size_t n)
+{
+	struct selftest t = { 0 };
+	int ret;
+
+	if (chip_open(c, msg, n, 1))		/* it erases a block: only the chip confirmed */
+		return -1;
+	read_registers(c);
+	t.cmd = &prog;
+	t.chip = c->chip;
+	t.programmer = c->programmer;
+	t.size = flen;
+	t.addr = 0;				/* the first block: where a locked loader usually is */
+	t.block = bsize;
+	t.kind = prog.kind;
+	t.lock = prog.lock;
+	if (prog.kind == FLASH_NOR && programmer->send) {
+		t.sr_valid = c->sr_valid;
+		memcpy(t.sr, c->sr, 3);
+		t.block_locks = snor_block_locks();
+	}
+	t.save_dir = save_dir;
+	t.out = msg;
+	t.out_size = n;
+	t.saved = saved;
+	t.saved_size = saved_n;
+	if (saved && saved_n)
+		saved[0] = 0;
+	msg[0] = 0;
+	ret = selftest(&t);
+	/* the lines one after the other: keep the last (the verdict) and the protection */
+	for (char *p = msg; *p; p++)
+		if (*p == '\n' && p[1])
+			*p = ' ';
+	if (n && msg[0] && msg[strlen(msg) - 1] == '\n')
+		msg[strlen(msg) - 1] = 0;
 	chip_close();
 	return ret;
 }

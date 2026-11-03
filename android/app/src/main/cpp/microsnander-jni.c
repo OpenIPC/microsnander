@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include "ops.h"
 #include "voltage.h"
 #include "usb.h"
@@ -114,6 +115,22 @@ JNIEXPORT jobject JNICALL FN(erase)(JNIEnv *env, jclass cls, jint fd, jint vid, 
 	use_device(fd, vid, pid);
 	int ret = ms_erase(&c, on_progress, &cb, msg, sizeof(msg));
 	return result(env, ret == 0, msg, &c, NULL);
+}
+
+/* -t on the first block of the chip expected; ok only for the OK verdict */
+JNIEXPORT jobject JNICALL FN(selftest)(JNIEnv *env, jclass cls, jint fd, jint vid, jint pid, jstring jdir)
+{
+	struct ms_chip c;
+	char msg[512] = "", saved[160] = "";
+	const char *dir = (*env)->GetStringUTFChars(env, jdir, NULL);
+	int ret;
+	(void)cls;
+
+	use_device(fd, vid, pid);
+	mkdir(dir, 0700);
+	ret = ms_selftest(&c, dir, saved, sizeof(saved), msg, sizeof(msg));
+	(*env)->ReleaseStringUTFChars(env, jdir, dir);
+	return result(env, ret == 0, msg, &c, saved);	/* name: the block saved in dir, "" */
 }
 
 /* the chip the next operation must find (the one the user confirmed) */

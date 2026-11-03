@@ -234,6 +234,7 @@ microsnander -d -r raw.bin
 <p align="center">
   <img src="screenshots/web-reading.png" alt="MicroSNANDer Web во время чтения: лампы, прибор с прогрессом, дисплей, латунные кнопки" width="45%">
   <img src="screenshots/web-registers.png" alt="MicroSNANDer Web после чтения: ссылка на дамп и лампы битов регистров" width="45%">
+  <img src="screenshots/web-selftest.png" alt="MicroSNANDer Web после самотеста: SELF-TEST OK, защита и итог" width="45%">
 </p>
 
 ```sh
@@ -261,6 +262,9 @@ microsnander -P ch347 -W 8080 -o /srv/dumps
   микросхем типа Winbond; янтарная — бит защиты, зелёная — другой бит) и **Clear protection**,
   которая делает то же, что `-u`: снимает BP, SRP и CMP и не трогает QE. Только SPI NOR через
   CH341A или CH347; программаторы EZP регистры не читают.
+- **Self-test** — `-t` на первом блоке (см. [Использование](#использование)): сначала Detect,
+  затем вопрос с названием найденной микросхемы; итог (`OK`, `PROTECTED`, `FAILED`) и защита —
+  в сообщении. Блок, который не удалось вернуть, сохраняется в каталог `-o`.
 
 Имена файлов: `flash-ГГГГММДДЧЧММ-МИКРОСХЕМА.bin` по местному времени машины, где работает
 служба, например `flash-202611031706-W25Q128BV.bin`. С `-a`/`-l` добавляется область:
@@ -330,7 +334,8 @@ Android TV (Android 5.0 и новее, без root; на приставке он
 - **Write** берёт файл через выбор файлов и пишет его с адреса 0 в стёртую микросхему, затем
   проверяет; файл читается частями, целиком в память не загружается. **Erase** стирает всю
   микросхему.
-- **Registers** и **Clear protection** — как в веб-режиме (SPI NOR через CH341A или CH347).
+- **Registers** и **Clear protection** — как в веб-режиме (SPI NOR через CH341A или CH347), и
+  **Self-test** (`-t` на первом блоке, после Detect и вопроса).
 - Приложение работает на том же коде C, что и microsnander (`src/`), собранном NDK, с устройством,
   которое открыл менеджер USB Android (через его файловый дескриптор и код usbfs, без libusb). Подписанный APK — в релизе:
   `microsnander-android.apk` в [latest](https://github.com/OpenIPC/microsnander/releases/latest).

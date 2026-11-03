@@ -4,6 +4,14 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.20.0 — 2026-11-04
+
+- Self-test in the web mode and the Android app: a **Self-test** button runs `-t` on the
+  first block of the chip — Detect first, then a question naming the chip found, and only
+  that chip is tested. The protection and the verdict (`OK`, `PROTECTED`, `FAILED`) are the
+  message; a block that does not come back is saved in the dump directory (`-o`, the app's
+  dumps). `ms_selftest()` in the operations; the self-test keeps its lines for them.
+
 ## 1.19.1 — 2026-11-04
 
 - SPI NAND: the FORESEE F35SQA001G and F35SQA002G are fully unlocked. They power up with the
