@@ -174,7 +174,8 @@ Toshiba/Kioxia、Winbond、Macronix 等）。不在列表中的芯片会显示�
 | PCT25VF010A–PCT25VF032B、PCT26VF016、PCT26VF032（SPI NOR） | 暂不支持：需要单字节/AAI 编程或 ULBPR 解锁           | 作为普通芯片列出                 |
 
 OOB 大小只影响使用 `-d` 的原始转储（每页连同 spare 区一起读取）；使用片内 ECC 的读写只
-涉及数据区。
+涉及数据区。原始写入只接受完整的“数据 + OOB”页，因此 1.11.1 之前（使用旧 OOB 大小）
+制作的上述 Toshiba/Kioxia 芯片原始转储会被拒绝：请先把每页用 `0xFF` 补齐到新的 OOB 大小。
 
 ## 构建
 
