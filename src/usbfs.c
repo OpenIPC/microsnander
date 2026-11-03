@@ -295,7 +295,11 @@ libusb_device_handle *libusb_open_device_with_vid_pid(libusb_context *ctx, uint1
 	for (ssize_t i = 0; i < n && !found; i++)
 		if (list[i]->desc.idVendor == vid && list[i]->desc.idProduct == pid)
 			found = list[i];
-	if (found && (fd = open(found->path, O_RDWR | O_CLOEXEC)) >= 0 && !(h = new_handle(fd, 1, found)))
+	if (found && (fd = open(found->path, O_RDWR | O_CLOEXEC)) < 0)
+		/* as libusb said it: the driver only tells that the open failed */
+		printf("%s: %s%s\n", found->path, strerror(errno), errno == EACCES || errno == EPERM ?
+		       " (run as root, or allow the device to a group with a udev rule)" : "");
+	else if (found && !(h = new_handle(fd, 1, found)))
 		close(fd);
 	if (n >= 0)
 		libusb_free_device_list(list, 1);
