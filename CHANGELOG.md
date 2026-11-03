@@ -4,6 +4,14 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.20.1 — 2026-11-04
+
+- Faster SPI NAND reads: the ECC check of a page takes the status its ready poll has already
+  read, with no second status read per page. CH347: CS low goes in the same USB transfer as
+  the command after it, one round trip less for every SPI transaction. 1 MB from a W25N01G
+  through the CH347: 1.93 s before, 1.48 s now. The CH341A is bound by its own SPI clock
+  (about 110 KB/s, as with SPI NOR).
+
 ## 1.20.0 — 2026-11-04
 
 - Self-test in the web mode and the Android app: a **Self-test** button runs `-t` on the
