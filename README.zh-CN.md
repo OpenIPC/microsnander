@@ -12,7 +12,7 @@
 
 MicroSNANDer 是一个命令行编程器，配合廉价的 CH341A USB 编程器使用，用于 SPI NOR 和
 SPI NAND 闪存芯片。它可以读取、写入、擦除和校验摄像机、路由器及其他开发板的闪存，
-解除 SPI NOR 芯片的写保护，支持 284 款 SPI NOR 和 135 款 SPI NAND 芯片。
+解除 SPI NOR 芯片的写保护，支持 291 款 SPI NOR 和 135 款 SPI NAND 芯片。
 
 它是 McMCC 的 [SNANDer](https://github.com/McMCCRU/SNANDer) 1.7.4 经过精简、增强、深度修改和优化的版本：
 仅支持 Linux，发布版本不含 EEPROM 部分，增加了 `-u`（解除保护）命令以及 OpenIPC
@@ -143,7 +143,7 @@ microsnander -d -r raw.bin
 
 ## 支持的芯片
 
-`microsnander -L` 会列出支持的芯片：284 款 SPI NOR 芯片（Winbond、Eon、Fudan
+`microsnander -L` 会列出支持的芯片：291 款 SPI NOR 芯片（Winbond、Eon、Fudan
 Microelectronics FM25Q、GigaDevice、Macronix、Spansion、XMC、XTX、Zbit、Giantec
 GM25Q、ISSI、Micron、Boya、Puya 等）和 135 款 SPI NAND 芯片（Etron、GigaDevice、Heyang、Foresee、ESMT、Dosilicon、XTX、Micron、
 Toshiba/Kioxia、Winbond、Macronix 等）。不在列表中的芯片会显示为未检测到；输出中的
@@ -156,22 +156,23 @@ Toshiba/Kioxia、Winbond、Macronix 等）。不在列表中的芯片会显示�
 您有这些芯片，请在 [GitHub Issues](https://github.com/OpenIPC/microsnander/issues)
 中报告其工作情况，并附上 `microsnander -i` 的输出和芯片上的完整型号。
 
-| 芯片                                                       | MicroSNANDer 使用                                    | 其他来源                         |
-|------------------------------------------------------------|------------------------------------------------------|----------------------------------|
-| TOSHIBA TC58CVG0S3H, TC58CVG1S3H                           | OOB 128 字节                                         | OOB 64 字节                      |
-| TOSHIBA TC58CVG2S0H, KIOXIA TC58CVG2S0HRAIJ                | OOB 256 字节                                         | OOB 128 字节                     |
-| MICRON MT29F4G01（ID `2C 36`）                             | 两个 2 Gbit 晶粒，页 2 KB，OOB 128 字节              | 单晶粒，页 4 KB，OOB 256 字节    |
-| 厂商 ID 为 `C9` 的 HEYANG 芯片                             | 状态位 5:4 为 `10` 表示 ECC 不可纠正；解锁清除位 5:3 | 位 5:4 为 `11`；解锁位 6:3       |
-| DOSILICON DS35Q1GA, DS35Q2GA                               | 状态位 5:4 为 `10` 表示 ECC 不可纠正                 | 位 6:4 为 `010`                  |
-| GIGADEVICE GD5F1GM7UE                                      | OOB 128 字节，dual 读取                              | OOB 64 字节，single 读取         |
-| ESMT F50D1G41LB(2M)                                        | OOB 64 字节                                          | OOB 128 字节                     |
-| FORESEE F35SQA001G                                         | OOB 64 字节                                          | OOB 128 字节                     |
-| FORESEE F35SQA512M                                         | dual 读取                                            | single 读取                      |
-| XINCUN XCSP1AAWH-NT                                        | 不检查 ECC 状态：不可纠正的页读取时不报错            | 状态编码未知                     |
-| UNIM UM19C0HISW                                            | 暂不支持                                             | spare 区计入页和块大小的几何参数 |
-| ES25P10–ES25P32、ES25M40A–ES25M16A（SPI NOR）              | 按 ID 中的容量字节确定大小（ES25P10：1 Mbit）        | 两倍大小                         |
-| ISSI `9D 60 1A`、`9D 70 1A`（SPI NOR）                     | IS25LP512M、IS25WP512M，512 Mbit                     | 命名为 IS25LP256D、IS25WP256D    |
-| PCT25VF010A–PCT25VF032B、PCT26VF016、PCT26VF032（SPI NOR） | 暂不支持：需要单字节/AAI 编程或 ULBPR 解锁           | 作为普通芯片列出                 |
+| 芯片                                                       | MicroSNANDer 使用                                                                | 其他来源                              |
+|------------------------------------------------------------|----------------------------------------------------------------------------------|---------------------------------------|
+| TOSHIBA TC58CVG0S3H, TC58CVG1S3H                           | OOB 128 字节                                                                     | OOB 64 字节                           |
+| TOSHIBA TC58CVG2S0H, KIOXIA TC58CVG2S0HRAIJ                | OOB 256 字节                                                                     | OOB 128 字节                          |
+| MICRON MT29F4G01（ID `2C 36`）                             | 两个 2 Gbit 晶粒，页 2 KB，OOB 128 字节                                          | 单晶粒，页 4 KB，OOB 256 字节         |
+| 厂商 ID 为 `C9` 的 HEYANG 芯片                             | 状态位 5:4 为 `10` 表示 ECC 不可纠正；解锁清除位 5:3                             | 位 5:4 为 `11`；解锁位 6:3            |
+| DOSILICON DS35Q1GA, DS35Q2GA                               | 状态位 5:4 为 `10` 表示 ECC 不可纠正                                             | 位 6:4 为 `010`                       |
+| GIGADEVICE GD5F1GM7UE                                      | OOB 128 字节，dual 读取                                                          | OOB 64 字节，single 读取              |
+| ESMT F50D1G41LB(2M)                                        | OOB 64 字节                                                                      | OOB 128 字节                          |
+| FORESEE F35SQA001G                                         | OOB 64 字节                                                                      | OOB 128 字节                          |
+| FORESEE F35SQA512M                                         | dual 读取                                                                        | single 读取                           |
+| XINCUN XCSP1AAWH-NT                                        | 不检查 ECC 状态：不可纠正的页读取时不报错                                        | 状态编码未知                          |
+| UNIM UM19C0HISW                                            | 暂不支持                                                                         | spare 区计入页和块大小的几何参数      |
+| ES25P10–ES25P32、ES25M40A–ES25M16A（SPI NOR）              | 按 ID 中的容量字节确定大小（ES25P10：1 Mbit）                                    | 两倍大小                              |
+| ISSI `9D 60 1A`、`9D 70 1A`（SPI NOR）                     | IS25LP512M、IS25WP512M，512 Mbit                                                 | 命名为 IS25LP256D、IS25WP256D         |
+| PCT25VF020B–PCT25VF032B、PCT26VF016、PCT26VF032（SPI NOR） | AAI 字编程（SST25 类型）、ULBPR 解锁和 4 KB 擦除（SST26 类型）；在 CH341A 上较慢 | 作为支持 256 字节页编程的普通芯片列出 |
+| PCT25VF010A（SPI NOR）                                     | 不支持：没有 JEDEC READ ID                                                       | 列有 JEDEC ID                         |
 
 OOB 大小只影响使用 `-d` 的原始转储（每页连同 spare 区一起读取）；使用片内 ECC 的读写只
 涉及数据区。原始写入只接受完整的“数据 + OOB”页，因此 1.11.1 之前（使用旧 OOB 大小）

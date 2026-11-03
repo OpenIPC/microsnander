@@ -13,7 +13,7 @@
 MicroSNANDer is a command-line programmer for SPI NOR and SPI NAND flash chips
 with the cheap CH341A USB programmer. It reads, writes, erases and verifies the
 flash of cameras, routers and other boards, removes the write protection of SPI
-NOR chips, and knows 284 SPI NOR and 135 SPI NAND chips.
+NOR chips, and knows 291 SPI NOR and 135 SPI NAND chips.
 
 It is a stripped-down, extended, deeply modified and optimized version of
 [SNANDer](https://github.com/McMCCRU/SNANDer) 1.7.4 by McMCC: Linux only, without
@@ -149,7 +149,7 @@ microsnander -d -r raw.bin
 
 ## Supported chips
 
-`microsnander -L` prints the list: 284 SPI NOR chips (Winbond, Eon, Fudan
+`microsnander -L` prints the list: 291 SPI NOR chips (Winbond, Eon, Fudan
 Microelectronics FM25Q, GigaDevice, Macronix, Spansion, XMC, XTX, Zbit, Giantec
 GM25Q, ISSI, Micron, Boya, Puya and others) and 135 SPI NAND chips (Etron, GigaDevice, Heyang, Foresee, ESMT, Dosilicon, XTX,
 Micron, Toshiba/Kioxia, Winbond, Macronix and others).
@@ -165,22 +165,23 @@ described here. If you have one of these chips, please report how it works in
 [GitHub Issues](https://github.com/OpenIPC/microsnander/issues), with the output
 of `microsnander -i` and the full part number from the chip.
 
-| Chip                                                      | MicroSNANDer uses                                                   | Found elsewhere                                                     |
-|-----------------------------------------------------------|---------------------------------------------------------------------|---------------------------------------------------------------------|
-| TOSHIBA TC58CVG0S3H, TC58CVG1S3H                          | OOB 128 bytes                                                       | OOB 64 bytes                                                        |
-| TOSHIBA TC58CVG2S0H, KIOXIA TC58CVG2S0HRAIJ               | OOB 256 bytes                                                       | OOB 128 bytes                                                       |
-| MICRON MT29F4G01 (ID `2C 36`)                             | two 2 Gbit dies, page 2 KB, OOB 128 bytes                           | one die, page 4 KB, OOB 256 bytes                                   |
-| HEYANG chips with maker ID `C9`                           | uncorrectable ECC = `10` in status bits 5:4; unlock clears bits 5:3 | `11` in bits 5:4; unlock bits 6:3                                   |
-| DOSILICON DS35Q1GA, DS35Q2GA                              | uncorrectable ECC = `10` in status bits 5:4                         | `010` in bits 6:4                                                   |
-| GIGADEVICE GD5F1GM7UE                                     | OOB 128 bytes, dual read                                            | OOB 64 bytes, single read                                           |
-| ESMT F50D1G41LB(2M)                                       | OOB 64 bytes                                                        | OOB 128 bytes                                                       |
-| FORESEE F35SQA001G                                        | OOB 64 bytes                                                        | OOB 128 bytes                                                       |
-| FORESEE F35SQA512M                                        | dual read                                                           | single read                                                         |
-| XINCUN XCSP1AAWH-NT                                       | no ECC status check: an uncorrectable page is read without an error | the encoding of its status is unknown                               |
-| UNIM UM19C0HISW                                           | not supported yet                                                   | a geometry with the spare area counted into the page and block size |
-| ES25P10–ES25P32, ES25M40A–ES25M16A (SPI NOR)              | size from the capacity byte of the ID (ES25P10: 1 Mbit)             | twice that size                                                     |
-| ISSI `9D 60 1A`, `9D 70 1A` (SPI NOR)                     | IS25LP512M, IS25WP512M, 512 Mbit                                    | named IS25LP256D, IS25WP256D                                        |
-| PCT25VF010A–PCT25VF032B, PCT26VF016, PCT26VF032 (SPI NOR) | not supported yet: need byte/AAI programming or the ULBPR unlock    | listed as ordinary chips                                            |
+| Chip                                                      | MicroSNANDer uses                                                                       | Found elsewhere                                                     |
+|-----------------------------------------------------------|-----------------------------------------------------------------------------------------|---------------------------------------------------------------------|
+| TOSHIBA TC58CVG0S3H, TC58CVG1S3H                          | OOB 128 bytes                                                                           | OOB 64 bytes                                                        |
+| TOSHIBA TC58CVG2S0H, KIOXIA TC58CVG2S0HRAIJ               | OOB 256 bytes                                                                           | OOB 128 bytes                                                       |
+| MICRON MT29F4G01 (ID `2C 36`)                             | two 2 Gbit dies, page 2 KB, OOB 128 bytes                                               | one die, page 4 KB, OOB 256 bytes                                   |
+| HEYANG chips with maker ID `C9`                           | uncorrectable ECC = `10` in status bits 5:4; unlock clears bits 5:3                     | `11` in bits 5:4; unlock bits 6:3                                   |
+| DOSILICON DS35Q1GA, DS35Q2GA                              | uncorrectable ECC = `10` in status bits 5:4                                             | `010` in bits 6:4                                                   |
+| GIGADEVICE GD5F1GM7UE                                     | OOB 128 bytes, dual read                                                                | OOB 64 bytes, single read                                           |
+| ESMT F50D1G41LB(2M)                                       | OOB 64 bytes                                                                            | OOB 128 bytes                                                       |
+| FORESEE F35SQA001G                                        | OOB 64 bytes                                                                            | OOB 128 bytes                                                       |
+| FORESEE F35SQA512M                                        | dual read                                                                               | single read                                                         |
+| XINCUN XCSP1AAWH-NT                                       | no ECC status check: an uncorrectable page is read without an error                     | the encoding of its status is unknown                               |
+| UNIM UM19C0HISW                                           | not supported yet                                                                       | a geometry with the spare area counted into the page and block size |
+| ES25P10–ES25P32, ES25M40A–ES25M16A (SPI NOR)              | size from the capacity byte of the ID (ES25P10: 1 Mbit)                                 | twice that size                                                     |
+| ISSI `9D 60 1A`, `9D 70 1A` (SPI NOR)                     | IS25LP512M, IS25WP512M, 512 Mbit                                                        | named IS25LP256D, IS25WP256D                                        |
+| PCT25VF020B–PCT25VF032B, PCT26VF016, PCT26VF032 (SPI NOR) | AAI word program (SST25 type), ULBPR unlock and 4 KB erase (SST26 type); slow on CH341A | listed as ordinary chips with a 256-byte page program               |
+| PCT25VF010A (SPI NOR)                                     | not supported: no JEDEC READ ID                                                         | listed with a JEDEC ID                                              |
 
 The OOB size matters for raw dumps with `-d` (every page is read with its spare
 area); reading and writing with the internal ECC uses only the data area. A raw

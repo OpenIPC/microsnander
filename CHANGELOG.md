@@ -4,6 +4,24 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.12.0 — 2026-11-03
+
+- SST25VF-type SPI NOR chips without a 256-byte page program are written with a byte
+  program for an odd first or last byte and AAI word program for the rest; their
+  status register protection (BP3, BPL) is cleared like on other chips (#22). This is
+  slow on the CH341A: one SPI command per two bytes.
+- SST26-type SPI NOR chips: the protection is cleared with the global unlock ULBPR, and
+  they are erased in 4 KB sectors, as their blocks at the start are 8 KB and 32 KB.
+- Back in the table: PCT25VF020B, PCT25VF040B, PCT25VF080B, PCT25VF016B, PCT25VF032B,
+  PCT26VF016, PCT26VF032 (291 SPI NOR chips). PCT25VF010A stays out: it has no JEDEC
+  READ ID.
+- SPI NOR: the write enable goes after the unprotect step before a page program and a
+  chip erase. Clearing the protection writes the status register, which clears the
+  write enable latch, so the first page program or a chip erase of a protected chip did
+  nothing.
+- `tests/norsim.c` simulates an ordinary, an SST25VF-type and an SST26-type chip and
+  checks chip erase, sector erase, and a write at an odd address with an odd length.
+
 ## 1.11.1 — 2026-11-03
 
 - SPI NAND OOB size: 128 bytes for TOSHIBA TC58CVG0S3H and TC58CVG1S3H (was 64), 256
