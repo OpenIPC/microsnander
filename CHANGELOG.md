@@ -4,6 +4,16 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.13.1 — 2026-11-03
+
+- SPI NOR unprotect keeps the quad enable bit (QE) of status register 2 and clears
+  only its protection bits, SRP1 and CMP (#30). QE protects nothing. Clearing it could
+  stop a SoC that boots with quad reads, and on parts with QE fixed at 1 (W25Q128JV
+  "Q") the unprotect wrote status register 2 again before every page program. Found on
+  hardware: a W25Q128JV with QE fixed on a CH341A.
+- `tests/norsim.c`: a chip with QE fixed at 1 (status register 2 is never written)
+  and a chip protected with CMP (CMP cleared, QE kept).
+
 ## 1.13.0 — 2026-11-03
 
 - CH347 programmers: CH347T (`1a86:55db`, mode 1, SPI interface 2) and CH347F
