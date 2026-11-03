@@ -73,6 +73,7 @@ void libusb_set_debug(libusb_context *c, int l) { (void)c; (void)l; }
 libusb_device_handle *libusb_open_device_with_vid_pid(libusb_context *c, uint16_t v, uint16_t p) { (void)c; (void)v; (void)p; return NULL; }
 void libusb_close(libusb_device_handle *h) { (void)h; }
 int libusb_detach_kernel_driver(libusb_device_handle *h, int i) { (void)h; (void)i; return 0; }
+int libusb_attach_kernel_driver(libusb_device_handle *h, int i) { (void)h; (void)i; return 0; }
 int libusb_claim_interface(libusb_device_handle *h, int i) { (void)h; (void)i; return 0; }
 int libusb_release_interface(libusb_device_handle *h, int i) { (void)h; (void)i; return 0; }
 libusb_device *libusb_get_device(libusb_device_handle *h) { (void)h; return NULL; }
