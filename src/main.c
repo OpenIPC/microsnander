@@ -190,7 +190,8 @@ int main(int argc, char* argv[])
 
 	if (op == 0) usage(1);
 
-	if (op == 'x' || (ECC_ignore && !ECC_fcheck) || (ECC_ignore && Skip_BAD_page) || (op == 'w' && ECC_ignore)) {
+	if (op == 'x' || (ECC_ignore && !ECC_fcheck) || (ECC_ignore && Skip_BAD_page) || (op == 'w' && ECC_ignore) ||
+	    (op == 't' && (!ECC_fcheck || ECC_ignore || Skip_BAD_page))) {	/* -t: one block, ECC on, no skipping */
 		printf("Conflicting options, only one option at a time.\n\n");
 		return 1;
 	}
@@ -216,8 +217,10 @@ int main(int argc, char* argv[])
 			.size = flen, .addr = addr, .block = bsize, .kind = prog.kind, .lock = prog.lock,
 		};
 
-		if (prog.kind == FLASH_NOR && programmer->send)
+		if (prog.kind == FLASH_NOR && programmer->send) {
 			t.sr_valid = !snor_read_status(t.sr);
+			t.block_locks = snor_block_locks();
+		}
 		rc = selftest(&t);		/* 0 OK, 2 protected, 1 failed */
 		goto out;
 	}

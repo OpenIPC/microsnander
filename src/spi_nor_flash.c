@@ -139,6 +139,8 @@ static int snor_is_sst26(void)
 	return spi_chip_info->id == 0xbf && (spi_chip_info->jedec_id >> 24) == 0x26;
 }
 
+int snor_block_locks(void) { return snor_is_sst26(); }	/* see snorcmd_api.h */
+
 /*
  * Set write enable latch with Write Enable command.
  * Returns negative if error occurred.

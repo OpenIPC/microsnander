@@ -20,6 +20,7 @@ struct selftest {
 	int sr_valid;			/* SPI NOR: sr read */
 	unsigned char sr[3];
 	int lock;			/* SPI NAND: A0 when found, -1 */
+	int block_locks;		/* SPI NOR of the SST26 type: blocks locked at power-up, not in SR */
 };
 
 /* the verdict printed; 0 OK, 2 protected, 1 failed */

@@ -10,10 +10,13 @@ from every push to `main`; this file is the change history.
   (SPI NOR: BP, TB, CMP, SRP; SPI NAND: the block lock register when found), then takes one
   block — the first by default, where a locked loader usually is, or the one at `-a` —
   keeps its data, erases it, writes a pattern, reads it back and puts the data back. One
-  line at the end: `OK` (exit 0), `PROTECTED` (2: the block took the commands and kept its
-  data, or the bits protect it; `-u` clears them) or `FAILED` with the first wrong address
-  (1). Old data that does not come back is saved to `selftest-<chip>-0x<address>.bin`. With
-  the EZP programmers (whole-chip erase only) it reads the block twice.
+  line at the end: `OK` (exit 0), `PROTECTED` (2) or `FAILED` with the first wrong address
+  (1). With protection bits set it stops before any erase and leaves them as they are
+  (`-u` clears them); a block that takes the commands and keeps its data with no bit set is
+  `PROTECTED` too. Old data that does not come back is saved to
+  `selftest-<chip>-0x<address>.bin`. SPI NAND: block 0 only, its spare area besides the ECC
+  is not kept; an SST26 is told that its blocks lock at power-up. Not with `-d`, `-I`, `-k`.
+  With the EZP programmers (whole-chip erase only) it reads the block twice.
 
 ## 1.18.2 — 2026-11-04
 

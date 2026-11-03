@@ -180,11 +180,14 @@ a later `-k` read may read it as data, and the dump is shifted from there on.
 (SPI NOR: BP, TB, CMP, SRP in the status registers; SPI NAND: the block lock register), then
 takes one block — the first by default, where a locked loader usually is, or the one at `-a` —
 keeps its data, erases it, writes a pattern, reads it back and puts the old data back. It ends
-with one line: `OK` (exit 0), `PROTECTED` — the block took the commands and kept its data, or
-the bits protect it; `-u` clears them (exit 2), or `FAILED` with the address of the first wrong
-byte (exit 1). If the old data cannot be put back, it is saved to
-`selftest-<chip>-0x<address>.bin` next to it. The EZP programmers erase only the whole chip:
-with them `-t` reads the block twice and does not erase it.
+with one line: `OK` (exit 0), `PROTECTED` (exit 2) or `FAILED` with the address of the first
+wrong byte (exit 1). `PROTECTED` comes before anything is erased when the protection bits are
+set (they stay as they are: `-u` clears them, then `-t` again), or when the block takes the
+commands and keeps its data with no bit set (the WP# pin, a block lock). If the old data
+cannot be put back, it is saved to `selftest-<chip>-0x<address>.bin` next to it. SPI NAND is
+tested on block 0 only, the one every maker guarantees good, and its spare area besides the ECC
+is not kept. `-t` goes without `-d`, `-I` and `-k`. The EZP programmers erase only the whole
+chip: with them `-t` reads the block twice and does not erase it.
 
 ## Examples
 

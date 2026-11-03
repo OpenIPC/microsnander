@@ -19,8 +19,8 @@ int snand_read(unsigned char *buf, unsigned long from, unsigned long len);
 int snand_erase(unsigned long offs, unsigned long len);
 int snand_write(unsigned char *buf, unsigned long to, unsigned long len);
 long snand_init(void);
-extern const char *flash_chip_name;
-extern int snand_probe_lock;		/* the block lock register (A0) when found, before the unlock */	/* name of the chip found, for file names */
+extern const char *flash_chip_name;	/* name of the chip found, for file names */
+extern int snand_probe_lock;		/* the block lock register (A0) when found, before the unlock */
 void support_snand_list(void);
 
 extern int ECC_fcheck;

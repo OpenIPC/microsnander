@@ -47,7 +47,6 @@ static long first_not_ff(const unsigned char *got, unsigned long n)
 	return -1;
 }
 
-/* the protection the registers show; 1 if some area is protected */
 /* "2 ms" or "2.43 s" */
 static const char *took(double s, char *buf, size_t n)
 {
@@ -58,6 +57,7 @@ static const char *took(double s, char *buf, size_t n)
 	return buf;
 }
 
+/* the protection the registers show; 1 if some area is protected */
 static int protection(const struct selftest *t, char *why, size_t n)
 {
 	why[0] = 0;
@@ -71,6 +71,11 @@ static int protection(const struct selftest *t, char *why, size_t n)
 		else
 			snprintf(why, n, "none, the blocks are unlocked (A0 = 0x%02x)", t->lock);
 		return 0;		/* unlocked by the driver: not in the way of this run */
+	}
+	if (t->block_locks) {
+		snprintf(why, n, "an SST26-type chip: its blocks are locked at power-up, and microsnander "
+			 "unlocks them for the run (the lock comes back at the next power-up)");
+		return 0;		/* volatile, unlocked by the driver: not in the way of this run */
 	}
 	if (!t->sr_valid)
 		return 0;
@@ -107,6 +112,20 @@ int selftest(const struct selftest *t)
 		printf("Self-test: FAILED, the block is past the chip end (0x%llx).\n", t->size);
 		goto out;
 	}
+	if (t->kind == FLASH_NAND && a) {
+		/* block 0 is the one every maker guarantees good; another one may
+		   be a bad block, whose mark the erase would take away */
+		printf("Self-test: SPI NAND is tested on block 0 only (-a 0).\n");
+		goto out;
+	}
+	if (prot) {
+		/* an erase would clear the protection bits, and they are the user's:
+		   no test of the block until -u is given for it */
+		printf("Self-test: PROTECTED, the registers protect part of the chip (exit 2). "
+		       "Clear them with -u, then run -t again.\n");
+		ret = 2;
+		goto out;
+	}
 	if (t->cmd->flash_read(orig, a, n) != (int)n || t->cmd->flash_read(buf, a, n) != (int)n) {
 		printf("Self-test: FAILED, the block does not read.\n");
 		goto out;
@@ -135,24 +154,26 @@ int selftest(const struct selftest *t)
 		int same = got && !memcmp(buf, orig, n);	/* nothing happened to it */
 
 		changed = !same;
-		/* a protected block takes the erase command and keeps its data; an
+		/* a block that takes the erase command and keeps its data is locked
+		   in a way the registers do not show (the WP# pin, a block lock); an
 		   erase that fails as a command is a fault of its own */
-		if (prot || (same && !e)) {
-			printf("Self-test: PROTECTED, the block does not erase%s.\n",
-			       prot ? ": the registers protect it, -u clears them" : " (its data stays as it was)");
+		if (same && !e) {
+			printf("Self-test: PROTECTED, the block takes the erase and keeps its data, though no "
+			       "register bit says so (the WP# pin, a block lock?).\n");
 			ret = 2;
-		} else {
-			printf("Self-test: FAILED, the erase does not take (0x%02x at 0x%llx).\n", got ? buf[d] : 0, a + (d > 0 ? d : 0));
-		}
+		} else if (e)
+			printf("Self-test: FAILED, the erase command fails.\n");
+		else if (!got)
+			printf("Self-test: FAILED, the erased block does not read.\n");
+		else
+			printf("Self-test: FAILED, the erase does not take: 0x%02x at 0x%llx.\n", buf[d], a + d);
 		goto restore;
 	}
 	for (unsigned long i = 0; i < n; i++)
 		pat[i] = pattern(a + i);
 	t0 = now();
 	if (t->cmd->flash_write(pat, a, n) != (int)n) {
-		printf("Self-test: %s, the write does not go%s.\n", prot ? "PROTECTED" : "FAILED",
-		       prot ? ": the registers protect the block, -u clears them" : "");
-		ret = prot ? 2 : 1;
+		printf("Self-test: FAILED, the write command fails.\n");
 		goto restore;
 	}
 	t_write = now() - t0;
@@ -196,7 +217,8 @@ restore:
 		char te[16], tw[16];
 
 		printf("Self-test: OK, the block erases in %s, takes a write in %s, reads back; "
-		       "its data is back.\n", took(t_erase, te, sizeof(te)), took(t_write, tw, sizeof(tw)));
+		       "its data is back%s.\n", took(t_erase, te, sizeof(te)), took(t_write, tw, sizeof(tw)),
+		       t->kind == FLASH_NAND ? " (its spare area besides the ECC is not kept)" : "");
 	}
 out:
 	free(orig);
