@@ -16,8 +16,8 @@ flash of cameras, routers and other boards, removes the write protection of SPI
 NOR chips, and knows 291 SPI NOR and 135 SPI NAND chips.
 
 It is a stripped-down, extended, deeply modified and optimized version of
-[SNANDer](https://github.com/McMCCRU/SNANDer) 1.7.4 by McMCC: Linux only, without
-the EEPROM part in the release build, with the `-u` (unprotect) command and the
+[SNANDer](https://github.com/McMCCRU/SNANDer) 1.7.4 by McMCC: Linux only, SPI NOR
+and SPI NAND only (no EEPROM chips), with the `-u` (unprotect) command and the
 flash chips found on OpenIPC hardware added. The release binaries are static and
 have no dependencies, so the same file runs on a PC or right on an ARM camera
 with the programmer plugged into its USB port.
@@ -247,7 +247,7 @@ How it works:
   can be replugged, or used by a normal microsnander run.
 - One operation runs at a time; a request while one runs gets `409`. The page polls the state
   twice a second while an operation runs.
-- `-d`, `-I`, `-k` and the EEPROM options do not go with `-W`: the page writes whole files
+- `-d`, `-I` and `-k` do not go with `-W`: the page writes whole files
   from address 0 with ECC on.
 - The service keeps running when a client disconnects; a slow client does not hold the others
   (up to 16 connections at a time).
@@ -359,9 +359,9 @@ sudo apt-get install build-essential libusb-1.0-0-dev
 make -C src
 ```
 
-`make -C src EEPROM_SUPPORT=y` adds the I2C (24Cxx) and Microwire (93Cxx) EEPROM
-support of the original SNANDer (`-E`, `-8`, `-f`); it is not in the release
-binaries.
+I2C (24Cxx) and Microwire (93Cxx) EEPROM chips are not supported: microsnander is for
+SPI NOR and SPI NAND flash. The EEPROM part of the original SNANDer (`-E`, `-8`, `-f`)
+was removed.
 
 The static release binaries are built by `ci/build-musl.sh` (Docker or any Linux
 x86_64 host with `curl`, `make` and, for arm, `qemu-user`). It downloads the musl

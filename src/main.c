@@ -35,22 +35,6 @@
 struct flash_cmd prog;
 extern unsigned int bsize;
 
-#ifdef EEPROM_SUPPORT
-#include "ch341a_i2c.h"
-#include "bitbang_microwire.h"
-extern struct EEPROM eeprom_info;
-extern char eepromname[12];
-extern int eepromsize;
-extern int mw_eepromsize;
-extern int org;
-#define EHELP	" -E             select I2C EEPROM {24c01|24c02|24c04|24c08|24c16|24c32|24c64|24c128|24c256|24c512|24c1024}\n" \
-		"                select Microwire EEPROM {93c06|93c16|93c46|93c56|93c66|93c76|93c86|93c96} (need SPI-to-MW adapter)\n" \
-		" -8             set organization 8-bit for Microwire EEPROM(default 16-bit) and set jumper on SPI-to-MW adapter\n" \
-		" -f <addr len>  set manual address size in bits for Microwire EEPROM(default auto)\n"
-#else
-#define EHELP	""
-#endif
-
 #define _VER	"1.16.4"
 
 const char *ms_version = _VER;
@@ -72,11 +56,7 @@ static int parse_num(const char *arg, const char *opt, long long *val)
 
 void title(void)
 {
-#ifdef EEPROM_SUPPORT
-	printf("\nMicroSNANDer - Serial Nor/nAND/Eeprom programmeR v." _VER "\n\n");
-#else
 	printf("\nMicroSNANDer - Spi Nor/nAND programmER v." _VER "\n\n");
-#endif
 }
 
 /* Exit code: 0 for -h, 1 for an unknown option or no operation. */
@@ -90,7 +70,6 @@ void usage(int code)
 		" -k             skip BAD pages (SPI NAND): use the next page instead\n"\
 		" -L             print list support chips\n"\
 		" -i             read the chip ID info\n"\
-		"" EHELP ""\
 		" -e             erase chip(full or use with -a [-l])\n"\
 		" -l <bytes>     manually set length\n"\
 		" -a <address>   manually set address\n"\
@@ -111,67 +90,16 @@ int main(int argc, char* argv[])
 {
 	int c, vr = 0, ret = 0, rc = 1, speed_set = 0;
 	char *fname = NULL, op = 0, *web = NULL, *web_key = NULL, *web_dir = NULL;
-#ifdef EEPROM_SUPPORT
-	char *str;
-#endif
 	unsigned char *buf;
 	int long long len = 0, addr = 0, flen = 0, wlen = 0;
 	FILE *fp;
 
 	title();
 
-#ifdef EEPROM_SUPPORT
-	while ((c = getopt(argc, argv, "diIhveukLl:a:w:r:E:f:8P:S:W:K:o:")) != -1)
-#else
 	while ((c = getopt(argc, argv, "diIhveukLl:a:w:r:P:S:W:K:o:")) != -1)
-#endif
 	{
 		switch(c)
 		{
-#ifdef EEPROM_SUPPORT
-			case 'E':
-				if ((eepromsize = parseEEPsize(optarg, &eeprom_info)) > 0) {
-					memset(eepromname, 0, sizeof(eepromname));
-					strncpy(eepromname, optarg, 10);
-					if (len > eepromsize) {
-						printf("Error set size %lld, max size %d for EEPROM %s!!!\n", len, eepromsize, eepromname);
-						exit(1);
-					}
-				} else if ((mw_eepromsize = deviceSize_3wire(optarg)) > 0) {
-					memset(eepromname, 0, sizeof(eepromname));
-					strncpy(eepromname, optarg, 10);
-					org = 1;
-					if (len > mw_eepromsize) {
-						printf("Error set size %lld, max size %d for EEPROM %s!!!\n", len, mw_eepromsize, eepromname);
-						exit(1);
-					}
-				} else {
-					printf("Unknown EEPROM chip %s!!!\n", optarg);
-					exit(1);
-				}
-				break;
-			case '8':
-				if (mw_eepromsize <= 0)
-				{
-					printf("-8 option only for Microwire EEPROM chips!!!\n");
-					exit(1);
-				}
-				org = 0;
-				break;
-			case 'f':
-				if (mw_eepromsize <= 0)
-				{
-					printf("-f option only for Microwire EEPROM chips!!!\n");
-					exit(1);
-				}
-				str = strdup(optarg);
-				fix_addr_len = strtoll(str, NULL, *str && *(str + 1) == 'x' ? 16 : 10);
-				if (fix_addr_len > 32) {
-						printf("Address len is very big!!!\n");
-						exit(1);
-				}
-				break;
-#endif
 			case 'I':
 				ECC_ignore = 1;
 				break;
@@ -243,14 +171,10 @@ int main(int argc, char* argv[])
 
 	if (web) {
 		/* the web mode: the page does the operations, one programmer, auto */
-		int eeprom = 0;
-#ifdef EEPROM_SUPPORT
-		eeprom = eepromsize > 0 || mw_eepromsize > 0;
-#endif
 		/* the page writes whole files from 0 with ECC on: no raw NAND
-		   (-d), no ECC ignore (-I), no BAD page skipping (-k), no EEPROM */
-		if (op || vr || speed_set || !ECC_fcheck || ECC_ignore || Skip_BAD_page || eeprom) {
-			printf("-W runs the web mode: give no -i, -r, -w, -e, -u, -v, -S, -d, -I, -k or -E with it.\n\n");
+		   (-d), no ECC ignore (-I), no BAD page skipping (-k) */
+		if (op || vr || speed_set || !ECC_fcheck || ECC_ignore || Skip_BAD_page) {
+			printf("-W runs the web mode: give no -i, -r, -w, -e, -u, -v, -S, -d, -I or -k with it.\n\n");
 			return 1;
 		}
 		return web_serve(web, web_key, web_dir, addr, len);
@@ -274,21 +198,9 @@ int main(int argc, char* argv[])
 		return 1;
 	}
 
-#ifdef EEPROM_SUPPORT
-	if ((eepromsize > 0 || mw_eepromsize > 0) && strcmp(programmer->key, "ch341a")) {
-		printf("EEPROM chips are supported with the CH341A only.\n\n");
-		goto out;
-	}
-#endif
 	if((flen = flash_cmd_init(&prog)) <= 0)
 		goto out;
 
-#ifdef EEPROM_SUPPORT
-	if ((eepromsize || mw_eepromsize) && op == 'i') {
-		printf("Programmer not supported auto detect EEPROM!\n\n");
-		goto out;
-	}
-#endif
 	if (op == 'i') {
 		rc = 0;
 		goto out;

@@ -17,10 +17,6 @@
 
 #include "nandcmd_api.h"
 #include "snorcmd_api.h"
-#ifdef EEPROM_SUPPORT
-#include "i2c_eeprom_api.h"
-#include "mw_eeprom_api.h"
-#endif
 
 struct flash_cmd {
 	int (*flash_read)(unsigned char *buf, unsigned long from, unsigned long len);
