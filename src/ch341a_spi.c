@@ -34,7 +34,13 @@
 #define LIBUSB_CALL
 #endif
 
-#define	 USB_TIMEOUT			1000	/* 1000 ms is plenty and we have no backup strategy anyway. */
+#define	 USB_TIMEOUT			1000	/* base timeout, ms; usb_timeout() adds time for the data */
+/* The CH341A sends the SPI stream at its SPI clock, ~60 KB/s of data. One
+   transfer of a whole 64 KB NOR sector needs ~1.1 s and runs out of a flat
+   1 s timeout, so a long stream goes in parts of at most this many bytes
+   (write plus read). CS stays low between the parts: the chip sees one
+   continuous stream. */
+#define	 CH341_MAX_STREAM		(16 * 1024)
 #define	 WRITE_EP			0x02
 #define	 READ_EP			0x82
 
@@ -140,15 +146,24 @@ static void LIBUSB_CALL cb_in(struct libusb_transfer *transfer)
 	cb_common(__func__, transfer);
 }
 
+/* Timeout of one transfer, ms: the base plus the data at a slow 8 KB/s, so a
+   slow hub or a clone programmer still fits. */
+static unsigned int usb_timeout(unsigned int bytes)
+{
+	return USB_TIMEOUT + bytes / 8;
+}
+
 static int32_t usb_transfer(const char *func, unsigned int writecnt, unsigned int readcnt, const uint8_t *writearr, uint8_t *readarr)
 {
 	if (handle == NULL)
 		return -1;
 
+	const unsigned int timeout = usb_timeout(writecnt + readcnt);
 	int state_out = TRANS_IDLE;
 	transfer_out->buffer = (uint8_t*)writearr;
 	transfer_out->length = writecnt;
 	transfer_out->user_data = &state_out;
+	transfer_out->timeout = timeout;
 
 	/* Schedule write first */
 	if (writecnt > 0) {
@@ -177,6 +192,7 @@ static int32_t usb_transfer(const char *func, unsigned int writecnt, unsigned in
 			transfer_ins[free_idx]->length = cur_todo;
 			transfer_ins[free_idx]->buffer = in_buf;
 			transfer_ins[free_idx]->user_data = &state_in[free_idx];
+			transfer_ins[free_idx]->timeout = timeout;
 			int ret = libusb_submit_transfer(transfer_ins[free_idx]);
 			if (ret) {
 				state_in[free_idx] = TRANS_ERR;
@@ -327,7 +343,7 @@ int enable_pins(bool enable)
 	return ret;
 }
 
-int ch341a_spi_send_command(unsigned int writecnt, unsigned int readcnt, const unsigned char *writearr, unsigned char *readarr)
+static int ch341a_spi_send_stream(unsigned int writecnt, unsigned int readcnt, const unsigned char *writearr, unsigned char *readarr)
 {
 	int32_t ret = 0;
 
@@ -376,6 +392,28 @@ int ch341a_spi_send_command(unsigned int writecnt, unsigned int readcnt, const u
 	}
 
 	return 0;
+}
+
+/* Send writecnt bytes, then read readcnt bytes, in parts of at most
+   CH341_MAX_STREAM bytes: the write part first, then the reads. */
+int ch341a_spi_send_command(unsigned int writecnt, unsigned int readcnt, const unsigned char *writearr, unsigned char *readarr)
+{
+	while (writecnt > CH341_MAX_STREAM) {
+		if (ch341a_spi_send_stream(CH341_MAX_STREAM, 0, writearr, NULL))
+			return -1;
+		writearr += CH341_MAX_STREAM;
+		writecnt -= CH341_MAX_STREAM;
+	}
+	while (writecnt + readcnt > CH341_MAX_STREAM) {
+		unsigned int now = CH341_MAX_STREAM - writecnt;
+
+		if (ch341a_spi_send_stream(writecnt, now, writearr, readarr))
+			return -1;
+		readarr += now;
+		readcnt -= now;
+		writecnt = 0;
+	}
+	return ch341a_spi_send_stream(writecnt, readcnt, writearr, readarr);
 }
 
 int ch341a_spi_shutdown(void)

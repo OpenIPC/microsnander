@@ -645,6 +645,7 @@ int snor_erase(unsigned long offs, unsigned long len)
 int snor_read(unsigned char *buf, unsigned long from, unsigned long len)
 {
 	u32 read_addr, physical_read_addr, remain_len, data_offset;
+	int failed;
 
 	snor_dbg("%s: from:%x len:%x \n", __func__, from, len);
 
@@ -661,6 +662,7 @@ int snor_read(unsigned char *buf, unsigned long from, unsigned long len)
 
 	read_addr = from;
 	remain_len = len;
+	failed = 0;
 
 	while(remain_len > 0) {
 
@@ -687,7 +689,7 @@ int snor_read(unsigned char *buf, unsigned long from, unsigned long len)
 				SPI_CONTROLLER_Chip_Select_High();
 				if (spi_chip_info->addr4b)
 					snor_4byte_mode(0);
-				len = -1;
+				failed = 1;
 				break;
 			}
 			remain_len = 0;
@@ -696,7 +698,7 @@ int snor_read(unsigned char *buf, unsigned long from, unsigned long len)
 				SPI_CONTROLLER_Chip_Select_High();
 				if (spi_chip_info->addr4b)
 					snor_4byte_mode(0);
-				len = -1;
+				failed = 1;
 				break;
 			}
 			remain_len -= spi_chip_info->sector_size - data_offset;
@@ -712,6 +714,10 @@ int snor_read(unsigned char *buf, unsigned long from, unsigned long len)
 
 		if (spi_chip_info->addr4b)
 			snor_4byte_mode(0);
+	}
+	if (failed) {
+		printf("\nRead failed at 0x%08x after [%lu] of [%lu] bytes\n", read_addr, len - remain_len, len);
+		return -1;
 	}
 	printf("Read 100%% [%lu] of [%lu] bytes      \n", len - remain_len, len);
 	timer_end();

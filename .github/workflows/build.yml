@@ -59,7 +59,8 @@ jobs:
 
       # main.c against a test double of the programmer: exit codes, option
       # conflicts, unprotect, verify after write; spi_nand_flash.c against an
-      # SPI NAND simulator: detection by ID, write and read, -k
+      # SPI NAND simulator: detection by ID, write and read, -k, busy chip;
+      # ch341a_spi.c against a fake libusb: long streams inside the timeout
       - name: Tests
         run: tests/run.sh
 

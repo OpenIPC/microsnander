@@ -33,6 +33,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <stdbool.h>
+#include <time.h>
 #include "types.h"
 #include "spi_nand_flash.h"
 #include "spi_controller.h"
@@ -249,6 +250,13 @@
 int ECC_fcheck = 1;
 int ECC_ignore = 0;
 int Skip_BAD_page = 0;
+
+/* Longest wait for the chip to leave OIP (operation in progress). A page read,
+   a program and a block erase take micro- to milliseconds; a chip that stays
+   busy longer is gone or hung (with no chip MISO floats high, so OIP reads 1). */
+#ifndef SPI_NAND_OIP_TIMEOUT_MS
+#define SPI_NAND_OIP_TIMEOUT_MS		3000
+#endif
 unsigned long long Skip_BAD_end = 0;	/* -k keeps the data below this address; 0: the chip end */
 
 static unsigned long long skip_limit(const struct SPI_NAND_FLASH_INFO_T *ptr_dev_info_t)
@@ -2885,6 +2893,42 @@ static SPI_NAND_FLASH_RTN_T ecc_fail_check( u32 page_number )
  *
  *------------------------------------------------------------------------------------
  */
+static int all_ff(const u8 *p, u32 len)
+{
+	u32 i;
+
+	for (i = 0; i < len; i++)
+		if (p[i] != 0xff)
+			return 0;
+	return 1;
+}
+
+static long long spi_nand_now_ms(void)
+{
+	struct timespec ts;
+
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	return (long long)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
+
+/* Poll the status register until OIP clears; the last status is in *ptr_status.
+   SPI_NAND_FLASH_RTN_TIMEOUT if the chip is still busy after the timeout. */
+static SPI_NAND_FLASH_RTN_T spi_nand_wait_ready( u8 *ptr_status, const char *what, u32 index )
+{
+	long long start = spi_nand_now_ms();
+
+	for (;;) {
+		spi_nand_protocol_get_status_reg_3( ptr_status );
+		if( !(*ptr_status & _SPI_NAND_VAL_OIP) )
+			return SPI_NAND_FLASH_RTN_NO_ERROR;
+		if( spi_nand_now_ms() - start > SPI_NAND_OIP_TIMEOUT_MS ) {
+			_SPI_NAND_PRINTF("\n%s 0x%x: the chip is still busy after %d ms, status = 0x%x\n",
+					 what, index, SPI_NAND_OIP_TIMEOUT_MS, *ptr_status);
+			return SPI_NAND_FLASH_RTN_TIMEOUT;
+		}
+	}
+}
+
 static SPI_NAND_FLASH_RTN_T spi_nand_load_page_into_cache( u32 page_number)
 {
 	u8 status;
@@ -2903,9 +2947,8 @@ static SPI_NAND_FLASH_RTN_T spi_nand_load_page_into_cache( u32 page_number)
 		spi_nand_protocol_page_read ( page_number );
 
 		/*  Checking status for load page/erase/program complete */
-		do {
-			spi_nand_protocol_get_status_reg_3( &status);
-		} while( status & _SPI_NAND_VAL_OIP) ;
+		if( spi_nand_wait_ready( &status, "Page read", page_number ) != SPI_NAND_FLASH_RTN_NO_ERROR )
+			return SPI_NAND_FLASH_RTN_TIMEOUT;
 
 		_SPI_NAND_DEBUG_PRINTF(SPI_NAND_FLASH_DEBUG_LEVEL_1, "spi_nand_load_page_into_cache : status = 0x%x\n", status);
 		if (ECC_fcheck && !ECC_ignore)
@@ -2993,9 +3036,8 @@ SPI_NAND_FLASH_RTN_T spi_nand_erase_block ( u32 block_index)
 	spi_nand_protocol_block_erase( block_index );
 
 	/* 2.4 Checking status for erase complete */
-	do {
-		spi_nand_protocol_get_status_reg_3( &status);
-	} while( status & _SPI_NAND_VAL_OIP) ;
+	if( spi_nand_wait_ready( &status, "Block erase", block_index ) != SPI_NAND_FLASH_RTN_NO_ERROR )
+		return SPI_NAND_FLASH_RTN_TIMEOUT;
 
 	/* 2.5 Disable write_flash */
 	spi_nand_protocol_write_disable();
@@ -3067,6 +3109,8 @@ static SPI_NAND_FLASH_RTN_T spi_nand_erase_internal( u32 addr, u32 len )
 			_SPI_NAND_DEBUG_PRINTF(SPI_NAND_FLASH_DEBUG_LEVEL_1, "spi_nand_erase_internal: addr = 0x%x, len = 0x%x, block_idx = 0x%x\n", addr, len, block_index );
 
 			rtn_status = spi_nand_erase_block(block_index);
+			if( rtn_status == SPI_NAND_FLASH_RTN_TIMEOUT )
+				break;
 
 			/* 2.6 Check Erase Fail Bit */
 			if(rtn_status != SPI_NAND_FLASH_RTN_NO_ERROR)
@@ -3116,7 +3160,10 @@ static SPI_NAND_FLASH_RTN_T spi_nand_read_page (u32 page_number, SPI_NAND_FLASH_
 	_SPI_NAND_ENABLE_MANUAL_MODE();
 
 	/* 1. Load Page into cache of NAND Flash Chip */
-	if( spi_nand_load_page_into_cache(page_number) == SPI_NAND_FLASH_RTN_DETECTED_BAD_BLOCK )
+	rtn_status = spi_nand_load_page_into_cache(page_number);
+	if( rtn_status == SPI_NAND_FLASH_RTN_TIMEOUT )
+		return rtn_status;
+	if( rtn_status == SPI_NAND_FLASH_RTN_DETECTED_BAD_BLOCK )
 	{
 		_SPI_NAND_PRINTF("spi_nand_read_page: Bad Block, ECC cannot recovery detecte, page = 0x%x\n", page_number);
 		rtn_status = SPI_NAND_FLASH_RTN_DETECTED_BAD_BLOCK;
@@ -3207,6 +3254,12 @@ static SPI_NAND_FLASH_RTN_T spi_nand_write_page( u32 page_number, u32 data_offse
 		SPI_NAND_FLASH_RTN_T rtn_status = SPI_NAND_FLASH_RTN_NO_ERROR;
 		u16 write_addr;
 
+		/* Programming can only clear bits, so data and OOB of all 0xFF change
+		   nothing on the chip: skip the page read and program. On an erased
+		   page this also leaves the page erased, ECC bytes included. */
+		if( all_ff(ptr_data, data_len) && (oob_len == 0 || all_ff(ptr_oob, oob_len)) )
+			return SPI_NAND_FLASH_RTN_NO_ERROR;
+
 		/* write to write_addr index in the page */
 		write_addr = 0;
 
@@ -3217,6 +3270,8 @@ static SPI_NAND_FLASH_RTN_T spi_nand_write_page( u32 page_number, u32 data_offse
 
 		/* Read Current page data to software cache buffer */
 		rtn_status = spi_nand_read_page(page_number, speed_mode);
+		if( rtn_status == SPI_NAND_FLASH_RTN_TIMEOUT )
+			return rtn_status;
 		if (Skip_BAD_page && (rtn_status == SPI_NAND_FLASH_RTN_DETECTED_BAD_BLOCK)) { /* skip BAD page, go to next page */
 			return SPI_NAND_FLASH_RTN_DETECTED_BAD_BLOCK;
 		}
@@ -3300,10 +3355,9 @@ static SPI_NAND_FLASH_RTN_T spi_nand_write_page( u32 page_number, u32 data_offse
 		/* Execute program data into SPI NAND chip  */
 		spi_nand_protocol_program_execute ( page_number );
 
-		/* Checking status for erase complete */
-		do {
-			spi_nand_protocol_get_status_reg_3( &status);
-		} while( status & _SPI_NAND_VAL_OIP) ;
+		/* Checking status for program complete */
+		if( spi_nand_wait_ready( &status, "Page program", page_number ) != SPI_NAND_FLASH_RTN_NO_ERROR )
+			return SPI_NAND_FLASH_RTN_TIMEOUT;
 
 		/*. Disable write_flash */
 		spi_nand_protocol_write_disable();
@@ -3484,6 +3538,11 @@ static SPI_NAND_FLASH_RTN_T spi_nand_read_internal ( u32 addr, u32 len, u8 *ptr_
 			rtn_status = SPI_NAND_FLASH_RTN_DETECTED_BAD_BLOCK;
 		else
 			rtn_status = spi_nand_read_page(page_number, speed_mode);
+		if( rtn_status == SPI_NAND_FLASH_RTN_TIMEOUT ) {
+			*status = rtn_status;
+			_SPI_NAND_SEMAPHORE_UNLOCK();
+			return (rtn_status);
+		}
 		if(rtn_status == SPI_NAND_FLASH_RTN_DETECTED_BAD_BLOCK) {
 			if (!Skip_BAD_page) {
 				*status = SPI_NAND_FLASH_RTN_DETECTED_BAD_BLOCK;
