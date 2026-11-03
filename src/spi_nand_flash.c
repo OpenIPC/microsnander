@@ -327,8 +327,9 @@ int Skip_BAD_page = 0;
 #ifndef SPI_NAND_OIP_TIMEOUT_MS
 #define SPI_NAND_OIP_TIMEOUT_MS		3000
 #endif
-unsigned long long Skip_BAD_end = 0;
-static u8 plane_column_high( u32 column, u32 page_size );	/* -k keeps the data below this address; 0: the chip end */
+unsigned long long Skip_BAD_end = 0;	/* -k keeps the data below this address; 0: the chip end */
+
+static u8 plane_column_high( u32 column, u32 page_size );
 
 static unsigned long long skip_limit(const struct SPI_NAND_FLASH_INFO_T *ptr_dev_info_t)
 {
