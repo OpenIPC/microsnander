@@ -80,6 +80,8 @@
 #define SR_EPE				0x20	/* Erase/Program error */
 #define SR_SRWD				0x80	/* SR write protect */
 
+#define SR1_TB				0x20	/* Top/bottom (BP3 on some chips) */
+#define SR1_PROTECT			(SR_BP0 | SR_BP1 | SR_BP2 | SR1_TB | SR_SRWD)	/* what unprotect clears */
 #define SR2_SRP1			1
 #define SR2_QE				2
 #define SR2_R				4
@@ -199,10 +201,21 @@ int snor_unprotect(void)
 		return -1;
 	}
 
-	if ((sr & (SR_BP0 | SR_BP1 | SR_BP2)) != 0 || (snor_is_sst25_aai() && (sr & 0xbc))) {
-		sr = 0;
-		if (snor_unprotect_write(OPCODE_WRSR, &sr))
+	/* BP0-2, TB (BP3 on some), SRP0: cleared together. Bit 6 is kept: SEC
+	   on Winbond-type chips (nothing without BP), QE on Macronix-type ones */
+	if (snor_is_sst25_aai() ? (sr & 0xbc) : (sr & SR1_PROTECT)) {
+		u8 was = sr;
+
+		sr = snor_is_sst25_aai() ? 0 : sr & 0x40;
+		if (snor_unprotect_write(OPCODE_WRSR, &sr) || snor_read_sr(OPCODE_RDSR, &sr) < 0)
 			return -1;
+		if (sr & (snor_is_sst25_aai() ? 0xbc : SR1_PROTECT)) {
+			printf("Status register 1 stays 0x%02x (was 0x%02x): %s\n", sr, was,
+			       sr & SR_SRWD ? "SRP0 is set and the WP# pin of the chip is low, which locks the register "
+					      "(in a socket it should be pulled up; on a board, the WP line)." :
+					      "the chip does not take the write.");
+			return -1;
+		}
 	}
 
 	/* SST25-type chips have one status register (BP3 and BPL in it) */
@@ -220,9 +233,17 @@ int snor_unprotect(void)
 	/* only the protection bits: QE (quad enable) protects nothing, and a
 	   chip set up for quad reads, or one with QE fixed at 1, needs it kept */
 	if (sr != 0xff && (sr & (SR2_SRP1 | SR2_CMP))) {
+		u8 was = sr;
+
 		sr &= ~(SR2_SRP1 | SR2_CMP);
-		if (snor_unprotect_write(OPCODE_WRSR2, &sr))
+		if (snor_unprotect_write(OPCODE_WRSR2, &sr) || snor_read_sr(OPCODE_RDSR2, &sr) < 0)
 			return -1;
+		if (sr & (SR2_SRP1 | SR2_CMP)) {
+			printf("Status register 2 stays 0x%02x (was 0x%02x): %s\n", sr, was,
+			       sr & SR2_SRP1 ? "SRP1 locks the registers until the chip is powered off and on." :
+					       "the chip does not take the write.");
+			return -1;
+		}
 	}
 
 	if (snor_read_sr(OPCODE_RDSR3, &sr) < 0) {
@@ -232,8 +253,12 @@ int snor_unprotect(void)
 
 	if (sr != 0xff && (sr & SR3_WPS)) {
 		sr ^= SR3_WPS;
-		if (snor_unprotect_write(OPCODE_WRSR3, &sr))
+		if (snor_unprotect_write(OPCODE_WRSR3, &sr) || snor_read_sr(OPCODE_RDSR3, &sr) < 0)
 			return -1;
+		if (sr & SR3_WPS) {
+			printf("Status register 3 stays 0x%02x: the chip does not take the write.\n", sr);
+			return -1;
+		}
 	}
 
 	return 0;
