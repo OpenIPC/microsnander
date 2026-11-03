@@ -1,6 +1,7 @@
 /*
  * ezp.c — EZP2019, EZP2019+ and EZP2023 programmers (USB 1fc8:310b, 310c,
- * 310d) with libusb, Linux only.
+ * 310d) with libusb, Linux only. The USB ID does not tell the model: an
+ * EZP2019+ reports 310b.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -62,7 +63,6 @@ static unsigned int ezp_id;			/* JEDEC ID, 3 bytes */
 static unsigned long ezp_size;
 
 static const unsigned short ezp_pids[] = { 0x310b, 0x310c, 0x310d };
-static const char *const ezp_names[] = { "EZP2019", "EZP2019+", "EZP2023" };
 
 static void put_be(unsigned char *p, unsigned int v, int n)
 {
@@ -375,7 +375,7 @@ int ezp_init(void)
 		libusb_exit(NULL);
 		return -1;
 	}
-	printf("Found programmer device: %s\n", ezp_names[which - 1]);
+	printf("Found programmer device: EZP2019/EZP2019+/EZP2023 (%04x:%04x)\n", EZP_VID, ezp_pids[which - 1]);
 
 	ret = libusb_detach_kernel_driver(ezp, 0);
 	ezp_detached = ret == 0;

@@ -62,7 +62,7 @@ sudo ./microsnander -w firmware.bin -v
   - CH347T (`1a86:55db`) in mode 1 (UART + SPI + I2C, set by its mode switch or
     jumpers) or CH347F (`1a86:55de`). Much faster than the CH341A (a 16 MB chip reads in about 7 s); the SPI
     clock is 30 MHz, `-S` changes it.
-  - EZP2019, EZP2019+ or EZP2023 (`1fc8:310b`, `1fc8:310c`, `1fc8:310d`), for SPI NOR
+  - EZP2019, EZP2019+ or EZP2023 (USB `1fc8:310b`, `1fc8:310c` or `1fc8:310d`), for SPI NOR
     chips up to 16 MB. These programmers run the SPI bus in their own firmware and
     take only whole operations, so with them:
     - `-r`, `-w` and `-v` work as with the others (a 16 MB chip reads in about 2 min 15 s);

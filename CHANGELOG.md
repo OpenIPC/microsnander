@@ -6,7 +6,8 @@ from every push to `main`; this file is the change history.
 
 ## 1.14.0 — 2026-11-03
 
-- EZP2019, EZP2019+ and EZP2023 programmers (`1fc8:310b`, `310c`, `310d`), `-P ezp`,
+- EZP2019, EZP2019+ and EZP2023 programmers (USB `1fc8:310b`, `310c` or `310d`; the
+  ID does not tell the model, an EZP2019+ reports `310b`), `-P ezp`,
   for SPI NOR chips up to 16 MB. They run the SPI bus in their own firmware and take
   whole operations only. The chip is found in the SPI NOR table by the JEDEC ID that
   the programmer reports. Then:
@@ -17,7 +18,7 @@ from every push to `main`; this file is the change history.
   - no SPI NAND.
 - A read stream of these programmers starts right only at a multiple of 256: the read
   starts there and drops the bytes before the address.
-- Checked on hardware: EZP2019 with a W25Q128 (16 MB). Chip erase 40 s, full read
+- Checked on hardware: EZP2019+ (`1fc8:310b`) with a W25Q128 (16 MB). Chip erase 40 s, full read
   135 s, full write 137 s (plus about 136 s each for the erased check and `-v`). Reads
   at odd addresses and up to the chip end, and a 4097-byte write at `0x1001`, are
   identical to the expected data.
