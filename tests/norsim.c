@@ -22,6 +22,8 @@ static int ncmd, nread;
 static int wel, aai, locked;
 static unsigned char sr;			/* BP bits */
 static unsigned long aai_addr;
+static int spi_fail_at = -1;		/* the Nth AAI command fails on the wire */
+static int naai;
 
 static unsigned long addr(void) { return ((unsigned long)cmd[1] << 16) | (cmd[2] << 8) | cmd[3]; }
 static int writable(void) { return wel && !(kind == SST26 ? locked : (sr & 0x3c)); }
@@ -33,6 +35,10 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Chip_Select_Low(void) { ncmd = nread = 0; re
 SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Write_NByte(u8 *d, u32 len, SPI_CONTROLLER_SPEED_T speed)
 {
 	(void)speed;
+	if (ncmd == 0 && len && d[0] == OPCODE_AAI && spi_fail_at >= 0 && naai++ == spi_fail_at) {
+		ncmd = sizeof(cmd) + 1;		/* the command is lost */
+		return SPI_CONTROLLER_RTN_DEF_NO;
+	}
 	for (u32 i = 0; i < len; i++)
 		if (ncmd < (int)sizeof(cmd)) cmd[ncmd++] = d[i];
 	return SPI_CONTROLLER_RTN_NO_ERROR;
@@ -53,8 +59,10 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Read_NByte(u8 *d, u32 len, SPI_CONTROLLER_SP
 }
 SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Chip_Select_High(void)
 {
-	if (ncmd == 0)
+	if (ncmd == 0 || ncmd > (int)sizeof(cmd)) {
+		ncmd = 0;
 		return SPI_CONTROLLER_RTN_NO_ERROR;
+	}
 	switch (cmd[0]) {
 	case OPCODE_WREN: wel = 1; break;
 	case OPCODE_WRDI: wel = 0; aai = 0; break;
@@ -169,6 +177,19 @@ int main(void)
 	write_read_erase("W25Q32BV", ORDINARY);
 	write_read_erase("PCT25VF016B", SST25);
 	write_read_erase("PCT26VF016", SST26);
+
+	/* an AAI command that fails on the wire stops the write with the bytes written so far */
+	{
+		static unsigned char buf[64];
+		memset(buf, 0x11, sizeof(buf));
+		chip(find("PCT25VF016B"), SST25);
+		snor_init();
+		snor_erase(0, 65536);
+		naai = 0; spi_fail_at = 10;
+		int n = snor_write(buf, 0, sizeof(buf));
+		spi_fail_at = -1;
+		check(n == 20, "PCT25VF016B: a failed AAI command stops the write after 10 words");
+	}
 
 	if (!fail) printf("all norsim checks passed\n");
 	return fail;

@@ -161,11 +161,18 @@ int snor_unprotect(void)
 
 	if (snor_is_sst26()) {
 		/* the block protection register, not the status register */
-		snor_wait_ready(1);
+		int err = 0;
+
+		if (snor_wait_ready(1))
+			return -1;
 		snor_write_enable();
-		SPI_CONTROLLER_Chip_Select_Low();
-		SPI_CONTROLLER_Write_One_Byte(OPCODE_ULBPR);
-		SPI_CONTROLLER_Chip_Select_High();
+		err |= SPI_CONTROLLER_Chip_Select_Low();
+		err |= SPI_CONTROLLER_Write_One_Byte(OPCODE_ULBPR);
+		err |= SPI_CONTROLLER_Chip_Select_High();
+		if (err) {
+			printf("%s: ULBPR failed\n", __func__);
+			return -1;
+		}
 		return 0;
 	}
 
@@ -362,7 +369,10 @@ static int full_erase_chip(void)
 
 	/* Unprotect first: clearing the protection ends with the write enable
 	   latch cleared, so the write enable goes right before the erase. */
-	snor_unprotect();
+	if (snor_unprotect() < 0) {
+		timer_end();
+		return -1;
+	}
 	snor_write_enable();
 
 	SPI_CONTROLLER_Chip_Select_Low();
@@ -819,7 +829,10 @@ int snor_erase(unsigned long offs, unsigned long len)
 
 	timer_start();
 
-	snor_unprotect();
+	if (snor_unprotect() < 0) {
+		timer_end();
+		return -1;
+	}
 
 	/* now erase those sectors */
 	while (len > 0) {
@@ -942,21 +955,28 @@ static int snor_wait_busy(void)
 	return -1;
 }
 
-static void snor_send_addr(unsigned long addr)
+static int snor_send_addr(unsigned long addr)
 {
-	SPI_CONTROLLER_Write_One_Byte((addr >> 16) & 0xff);
-	SPI_CONTROLLER_Write_One_Byte((addr >> 8) & 0xff);
-	SPI_CONTROLLER_Write_One_Byte(addr & 0xff);
+	int err = 0;
+
+	err |= SPI_CONTROLLER_Write_One_Byte((addr >> 16) & 0xff);
+	err |= SPI_CONTROLLER_Write_One_Byte((addr >> 8) & 0xff);
+	err |= SPI_CONTROLLER_Write_One_Byte(addr & 0xff);
+	return err;
 }
 
 static int snor_program_byte(unsigned long addr, u8 data)
 {
+	int err = 0;
+
 	snor_write_enable();
-	SPI_CONTROLLER_Chip_Select_Low();
-	SPI_CONTROLLER_Write_One_Byte(OPCODE_PP);
-	snor_send_addr(addr);
-	SPI_CONTROLLER_Write_One_Byte(data);
-	SPI_CONTROLLER_Chip_Select_High();
+	err |= SPI_CONTROLLER_Chip_Select_Low();
+	err |= SPI_CONTROLLER_Write_One_Byte(OPCODE_PP);
+	err |= snor_send_addr(addr);
+	err |= SPI_CONTROLLER_Write_One_Byte(data);
+	err |= SPI_CONTROLLER_Chip_Select_High();
+	if (err)
+		return -1;
 	return snor_wait_busy();
 }
 
@@ -967,7 +987,8 @@ static int snor_write_aai(unsigned char *buf, unsigned long to, unsigned long le
 	unsigned long plen = len;
 	int aai = 0;
 
-	snor_unprotect();
+	if (snor_unprotect() < 0)
+		goto fail;
 
 	if ((to & 1) && len) {
 		if (snor_program_byte(to, *buf))
@@ -975,17 +996,21 @@ static int snor_write_aai(unsigned char *buf, unsigned long to, unsigned long le
 		to++; buf++; len--;
 	}
 	while (len >= 2) {
+		int err = 0;
+
 		if (!aai)
 			snor_write_enable();
-		SPI_CONTROLLER_Chip_Select_Low();
-		SPI_CONTROLLER_Write_One_Byte(OPCODE_AAI);
+		err |= SPI_CONTROLLER_Chip_Select_Low();
+		err |= SPI_CONTROLLER_Write_One_Byte(OPCODE_AAI);
 		if (!aai)
-			snor_send_addr(to);
-		SPI_CONTROLLER_Write_One_Byte(buf[0]);
-		SPI_CONTROLLER_Write_One_Byte(buf[1]);
-		SPI_CONTROLLER_Chip_Select_High();
+			err |= snor_send_addr(to);
+		err |= SPI_CONTROLLER_Write_One_Byte(buf[0]);
+		err |= SPI_CONTROLLER_Write_One_Byte(buf[1]);
+		err |= SPI_CONTROLLER_Chip_Select_High();
 		aai = 1;
-		if (snor_wait_busy())
+		/* the word counts only when its command went out and the chip is ready
+		   again (BUSY, bit 0: bit 6 only says AAI mode is on) */
+		if (err || snor_wait_busy())
 			goto fail;
 		to += 2; buf += 2; len -= 2;
 		if( timer_progress() ) {
@@ -1055,7 +1080,8 @@ int snor_write(unsigned char *buf, unsigned long to, unsigned long len)
 		/* write the next page to flash */
 
 		snor_wait_ready(3);
-		snor_unprotect();
+		if (snor_unprotect() < 0)
+			break;		/* retlen has what was written */
 		snor_write_enable();	/* after the unprotect, which clears the latch */
 
 		SPI_CONTROLLER_Chip_Select_Low();
