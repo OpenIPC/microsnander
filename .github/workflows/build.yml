@@ -141,7 +141,7 @@ jobs:
           file dist/microsnander-linux-arm | grep -q 'ARM.*statically linked' ||
             { echo "::error::microsnander-linux-arm is not a static ARM binary"; exit 1; }
           chmod 755 dist/*
-          ./dist/microsnander-linux-x86_64 -h | grep -q " v\.$ver " ||
+          ./dist/microsnander-linux-x86_64 -h | grep -q " v\.$ver\$" ||
             { echo "::error::the binary does not print v.$ver"; exit 1; }
           echo "VER=$ver" >> "$GITHUB_ENV"
 

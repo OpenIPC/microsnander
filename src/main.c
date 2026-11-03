@@ -48,14 +48,14 @@ extern int org;
 #define EHELP	""
 #endif
 
-#define _VER	"1.9.0"
+#define _VER	"1.9.1"
 
 void title(void)
 {
 #ifdef EEPROM_SUPPORT
-	printf("\nMicroSNANDer - Serial Nor/nAND/Eeprom programmeR v." _VER " (based on SNANDer by McMCC <mcmcc@mail.ru>)\n\n");
+	printf("\nMicroSNANDer - Serial Nor/nAND/Eeprom programmeR v." _VER "\n\n");
 #else
-	printf("\nMicroSNANDer - Spi Nor/nAND programmER v." _VER " (based on SNANDer by McMCC <mcmcc@mail.ru>)\n\n");
+	printf("\nMicroSNANDer - Spi Nor/nAND programmER v." _VER "\n\n");
 #endif
 }
 
