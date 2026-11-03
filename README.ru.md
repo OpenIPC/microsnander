@@ -294,7 +294,8 @@ Android TV (Android 5.0 и новее, без root; на приставке он
 управляется пультом).
 
 <p align="center">
-  <img src="screenshots/android-main.png" alt="MicroSNANDer для Android: дисплей, латунные кнопки" width="320">
+  <img src="screenshots/android-main.png" alt="MicroSNANDer для Android: дисплей, латунные кнопки" height="360">
+  <img src="screenshots/android-tv.png" alt="MicroSNANDer на приставке Android TV: найдены CH341A и W25Q128, лампы битов регистров" height="360">
 </p>
 
 - Подключите программатор (к телефону — через OTG-переходник; на приставке один из портов может

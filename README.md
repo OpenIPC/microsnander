@@ -290,7 +290,8 @@ Android TV box (Android 5.0 and later, no root; on a TV box it is on the home sc
 with the remote).
 
 <p align="center">
-  <img src="screenshots/android-main.png" alt="MicroSNANDer for Android: display, brass buttons" width="320">
+  <img src="screenshots/android-main.png" alt="MicroSNANDer for Android: display, brass buttons" height="360">
+  <img src="screenshots/android-tv.png" alt="MicroSNANDer on an Android TV box: CH341A and W25Q128 found, status register lamps" height="360">
 </p>
 
 - Plug the programmer in (through an OTG adapter on a phone; on a TV box one of its ports may

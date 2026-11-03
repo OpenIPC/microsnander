@@ -267,7 +267,8 @@ WantedBy=multi-user.target
 root；在电视盒子上会出现在主屏幕，可用遥控器操作）。
 
 <p align="center">
-  <img src="screenshots/android-main.png" alt="MicroSNANDer Android 版：显示屏、黄铜按钮" width="320">
+  <img src="screenshots/android-main.png" alt="MicroSNANDer Android 版：显示屏、黄铜按钮" height="360">
+  <img src="screenshots/android-tv.png" alt="MicroSNANDer 在 Android 电视盒子上：已识别 CH341A 和 W25Q128，状态寄存器指示灯" height="360">
 </p>
 
 - 插上编程器（手机需通过 OTG 转接头；电视盒子的某个端口可能只能作为设备端口，请换另一个），并允许
