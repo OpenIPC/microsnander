@@ -19,7 +19,7 @@ set -u
 T=$(cd "$(dirname "$0")" && pwd)
 W=$(mktemp -d)
 trap 'rm -rf "$W"' EXIT
-${CC:-cc} -std=gnu99 -Wall -Werror -I"$T/../src" -o "$W/ms" "$T/../src/main.c" "$T/stub.c" || exit 1
+${CC:-cc} -std=gnu99 -Wall -Werror -I"$T/../src" -o "$W/ms" "$T/../src/main.c" "$T/../src/selftest.c" "$T/stub.c" || exit 1
 ${CC:-cc} -std=gnu99 -Wall -Werror -O1 -DSPI_NAND_OIP_TIMEOUT_MS=50 -o "$W/nandsim" "$T/nandsim.c" "$T/../src/timer.c" || exit 1
 ${CC:-cc} -std=gnu99 -Wall -Werror -O1 -I"$T/../src" ${LIBUSB_CFLAGS:-} -o "$W/ch341sim" "$T/ch341sim.c" || exit 1
 ${CC:-cc} -std=gnu99 -Wall -Werror -O1 -o "$W/norsim" "$T/norsim.c" "$T/../src/timer.c" || exit 1
@@ -65,6 +65,31 @@ MS_PROGRAMMER=1 $B -P ch347 -i | grep -q '^programmer: ch347' && MS_PROGRAMMER=1
 $B -h | grep -q '^ -P ' && $B -h | grep -q '^ -S ' && echo "ok   -h lists -P and -S" || { echo "FAIL -h without -P/-S"; fail=1; }
 $B -h | grep -q '^ -k ' && echo "ok   -h lists -k" || { echo "FAIL -h without -k"; fail=1; }
 t 0 "-i detected"                     $B -i
+# -t: the self-test of the first block (or -a), its data put back
+head -c 65536 /dev/urandom > chip.img; cp chip.img before.img
+t 0 "-t on a good chip"               $B -t
+$B -t | grep -q '^Self-test: OK' && cmp -s chip.img before.img && $B -t | grep -q 'block 0x0 + 0x1000' && echo "ok     the first block, OK, and the chip is as it was" || { echo "FAIL -t OK"; fail=1; }
+$B -t -a 0x8123 | grep -q 'block 0x8000 + 0x1000' && echo "ok     -a 0x8123: the block at 0x8000" || { echo "FAIL -t -a"; fail=1; }
+t 2 "-t, protected by BP bits"        MS_SR=1c0000 MS_PROTECT=1 $B -t
+cp before.img chip.img; MS_SR=1c0000 $B -t | grep -q 'PROTECTED, the registers protect part.*-u' && MS_SR=1c0000 $B -t | grep -q 'BP = 7, TB = 0' && cmp -s chip.img before.img && echo "ok     says PROTECTED, the bits and -u, and erases nothing" || { echo "FAIL -t protected"; fail=1; }
+t 2 "-t, nothing changes, no bits set" MS_PROTECT=1 $B -t
+MS_PROTECT=1 $B -t | grep -q 'no register bit says so' && echo "ok     a block that keeps its data with no bit set: told apart" || { echo "FAIL -t hidden protection"; fail=1; }
+t 1 "-t, a write that does not take"  MS_CORRUPT=5 $B -t
+cp before.img chip.img; MS_CORRUPT=5 $B -t | grep -q 'the write does not take: .* at 0x5,' && head -c 4096 before.img | cmp -s - selftest-W25Q80-0x0.bin && echo "ok     the bad byte and its address; the old block saved to selftest-W25Q80-0x0.bin" || { echo "FAIL -t corrupt"; fail=1; }
+rm -f selftest-*.bin
+t 1 "-t, an erase that fails"         MS_FAIL=erase $B -t
+MS_FAIL=erase $B -t | grep -q 'the erase command fails' && echo "ok     a failing erase command is FAILED, not PROTECTED" || { echo "FAIL -t erase fail"; fail=1; }
+t 1 "-t on SPI NAND, not block 0"     MS_CHIP=nand $B -t -a 0x20000
+t 1 "-t with -k is a conflict"        $B -t -k
+t 1 "-t with -d is a conflict"        $B -t -d
+MS_SST26=1 $B -t | grep -q 'SST26-type chip: its blocks are locked at power-up' && echo "ok     an SST26: its power-up locks are told" || { echo "FAIL -t sst26"; fail=1; }
+t 0 "-P ezp -t: reads only"           $B -P ezp -t
+$B -P ezp -t | grep -q 'READ OK.*erases only the whole chip' && echo "ok     the EZP: two reads, no block erase" || { echo "FAIL -t ezp"; fail=1; }
+MS_CHIP=nand MS_LOCK=7c $B -t | grep -q 'locked at power-up (A0 = 0x7c, BP = 7)' && echo "ok     SPI NAND: the lock at power-up is told" || { echo "FAIL -t nand lock"; fail=1; }
+t 1 "-t with -r is a conflict"        $B -t -r x.bin
+t 1 "-W with -t is an error"          $B -W 8080 -t
+$B -h | grep -q '^ -t ' && echo "ok     -h lists -t" || { echo "FAIL -h without -t"; fail=1; }
+rm -f chip.img before.img
 t 1 "-i chip not found"               MS_CHIP=none $B -i
 t 0 "-u NOR"                          $B -u
 t 1 "-u NOR fails"                    MS_FAIL=unprotect $B -u

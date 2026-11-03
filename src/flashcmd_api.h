@@ -23,7 +23,11 @@ struct flash_cmd {
 	int (*flash_erase)(unsigned long offs, unsigned long len);
 	int (*flash_write)(unsigned char *buf, unsigned long to, unsigned long len);
 	int (*flash_unprotect)(void);
+	int kind;		/* FLASH_NOR, FLASH_NAND, FLASH_FIRMWARE (the EZP runs the chip itself) */
+	int lock;		/* SPI NAND: its block lock register (A0) when found, -1: not known */
 };
+
+enum { FLASH_NOR, FLASH_NAND, FLASH_FIRMWARE };
 
 long flash_cmd_init(struct flash_cmd *cmd);
 void support_flash_list(void);

@@ -4,6 +4,20 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.19.0 — 2026-11-04
+
+- `-t`: a short self-test of the chip, with nothing to prepare. It reads the protection
+  (SPI NOR: BP, TB, CMP, SRP; SPI NAND: the block lock register when found), then takes one
+  block — the first by default, where a locked loader usually is, or the one at `-a` —
+  keeps its data, erases it, writes a pattern, reads it back and puts the data back. One
+  line at the end: `OK` (exit 0), `PROTECTED` (2) or `FAILED` with the first wrong address
+  (1). With protection bits set it stops before any erase and leaves them as they are
+  (`-u` clears them); a block that takes the commands and keeps its data with no bit set is
+  `PROTECTED` too. Old data that does not come back is saved to
+  `selftest-<chip>-0x<address>.bin`. SPI NAND: block 0 only, its spare area besides the ECC
+  is not kept; an SST26 is told that its blocks lock at power-up. Not with `-d`, `-I`, `-k`.
+  With the EZP programmers (whole-chip erase only) it reads the block twice.
+
 ## 1.18.2 — 2026-11-04
 
 - Unprotect (`-u`, Clear protection in the web mode and the app) also clears SRP0 and TB
