@@ -4035,6 +4035,7 @@ static SPI_NAND_FLASH_RTN_T spi_nand_erase_internal( u32 addr, u32 len )
 {
 	u32 block_index = 0;
 	u32 erase_len = 0;
+	u32 failed = 0;		/* blocks that did not erase */
 	SPI_NAND_FLASH_RTN_T rtn_status = SPI_NAND_FLASH_RTN_NO_ERROR;
 #if 0
 	print_dot  = 0;
@@ -4063,11 +4064,12 @@ static SPI_NAND_FLASH_RTN_T spi_nand_erase_internal( u32 addr, u32 len )
 			if( rtn_status == SPI_NAND_FLASH_RTN_TIMEOUT )
 				break;
 
-			/* 2.6 Check Erase Fail Bit */
+			/* 2.6 Check Erase Fail Bit: the erase goes on with the next blocks,
+			   but fails at the end (the next block must not hide this one) */
 			if(rtn_status != SPI_NAND_FLASH_RTN_NO_ERROR)
 			{
-				_SPI_NAND_PRINTF("spi_nand_erase_internal : Erase Fail at addr = 0x%x, len = 0x%x, block_idx = 0x%x\n", addr, len, block_index);
-				rtn_status = SPI_NAND_FLASH_RTN_ERASE_FAIL;
+				_SPI_NAND_PRINTF("\nErase failed at 0x%x (block 0x%x)\n", addr, block_index);
+				failed++;
 			}
 
 			/* 2.7 Erase next block if needed */
@@ -4082,6 +4084,11 @@ static SPI_NAND_FLASH_RTN_T spi_nand_erase_internal( u32 addr, u32 len )
 		}
 		if( rtn_status == SPI_NAND_FLASH_RTN_TIMEOUT )
 			printf("Erase stopped at [%u] of [%u] bytes      \n", erase_len, len);
+		else if( failed )
+		{
+			printf("Erase done, %u block(s) of [%u] bytes failed      \n", failed, len);
+			rtn_status = SPI_NAND_FLASH_RTN_ERASE_FAIL;
+		}
 		else
 			printf("Erase 100%% [%u] of [%u] bytes      \n", erase_len, len);
 	}

@@ -4,6 +4,13 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.10.1 — 2026-11-03
+
+- SPI NAND erase: a block that fails to erase fails the whole erase. The next block
+  overwrote the status, so `-e` ended with `OK` unless the failed block was the last
+  one (#18). The erase still goes on with the other blocks, prints each failed block
+  and the number of failed blocks at the end.
+
 ## 1.10.0 — 2026-11-03
 
 - 54 more SPI NAND chips, 135 in all: GIGADEVICE GD5F2GQ4UA, GD5F1GQ4RE, GD5F2GQ5UE,
