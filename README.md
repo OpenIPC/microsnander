@@ -200,32 +200,66 @@ microsnander -d -r raw.bin
 
 ## Web mode
 
-`-W [address:]port` runs microsnander as a service: a page in the browser with Detect,
-Read, Erase, Write and Registers for the programmer that is connected.
+`-W [address:]port` runs microsnander as a service: a page in the browser, in the style of
+the other OpenIPC tools, with Detect, Read, Erase, Write and Registers for the programmer that
+is connected.
+
+<p align="center">
+  <img src="screenshots/web-reading.png" alt="MicroSNANDer Web while reading: lamps, progress gauge, display, brass buttons" width="45%">
+  <img src="screenshots/web-registers.png" alt="MicroSNANDer Web after a read: dump link and status register lamps" width="45%">
+</p>
 
 ```sh
 microsnander -W 8080                       # every interface, port 8080
 microsnander -W 127.0.0.1:8080 -K secret   # this computer only, with a password
+microsnander -P ch347 -W 8080 -o /srv/dumps
 ```
 
-- **Detect**: the programmer, the chip and its size, and the status registers.
-- **Read**: the whole chip into `flash-YYYYMMDDHHMM-CHIP.bin`, for example
-  `flash-202611031706-W25Q128BV.bin`, in the `-o` directory (the current one by default).
-  The browser downloads it too. With `-a`/`-l` given at the start, Read takes that range,
-  and the name ends in `-0xADDRESS-0xLENGTH.bin`.
-- **Erase**: the whole chip.
-- **Write**: a file chosen in the browser (a loader or a full image), from address 0 into an
-  erased chip, then read back and compared.
-- **Registers**: the bits of status registers 1–3; **Clear protection** does what `-u` does.
-  SPI NOR through the CH341A or the CH347 only.
+The page:
 
-One programmer is used, chosen as without `-W` (with several connected, give `-P`). One
-operation runs at a time, and the programmer is opened for each operation and closed after it,
-so it can be replugged in between.
+- **Lamps**: Link (the page reaches the service), Programmer, Chip, Busy.
+- **Gauge and display**: the progress of the operation in percent and its state (Reading,
+  Writing, Verifying, Erasing, Saved, Written, Erased, Failed); under them the programmer,
+  the chip and its size, the last dump and the last message.
+- **Detect**: finds the programmer and the chip, and reads the status registers.
+- **Read**: the whole chip into a file in the `-o` directory (the current one by default),
+  which the browser downloads too; the link stays on the page. With `-a`/`-l` given at the
+  start, Read takes that range.
+- **Erase**: the whole chip, after a confirmation.
+- **Write**: a file chosen in the browser (a loader or a full image) is written from address 0
+  into an erased chip, then read back and compared. Erase first.
+- **Registers**: a lamp for every bit of status registers 1–3 (bit names as on Winbond-type
+  chips; amber: a protection bit, green: another bit) and **Clear protection**, which does
+  what `-u` does: it clears BP, SRP and CMP and keeps QE. SPI NOR through the CH341A or the
+  CH347 only; the EZP programmers cannot read the registers.
 
-Without `-K` anyone who reaches the port can erase the chip. With `-K` the browser asks for
-the password (any user name). The page is plain HTTP, so the password crosses the network
-unencrypted: use a trusted network, or `-W 127.0.0.1:8080` and an SSH tunnel.
+File names: `flash-YYYYMMDDHHMM-CHIP.bin` in the local time of the machine that runs the
+service, for example `flash-202611031706-W25Q128BV.bin`. With `-a`/`-l` the range is added:
+`flash-202611031706-W25Q128BV-0x50000-0x100000.bin`. A second read in the same minute does not
+replace the first one: it gets `-2`, `-3` and so on.
+
+How it works:
+
+- One programmer is used, chosen as without `-W`; with several connected, give `-P`.
+- The programmer is opened for each operation and closed after it, so between operations it
+  can be replugged, or used by a normal microsnander run.
+- One operation runs at a time; a request while one runs gets `409`. The page polls the state
+  twice a second while an operation runs.
+- `-d`, `-I`, `-k` and the EEPROM options do not go with `-W`: the page writes whole files
+  from address 0 with ECC on.
+- The service keeps running when a client disconnects; a slow client does not hold the others
+  (up to 16 connections at a time).
+
+Access:
+
+- Without `-K` anyone who reaches the port can erase the chip. With `-K` the browser asks for
+  the password (any user name); an empty password is refused.
+- The page is plain HTTP, so the password crosses the network unencrypted: use a trusted
+  network, or `-W 127.0.0.1:8080` and an SSH tunnel.
+- Operations need a header that only the page sends, so a page of another site cannot start an
+  erase or a write. A request has to name this machine by its IP address, `localhost` or its
+  host name (no other names: DNS rebinding).
+- Only dumps made by Read are served from the `-o` directory, never links to other files.
 
 As a systemd service (the user in the `plugdev` group of the udev rule above):
 

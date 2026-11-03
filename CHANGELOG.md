@@ -17,8 +17,18 @@ from every push to `main`; this file is the change history.
     back and compared.
   - Registers: the bits of status registers 1–3 and Clear protection (as `-u`), for SPI
     NOR through the CH341A or the CH347.
-  - One operation at a time, in a thread of its own, with a progress bar. The programmer
-    is opened for each operation and closed after it.
+  - One operation at a time, in a thread of its own; the page shows its progress on a
+    gauge. The programmer is opened for each operation and closed after it.
+  - The page has the style of the other OpenIPC tools: lamps, gauge, display, brass
+    buttons, and a lamp for every status register bit.
+  - A second read in the same minute does not replace the first dump: `-2`, `-3`, ...
+  - Access: an operation needs a header that only the page sends (no erase or write from a
+    page of another site); a request has to name this machine by its IP address,
+    `localhost` or its host name (DNS rebinding); only regular dump files are served, never
+    links; an empty `-K` is refused. A thread for each connection, up to 16, so a slow
+    client does not hold the others; errors of `accept()` do not stop the service.
+  - `-d`, `-I`, `-k` and the EEPROM options are refused with `-W`.
+- `-a` and `-l` that are not numbers are refused (they were taken as 0).
 - `src/web.c`: a small HTTP/1.0 server, no library needed. The page is
   `src/web_page.html`, built into the program.
 - `tests/websim.c` runs `web.c` with a fake flash: the requests, the password, the

@@ -38,6 +38,7 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/time.h>
+#include <fcntl.h>
 #include "web.h"
 #include "flashcmd_api.h"
 #include "programmer.h"
@@ -59,8 +60,10 @@ static struct {
 	long long size;
 	int sr_valid;
 	unsigned char sr[3];
-	char file[128];
+	char file[160];
 } st = { .lock = PTHREAD_MUTEX_INITIALIZER, .ok = -1 };
+
+extern const char *ms_version;
 
 static const char *web_dir = ".";
 static const char *web_password;
@@ -166,17 +169,30 @@ static int op_read(void)
 {
 	static unsigned char part[WEB_PART];
 	unsigned long long a = web_addr, l = web_len ? web_len : (unsigned long long)flen - web_addr;
-	char name[128], path[1024];
+	char base[128], name[140], path[1024];
 	FILE *f;
 
 	if (web_addr >= (unsigned long long)flen || l > (unsigned long long)flen - web_addr) {
 		set_msg("The range 0x%llx + 0x%llx is past the chip end (0x%llx).", web_addr, l, flen);
 		return -1;
 	}
-	dump_name(name, sizeof(name), st.chip, web_len || web_addr, a, l);
-	snprintf(path, sizeof(path), "%s/%s", web_dir, name);
-	f = fopen(path, "wb");
-	if (!f) {
+	/* a second read in the same minute does not replace the first: -2, -3, ... */
+	dump_name(base, sizeof(base), st.chip, web_len || web_addr, a, l);
+	base[strlen(base) - 4] = 0;		/* without .bin */
+	int fd = -1;
+	for (int k = 1; k < 100 && fd < 0; k++) {
+		if (k == 1)
+			snprintf(name, sizeof(name), "%s.bin", base);
+		else
+			snprintf(name, sizeof(name), "%s-%d.bin", base, k);
+		snprintf(path, sizeof(path), "%s/%s", web_dir, name);
+		fd = open(path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0644);
+		if (fd < 0 && errno != EEXIST)
+			break;
+	}
+	if (fd < 0 || !(f = fdopen(fd, "wb"))) {
+		if (fd >= 0)
+			close(fd);
 		set_msg("Cannot create %s: %s", path, strerror(errno));
 		return -1;
 	}
@@ -313,8 +329,8 @@ static void *worker(void *arg)
 	return NULL;
 }
 
-/* start an operation; 0, or -1 when one is running */
-static int start(int op)
+/* start an operation (with the file to write); 0, or -1 when one is running */
+static int start(int op, unsigned char *body, unsigned long blen)
 {
 	pthread_t t;
 
@@ -323,6 +339,8 @@ static int start(int op)
 		pthread_mutex_unlock(&st.lock);
 		return -1;
 	}
+	upload = body;
+	upload_len = blen;
 	st.busy = 1;
 	st.op = op;
 	st.ok = -1;
@@ -334,6 +352,7 @@ static int start(int op)
 	pthread_mutex_unlock(&st.lock);
 	if (pthread_create(&t, NULL, worker, (void *)(long)op)) {
 		pthread_mutex_lock(&st.lock);
+		upload = NULL;
 		st.busy = 0;
 		pthread_mutex_unlock(&st.lock);
 		return -1;
@@ -404,9 +423,10 @@ static void reply_state(int fd)
 		snprintf(sr, sizeof(sr), "[%u,%u,%u]", st.sr[0], st.sr[1], st.sr[2]);
 	int n = snprintf(body, sizeof(body),
 			 "{\"busy\":%d,\"op\":\"%s\",\"ok\":%s,\"phase\":\"%s\",\"done\":%llu,\"total\":%llu,"
-			 "\"message\":\"%s\",\"programmer\":\"%s\",\"chip\":\"%s\",\"size\":%lld,\"sr\":%s,\"file\":\"%s\"}",
+			 "\"message\":\"%s\",\"programmer\":\"%s\",\"chip\":\"%s\",\"size\":%lld,\"sr\":%s,\"file\":\"%s\","
+			 "\"version\":\"%s\"}",
 			 st.busy, op_names[st.op], st.ok < 0 ? "null" : st.ok ? "true" : "false", st.phase,
-			 st.done, st.total, msg, prg, chip, st.size, sr, file);
+			 st.done, st.total, msg, prg, chip, st.size, sr, file, ms_version);
 	pthread_mutex_unlock(&st.lock);
 	reply(fd, "200 OK", "application/json", NULL, body, n);
 }
@@ -461,6 +481,37 @@ static int authorized(const char *headers)
 	return h && !strcmp(h + 1, web_password);
 }
 
+/* The Host of the request: an IP address, localhost, or this machine's name.
+   A page of another site that resolves its own name to this address (DNS
+   rebinding) sends its own name, and is refused. */
+static int host_ok(const char *headers)
+{
+	const char *h = find_header(headers, "Host:");
+	char host[256], me[256];
+	size_t n = 0;
+
+	if (!h)
+		return 1;			/* HTTP/1.0 without Host */
+	for (h += 7; *h == ' '; h++)
+		;
+	if (*h == '[')
+		return 1;			/* an IPv6 address */
+	while (*h && *h != '\r' && *h != ':' && n < sizeof(host) - 1)
+		host[n++] = *h++;
+	host[n] = 0;
+	struct in_addr ia;
+	if (inet_pton(AF_INET, host, &ia) == 1 || !strcasecmp(host, "localhost"))
+		return 1;
+	if (!gethostname(me, sizeof(me))) {
+		me[sizeof(me) - 1] = 0;
+		size_t m = strlen(me);
+
+		if (!strcasecmp(host, me) || (!strncasecmp(host, me, m) && host[m] == '.'))
+			return 1;	/* name or name.local / name.domain */
+	}
+	return 0;
+}
+
 /* a dump name made by Read: no path, flash-*.bin */
 static int dump_ok(const char *name)
 {
@@ -473,17 +524,23 @@ static void send_dump(int fd, const char *name)
 {
 	char path[1024], h[512];
 	struct stat sb;
-	FILE *f;
+	FILE *f = NULL;
+	int in = -1;
 
+	/* a regular file of the dump directory, not a link to elsewhere */
 	snprintf(path, sizeof(path), "%s/%s", web_dir, name);
-	if (!dump_ok(name) || stat(path, &sb) || !(f = fopen(path, "rb"))) {
+	if (dump_ok(name))
+		in = open(path, O_RDONLY | O_NOFOLLOW);
+	if (in < 0 || fstat(in, &sb) || !S_ISREG(sb.st_mode) || !(f = fdopen(in, "rb"))) {
+		if (in >= 0)
+			close(in);
 		reply_text(fd, "404 Not Found", "No such dump.\n");
 		return;
 	}
 	int k = snprintf(h, sizeof(h), "HTTP/1.0 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: %lld\r\n"
 			 "Content-Disposition: attachment; filename=\"%s\"\r\nConnection: close\r\n\r\n", (long long)sb.st_size, name);
 	if (!send_all(fd, h, k)) {
-		static char buf[65536];
+		char buf[16384];
 		size_t n;
 
 		while ((n = fread(buf, 1, sizeof(buf), f)) > 0 && !send_all(fd, buf, n))
@@ -494,7 +551,7 @@ static void send_dump(int fd, const char *name)
 
 static void handle(int fd)
 {
-	static char head[WEB_HEADERS + 1];
+	char head[WEB_HEADERS + 1];
 	size_t got = 0;
 	char *end = NULL, method[8], path[256];
 	unsigned long clen = 0;
@@ -510,6 +567,10 @@ static void handle(int fd)
 	}
 	if (!end || sscanf(head, "%7s %255s", method, path) != 2) {
 		reply_text(fd, "400 Bad Request", "Bad request.\n");
+		return;
+	}
+	if (!host_ok(head)) {
+		reply_text(fd, "403 Forbidden", "Use the address of this machine.\n");
 		return;
 	}
 	if (!authorized(head)) {
@@ -536,6 +597,12 @@ static void handle(int fd)
 		reply_text(fd, "404 Not Found", "Not found.\n");
 		return;
 	}
+	/* a header another site cannot send without asking first (no CORS
+	   here), so a page elsewhere cannot start an erase or a write */
+	if (!find_header(head, "X-MicroSNANDer:")) {
+		reply_text(fd, "403 Forbidden", "Operations come from the page only.\n");
+		return;
+	}
 
 	static const struct { const char *path; int op; } routes[] = {
 		{ "/api/detect", OP_DETECT }, { "/api/read", OP_READ }, { "/api/erase", OP_ERASE },
@@ -557,9 +624,9 @@ static void handle(int fd)
 		reply_text(fd, "409 Conflict", "An operation is running.\n");
 		return;
 	}
+	unsigned char *body = NULL;
 	if (op == OP_WRITE) {
 		size_t have = got - (end + 4 - head);
-		unsigned char *body;
 
 		if (!clen || clen > WEB_MAX_BODY || have > clen) {
 			reply_text(fd, "413 Payload Too Large", "No file, or too large.\n");
@@ -579,16 +646,28 @@ static void handle(int fd)
 			}
 			have += r;
 		}
-		upload = body;
-		upload_len = clen;
 	}
-	if (start(op)) {
-		free(upload);
-		upload = NULL;
+	if (start(op, body, clen)) {
+		free(body);
 		reply_text(fd, "409 Conflict", "An operation is running.\n");
 		return;
 	}
 	reply_text(fd, "202 Accepted", "Started.\n");
+}
+
+#define WEB_MAX_CONN	16
+static int connections;
+
+static void *conn_thread(void *arg)
+{
+	int c = (int)(long)arg;
+
+	handle(c);
+	close(c);
+	pthread_mutex_lock(&st.lock);
+	connections--;
+	pthread_mutex_unlock(&st.lock);
+	return NULL;
 }
 
 int web_serve(const char *listen_on, const char *password, const char *dir,
@@ -616,7 +695,11 @@ int web_serve(const char *listen_on, const char *password, const char *dir,
 		printf("-W: give [address:]port, for example 8080 or 127.0.0.1:8080.\n");
 		return 1;
 	}
-	web_password = password && *password ? password : NULL;
+	if (password && !*password) {
+		printf("-K: the password is empty.\n");
+		return 1;
+	}
+	web_password = password;
 	web_dir = dir && *dir ? dir : ".";
 	web_addr = addr;
 	web_len = len;
@@ -633,19 +716,34 @@ int web_serve(const char *listen_on, const char *password, const char *dir,
 	       web_password ? " (password)" : "", web_dir);
 	fflush(stdout);
 
+	/* a thread for each connection, so a slow client does not hold the others */
 	for (;;) {
 		int c = accept(s, NULL, NULL);
+		pthread_t t;
 
 		if (c < 0) {
-			if (errno == EINTR)
-				continue;
-			break;
+			if (errno == EMFILE || errno == ENFILE || errno == ENOBUFS || errno == ENOMEM)
+				usleep(100000);		/* out of resources: wait, do not stop */
+			continue;			/* EINTR, ECONNABORTED, EPROTO, network errors */
 		}
 		struct timeval tv = { 30, 0 };
 		setsockopt(c, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-		handle(c);
-		close(c);
+		setsockopt(c, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+		pthread_mutex_lock(&st.lock);
+		int many = connections >= WEB_MAX_CONN;
+		if (!many)
+			connections++;
+		pthread_mutex_unlock(&st.lock);
+		if (many || pthread_create(&t, NULL, conn_thread, (void *)(long)c)) {
+			if (!many) {
+				pthread_mutex_lock(&st.lock);
+				connections--;
+				pthread_mutex_unlock(&st.lock);
+			}
+			reply_text(c, "503 Service Unavailable", "Too many connections.\n");
+			close(c);
+			continue;
+		}
+		pthread_detach(t);
 	}
-	close(s);
-	return 1;
 }

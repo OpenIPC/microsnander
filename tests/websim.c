@@ -8,6 +8,8 @@
 #define SIM_SIZE (1 << 20)
 static unsigned char mem[SIM_SIZE];
 static int unprotects, opens, fail_open;
+const char *ms_version = "test";
+static const char *extra = "";		/* more request headers */
 const char *flash_chip_name;
 static const struct programmer fake = { .key = "ch347", .name = "CH347", .send = (void *)1 };
 const struct programmer *programmer;
@@ -45,8 +47,10 @@ static int request(const char *method, const char *path, const char *auth, const
 	char head[512];
 
 	socketpair(AF_UNIX, SOCK_STREAM, 0, sv);
-	int k = snprintf(head, sizeof(head), "%s %s HTTP/1.0\r\nHost: x\r\n%s%s%sContent-Length: %zu\r\n\r\n",
-			 method, path, auth ? "Authorization: Basic " : "", auth ? auth : "", auth ? "\r\n" : "", blen);
+	int k = snprintf(head, sizeof(head), "%s %s HTTP/1.0\r\n%s%s%s%s%sContent-Length: %zu\r\n\r\n",
+			 method, path, *extra ? extra : "Host: 127.0.0.1:8080\r\n",
+			 strcmp(method, "POST") ? "" : "X-MicroSNANDer: 1\r\n",
+			 auth ? "Authorization: Basic " : "", auth ? auth : "", auth ? "\r\n" : "", blen);
 	pid_t p = fork();
 	if (!p) {				/* the client side writes the request */
 		close(sv[1]);
@@ -92,7 +96,7 @@ int main(void)
 	web_dir = dir;
 	for (unsigned i = 0; i < SIM_SIZE; i++) mem[i] = (unsigned char)(i * 7 + (i >> 9));
 
-	check(request("GET", "/", NULL, NULL, 0) == 200 && strstr(body_of(), "<title>MicroSNANDer</title>") && strstr(body_of(), "Registers"),
+	check(request("GET", "/", NULL, NULL, 0) == 200 && strstr(body_of(), "<title>MicroSNANDer Web</title>") && strstr(body_of(), "Registers"),
 	      "GET / gives the page");
 
 	web_password = "secret";
@@ -120,6 +124,16 @@ int main(void)
 	snprintf(path, sizeof(path), "/dumps/%s", file);
 	check(request("GET", path, NULL, NULL, 0) == 200 && strstr(resp, "attachment; filename=") &&
 	      nresp - (body_of() - resp) == SIM_SIZE && !memcmp(body_of(), mem, SIM_SIZE), "  and downloads with the chip content");
+	request("POST", "/api/read", NULL, NULL, 0);
+	wait_idle();
+	request("GET", "/api/state", NULL, NULL, 0);
+	char second[160];
+	snprintf(second, sizeof(second), "\"file\":\"%.*s-2.bin\"", (int)strlen(file) - 4, file);
+	check(strstr(body_of(), second) != NULL, "  a second read in the same minute keeps the first: -2");
+	char lnk[300];
+	snprintf(lnk, sizeof(lnk), "%s/flash-link.bin", dir);
+	if (symlink("/etc/passwd", lnk)) {}
+	check(request("GET", "/dumps/flash-link.bin", NULL, NULL, 0) == 404, "  a link in the dump directory is not served");
 	check(request("GET", "/dumps/../websim.c", NULL, NULL, 0) == 404 && request("GET", "/dumps/flash-x/../a.bin", NULL, NULL, 0) == 404,
 	      "  no other file is served");
 
@@ -165,6 +179,22 @@ int main(void)
 	pthread_mutex_lock(&st.lock); st.busy = 1; pthread_mutex_unlock(&st.lock);
 	check(request("POST", "/api/read", NULL, NULL, 0) == 409, "an operation while one runs: 409");
 	pthread_mutex_lock(&st.lock); st.busy = 0; pthread_mutex_unlock(&st.lock);
+	extra = "Host: 127.0.0.1\r\n";		/* a POST without the page header */
+	{
+		int sv[2]; char rq[] = "POST /api/erase HTTP/1.0\r\nHost: 127.0.0.1\r\nContent-Length: 0\r\n\r\n";
+		socketpair(AF_UNIX, SOCK_STREAM, 0, sv);
+		send_all(sv[0], rq, sizeof(rq) - 1);
+		handle(sv[1]); close(sv[1]);
+		nresp = recv(sv[0], resp, sizeof(resp) - 1, 0); resp[nresp > 0 ? nresp : 0] = 0; close(sv[0]);
+		check(atoi(resp + 9) == 403, "a POST without X-MicroSNANDer (another site): 403");
+	}
+	extra = "Host: evil.example:8080\r\n";
+	check(request("GET", "/api/state", NULL, NULL, 0) == 403, "a Host of another name (DNS rebinding): 403");
+	extra = "Host: localhost:8080\r\n";
+	check(request("GET", "/api/state", NULL, NULL, 0) == 200, "  localhost: 200");
+	extra = "";
+	check(web_serve("127.0.0.1:0", "", dir, 0, 0) == 1, "an empty -K password is refused");
+
 	check(request("GET", "/nope", NULL, NULL, 0) == 404 && request("POST", "/api/nope", NULL, NULL, 0) == 404, "unknown paths: 404");
 
 	char cmd[300];

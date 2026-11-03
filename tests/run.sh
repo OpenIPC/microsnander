@@ -47,6 +47,11 @@ t 0 "-W 8080 (web mode)"              $B -W 8080
 t 1 "-W with -r is an error"          $B -W 8080 -r x.bin
 t 1 "-W with -v is an error"          $B -W 8080 -v
 t 1 "-K without -W is an error"       $B -K pw -i
+t 1 "-W with -d is an error"          $B -W 8080 -d
+t 1 "-W with -k is an error"          $B -W 8080 -k
+t 1 "-W with -I is an error"          $B -W 8080 -I
+t 1 "-l that is not a number"         $B -r x.bin -l 12abc
+t 1 "-a that is not a number"         $B -r x.bin -a zz
 t 1 "-o without -W is an error"       $B -o /tmp -i
 $B -W 127.0.0.1:8080 -K pw -o /srv -a 0x1000 -l 0x2000 | grep -q '^web: 127.0.0.1:8080 key=pw dir=/srv addr=0x1000 len=0x2000' && echo "ok   -W passes the address, password, dump directory and range" || { echo "FAIL -W arguments"; fail=1; }
 $B -h | grep -q '^ -W ' && $B -h | grep -q '^ -K ' && $B -h | grep -q '^ -o ' && echo "ok   -h lists -W, -K and -o" || { echo "FAIL -h without -W/-K/-o"; fail=1; }

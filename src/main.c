@@ -22,6 +22,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <getopt.h>
+#include <errno.h>
 #include <time.h>
 #include <stdio.h>
 
@@ -51,6 +52,23 @@ extern int org;
 #endif
 
 #define _VER	"1.15.0"
+
+const char *ms_version = _VER;
+
+/* a number in decimal or 0x hexadecimal, all of the argument; -1 if not */
+static int parse_num(const char *arg, const char *opt, long long *val)
+{
+	char *end;
+	int hex = arg[0] == '0' && (arg[1] == 'x' || arg[1] == 'X');
+
+	errno = 0;
+	*val = strtoll(arg, &end, hex ? 16 : 10);
+	if (!*arg || *end || errno || *val < 0) {
+		printf("%s: not a number: %s\n\n", opt, arg);
+		return -1;
+	}
+	return 0;
+}
 
 void title(void)
 {
@@ -92,7 +110,10 @@ void usage(int code)
 int main(int argc, char* argv[])
 {
 	int c, vr = 0, ret = 0, rc = 1, speed_set = 0;
-	char *str, *fname = NULL, op = 0, *web = NULL, *web_key = NULL, *web_dir = NULL;
+	char *fname = NULL, op = 0, *web = NULL, *web_key = NULL, *web_dir = NULL;
+#ifdef EEPROM_SUPPORT
+	char *str;
+#endif
 	unsigned char *buf;
 	int long long len = 0, addr = 0, flen = 0, wlen = 0;
 	FILE *fp;
@@ -175,12 +196,12 @@ int main(int argc, char* argv[])
 				_ondie_ecc_flag = 0;
 				break;
 			case 'l':
-				str = strdup(optarg);
-				len = strtoll(str, NULL, *str && *(str + 1) == 'x' ? 16 : 10);
+				if (parse_num(optarg, "-l", &len))
+					exit(1);
 				break;
 			case 'a':
-				str = strdup(optarg);
-				addr = strtoll(str, NULL, *str && *(str + 1) == 'x' ? 16 : 10);
+				if (parse_num(optarg, "-a", &addr))
+					exit(1);
 				break;
 			case 'v':
 				vr = 1;
@@ -222,8 +243,14 @@ int main(int argc, char* argv[])
 
 	if (web) {
 		/* the web mode: the page does the operations, one programmer, auto */
-		if (op || vr || speed_set) {
-			printf("-W runs the web mode: give no -i, -r, -w, -e, -u, -v or -S with it.\n\n");
+		int eeprom = 0;
+#ifdef EEPROM_SUPPORT
+		eeprom = eepromsize > 0 || mw_eepromsize > 0;
+#endif
+		/* the page writes whole files from 0 with ECC on: no raw NAND
+		   (-d), no ECC ignore (-I), no BAD page skipping (-k), no EEPROM */
+		if (op || vr || speed_set || !ECC_fcheck || ECC_ignore || Skip_BAD_page || eeprom) {
+			printf("-W runs the web mode: give no -i, -r, -w, -e, -u, -v, -S, -d, -I, -k or -E with it.\n\n");
 			return 1;
 		}
 		return web_serve(web, web_key, web_dir, addr, len);
