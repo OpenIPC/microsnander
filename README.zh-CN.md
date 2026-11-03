@@ -44,6 +44,7 @@ sudo ./microsnander -w firmware.bin -v
 - [发布与固定链接](#发布与固定链接)
 - [用法](#用法)
 - [示例](#示例)
+- [Web 模式](#web-模式)
 - [支持的芯片](#支持的芯片)
 - [数据不确定的芯片](#数据不确定的芯片)
 - [构建](#构建)
@@ -137,6 +138,9 @@ microsnander [options]
  -v             verify after write on chip
  -P <name>      programmer: ch341a, ch347, ezp, auto (default: the one connected)
  -S <speed>     SPI clock of the CH347: 60M, 30M (default), 15M, 7.5M, 3.75M, 1.875M
+ -W [addr:]port web mode: a page with Detect, Read, Erase, Write, Registers
+ -K <password>  web mode: ask for this password (any user name)
+ -o <dir>       web mode: where Read saves the dumps (default: the current one)
 ```
 
 每次运行只执行一个操作：`-i`、`-e`、`-r`、`-w` 或 `-u`。不指定 `-a` 和 `-l` 时，
@@ -179,6 +183,79 @@ microsnander -u
 
 # SPI NAND：带 OOB 区的原始转储，关闭 ECC
 microsnander -d -r raw.bin
+```
+
+## Web 模式
+
+`-W [地址:]端口` 让 microsnander 作为服务运行：在浏览器中打开一个与其他 OpenIPC 工具风格一致的页面，
+为已连接的编程器提供 Detect、Read、Erase、Write 和 Registers 按钮。
+
+<p align="center">
+  <img src="screenshots/web-reading.png" alt="MicroSNANDer Web 读取中：指示灯、进度表盘、显示屏、黄铜按钮" width="45%">
+  <img src="screenshots/web-registers.png" alt="MicroSNANDer Web 读取完成：转储链接和状态寄存器各位的指示灯" width="45%">
+</p>
+
+```sh
+microsnander -W 8080                       # 所有网络接口，端口 8080
+microsnander -W 127.0.0.1:8080 -K secret   # 仅本机访问，并设置密码
+microsnander -P ch347 -W 8080 -o /srv/dumps
+```
+
+页面：
+
+- **指示灯**：Link（页面能连到服务）、Programmer、Chip、Busy。
+- **表盘和显示屏**：操作进度（百分比）和状态（Reading、Writing、Verifying、Erasing、Saved、Written、
+  Erased、Failed）；下方是编程器、芯片及其容量、最近的转储和最近的消息。
+- **Detect**：查找编程器和芯片，并读取状态寄存器。
+- **Read**：将整片芯片读入 `-o` 目录（默认为当前目录）中的文件，浏览器同时下载，链接保留在页面上。
+  启动时指定了 `-a`/`-l` 时，读取该区域。
+- **Erase**：确认后擦除整片芯片。
+- **Write**：在浏览器中选择的文件（引导程序或完整镜像）从地址 0 写入已擦除的芯片，然后读回比较。
+  请先擦除。
+- **Registers**：状态寄存器 1–3 的每一位一个指示灯（位名称与 Winbond 类芯片相同；琥珀色为保护位，
+  绿色为其他位），以及 **Clear protection**，与 `-u` 相同：清除 BP、SRP 和 CMP，保留 QE。仅限通过
+  CH341A 或 CH347 操作 SPI NOR；EZP 编程器无法读取寄存器。
+
+文件名：`flash-YYYYMMDDHHMM-芯片.bin`，使用运行服务的机器的本地时间，例如
+`flash-202611031706-W25Q128BV.bin`。使用 `-a`/`-l` 时会加上区域：
+`flash-202611031706-W25Q128BV-0x50000-0x100000.bin`。同一分钟内的第二次读取不会覆盖第一次，
+而是加上 `-2`、`-3` 等。
+
+工作方式：
+
+- 只使用一个编程器，选择方式与不带 `-W` 时相同；连接了多个时请用 `-P`。
+- 每个操作开始时打开编程器、结束后关闭，因此两次操作之间可以重新插拔，或用普通方式运行 microsnander。
+- 每次只运行一个操作；操作进行中的请求会得到 `409`。操作进行时页面每秒查询两次状态。
+- `-d`、`-I`、`-k` 和 EEPROM 选项不能与 `-W` 一起使用：页面在开启 ECC 的情况下从地址 0 写入完整文件。
+- 客户端断开时服务继续运行；慢速客户端不会阻塞其他客户端（最多同时 16 个连接）。
+
+访问：
+
+- 不带 `-K` 时，任何能访问该端口的人都可以擦除芯片。带 `-K` 时浏览器会要求输入密码（用户名任意）；
+  空密码会被拒绝。
+- 页面使用普通 HTTP，密码以明文在网络上传输：请在可信网络中使用，或使用 `-W 127.0.0.1:8080` 加
+  SSH 隧道。
+- 操作需要一个只有本页面才会发送的请求头，因此其他网站的页面无法发起擦除或写入。请求必须通过 IP
+  地址、`localhost` 或本机主机名访问本机（不接受其他名称：防止 DNS rebinding）。
+- `-o` 目录中只提供 Read 生成的转储文件，绝不提供指向其他文件的链接。
+
+作为 systemd 服务运行（用户需在上面 udev 规则中的 `plugdev` 组内）：
+
+```ini
+# /etc/systemd/system/microsnander.service
+[Unit]
+Description=microsnander web mode
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/microsnander -W 8080 -K <password> -o /var/lib/microsnander
+User=microsnander
+Group=plugdev
+StateDirectory=microsnander
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
 ```
 
 ## 支持的芯片

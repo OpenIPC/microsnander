@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MicroSNANDer Web</title>
+<style>
+:root{--panel:#2c2119;--panel2:#3d2d22;--brass:#c9a24d;--brass2:#8c6a2a;--amber:#ffb347;--ember:#ff6a1a;--ink:#e8d9b8;--dim:#8a7455;--red:#c8452c;--green:#5ad38f}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 50% 0,#3b2c22 0,#1a1512 55%,#0f0b09 100%);color:var(--ink);font-family:Georgia,'Times New Roman',serif;display:flex;flex-direction:column;align-items:center;padding:28px 12px}
+h1{font-size:clamp(22px,4.5vw,40px);letter-spacing:.2em;text-transform:uppercase;margin:0 0 6px;text-align:center;color:var(--brass);text-shadow:0 1px 0 #f3d78a,0 -1px 0 #3d2a0c,0 0 22px rgba(201,162,77,.35)}
+.sub{font-family:'Courier New',monospace;font-size:12px;color:var(--dim);letter-spacing:.3em;text-transform:uppercase;margin-bottom:24px;text-align:center}
+.panel{position:relative;width:min(760px,100%);background:linear-gradient(180deg,var(--panel2),var(--panel));border:3px solid var(--brass2);border-radius:16px;box-shadow:inset 0 0 0 2px #1a1210,inset 0 0 50px rgba(0,0,0,.6),0 24px 48px rgba(0,0,0,.65);padding:30px 24px 24px;margin-bottom:22px}
+.rivet{position:absolute;width:14px;height:14px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#f1d38b,#8c6a2a 60%,#3a2a10);box-shadow:0 1px 2px #000,inset 0 -1px 1px rgba(0,0,0,.5)}
+.rivet.tl{top:8px;left:8px}.rivet.tr{top:8px;right:8px}.rivet.bl{bottom:8px;left:8px}.rivet.br{bottom:8px;right:8px}
+.plate{font-family:'Courier New',monospace;font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:#2a1c10;background:linear-gradient(180deg,#e2c377,#a88237);border:1px solid #5b4416;border-radius:4px;padding:4px 10px;display:inline-block;box-shadow:inset 0 1px 0 #fbe6a8,0 1px 2px #000}
+.top{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
+.lamps{display:flex;gap:18px;flex-wrap:wrap;margin-top:20px;padding:14px 16px;border:1px solid #574123;border-radius:10px;background:rgba(0,0,0,.25);box-shadow:inset 0 2px 8px rgba(0,0,0,.6)}
+.lamp{display:flex;align-items:center;gap:8px;font-family:'Courier New',monospace;font-size:12px;letter-spacing:.15em;text-transform:uppercase;color:var(--dim)}
+.bulb{width:18px;height:18px;border-radius:50%;border:2px solid #6e5320;background:#2a2118;box-shadow:inset 0 0 6px #000;transition:background .3s,box-shadow .3s;flex:none}
+.bulb.on{background:radial-gradient(circle at 40% 35%,#fff3c4,var(--amber) 45%,#a24d0a);box-shadow:0 0 14px var(--amber),0 0 30px rgba(255,179,71,.45)}
+.bulb.ok{background:radial-gradient(circle at 40% 35%,#d8ffe8,var(--green) 45%,#155b34);box-shadow:0 0 14px var(--green)}
+.bulb.bad{background:radial-gradient(circle at 40% 35%,#ffd0c4,var(--red) 45%,#5a1a0e);box-shadow:0 0 14px var(--red);animation:blink 1.2s infinite}
+@keyframes blink{50%{box-shadow:0 0 2px var(--red)}}
+.mid{display:flex;gap:22px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-top:22px}
+.gauge{position:relative;width:220px;height:118px;overflow:hidden;flex:none;margin:0 auto}
+.dial{position:absolute;left:0;top:0;width:220px;height:220px;border-radius:50%;border:6px solid var(--brass2);background:radial-gradient(circle at 50% 50%,#f4e6c3 0,#e6d3a3 55%,#c9b27a 100%);box-shadow:inset 0 0 18px rgba(0,0,0,.5)}
+.tick{position:absolute;left:50%;top:110px;width:2px;height:104px;margin-left:-1px;margin-top:-104px;transform-origin:50% 100%}
+.tick:after{content:'';position:absolute;top:8px;left:0;width:2px;height:12px;background:#3a2a10}
+.needle{position:absolute;left:50%;top:110px;width:4px;height:98px;margin-left:-2px;margin-top:-98px;background:linear-gradient(180deg,#d33 0,#7a1a10 70%,#2a1c10);transform-origin:50% 100%;transform:rotate(-88deg);transition:transform .6s cubic-bezier(.3,1.4,.4,1);border-radius:2px;box-shadow:0 0 4px rgba(0,0,0,.6)}
+.hub{position:absolute;left:50%;top:110px;width:26px;height:26px;margin:-13px 0 0 -13px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#f1d38b,#8c6a2a 60%,#3a2a10);box-shadow:0 2px 4px #000}
+.lbl{position:absolute;bottom:8px;font-family:'Courier New',monospace;font-size:11px;letter-spacing:.2em;color:#3a2a10;font-weight:bold}
+.lbl.l{left:28px}.lbl.r{right:22px}
+.readout{flex:1;min-width:230px;font-family:'Courier New',monospace}
+.state{font-size:clamp(18px,3vw,26px);letter-spacing:.18em;text-transform:uppercase;color:var(--amber);text-shadow:0 0 12px rgba(255,179,71,.5);padding:14px 16px;border:2px solid #574123;border-radius:8px;background:#120d0a;box-shadow:inset 0 0 20px rgba(0,0,0,.8);transition:color .3s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.state.off{color:var(--dim);text-shadow:none}
+.state.ok{color:var(--green);text-shadow:0 0 12px rgba(90,211,143,.45)}
+.state.bad{color:var(--red);text-shadow:0 0 12px rgba(200,69,44,.5)}
+.meta{margin-top:10px;font-size:12px;color:var(--dim);letter-spacing:.08em;line-height:1.7;word-break:break-all}
+.meta b{display:inline-block;width:96px;font-weight:normal}
+.meta a{color:var(--amber)}
+.btns{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-top:24px}
+@media (max-width:620px){.btns{grid-template-columns:repeat(2,1fr)}}
+.btn{position:relative;border:0;cursor:pointer;font-family:Georgia,'Times New Roman',serif;font-size:14px;letter-spacing:.18em;text-transform:uppercase;color:#2a1c10;padding:18px 6px 14px;border-radius:12px;background:linear-gradient(180deg,#e9cd84,#b08b3c 55%,#7c5c1f);box-shadow:0 7px 0 #4a3510,0 12px 20px rgba(0,0,0,.6),inset 0 1px 0 #fff1c0;transition:transform .1s,box-shadow .1s,filter .2s}
+.btn:hover{filter:brightness(1.07)}
+.btn.pressed{transform:translateY(6px);box-shadow:0 1px 0 #4a3510,0 3px 6px rgba(0,0,0,.6),inset 0 1px 0 #fff1c0}
+.btn .ind{display:block;margin:10px auto 0;width:12px;height:12px;border-radius:50%;background:#3b2a12;border:1px solid #241806;box-shadow:inset 0 0 4px #000;transition:background .3s,box-shadow .3s}
+.btn.engaged{background:linear-gradient(180deg,#f6dc95,#c99d45 55%,#8a6621);box-shadow:0 2px 0 #4a3510,0 4px 8px rgba(0,0,0,.6),inset 0 0 14px rgba(255,180,60,.55);transform:translateY(4px)}
+.btn.engaged .ind{background:radial-gradient(circle at 40% 35%,#fff3c4,var(--amber) 45%,#a24d0a);box-shadow:0 0 10px var(--amber)}
+.btn.danger.engaged .ind{background:radial-gradient(circle at 40% 35%,#ffe1d0,var(--ember) 45%,#7a2a05);box-shadow:0 0 10px var(--ember);animation:flick .35s infinite}
+@keyframes flick{50%{opacity:.25}}
+.btn:disabled{cursor:not-allowed;filter:grayscale(.7) brightness(.6)}
+.btn.wide{grid-column:auto;font-size:13px}
+.log{font-family:'Courier New',monospace;font-size:12px;color:var(--dim);margin-top:18px;min-height:16px;letter-spacing:.08em}
+.regs{display:grid;grid-template-columns:auto repeat(8,1fr);gap:8px 6px;margin-top:20px;font-family:'Courier New',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase}
+.regs .name{color:var(--amber);align-self:center;padding-right:10px;white-space:nowrap}
+.bit{display:flex;flex-direction:column;align-items:center;gap:5px;color:var(--dim);text-align:center}
+.bit .bulb{width:14px;height:14px}
+.note{font-family:'Courier New',monospace;font-size:11px;color:var(--dim);letter-spacing:.08em;line-height:1.6;margin-top:16px}
+.regbtns{display:flex;justify-content:flex-end;margin-top:20px}
+.regbtns .btn{min-width:240px}
+body:not(.ready) *{transition:none!important}
+.foot{margin-top:0;font-family:'Courier New',monospace;font-size:11px;color:#5e4d36;letter-spacing:.2em;text-transform:uppercase;text-align:center}
+</style>
+</head>
+<body>
+<h1>MicroSNANDer Web</h1>
+<div class="sub">SPI NOR / NAND programmer &middot; CH341A &middot; CH347 &middot; EZP</div>
+<div class="panel">
+<span class="rivet tl"></span><span class="rivet tr"></span><span class="rivet bl"></span><span class="rivet br"></span>
+<div class="top"><span class="plate">Flash console</span><span class="plate" id="ver">microsnander</span></div>
+<div class="lamps">
+<div class="lamp"><span class="bulb" id="l-link"></span><span id="t-link">Link</span></div>
+<div class="lamp"><span class="bulb" id="l-prog"></span>Programmer</div>
+<div class="lamp"><span class="bulb" id="l-chip"></span>Chip</div>
+<div class="lamp"><span class="bulb" id="l-busy"></span>Busy</div>
+</div>
+<div class="mid">
+<div class="gauge"><div class="dial"></div>
+<div class="tick" style="transform:rotate(-80deg)"></div><div class="tick" style="transform:rotate(-40deg)"></div><div class="tick"></div><div class="tick" style="transform:rotate(40deg)"></div><div class="tick" style="transform:rotate(80deg)"></div>
+<span class="lbl l">0</span><span class="lbl r">100%</span>
+<div class="needle" id="needle"></div><div class="hub"></div></div>
+<div class="readout"><div class="state off" id="state">Stand by</div><div class="meta" id="meta">Press Detect to find the chip.</div></div>
+</div>
+<div class="btns">
+<button class="btn" id="b-detect">Detect<span class="ind"></span></button>
+<button class="btn" id="b-read">Read<span class="ind"></span></button>
+<button class="btn danger" id="b-erase">Erase<span class="ind"></span></button>
+<button class="btn danger" id="b-write">Write<span class="ind"></span></button>
+<button class="btn" id="b-registers">Registers<span class="ind"></span></button>
+</div>
+<input type="file" id="file" hidden>
+<div class="log" id="log">&nbsp;</div>
+</div>
+<div class="panel" id="regpanel" hidden>
+<span class="rivet tl"></span><span class="rivet tr"></span><span class="rivet bl"></span><span class="rivet br"></span>
+<div class="top"><span class="plate">Status registers</span><span class="plate" id="srhex">&nbsp;</span></div>
+<div class="regs" id="regs"></div>
+<div class="note">Bit names as on most Winbond-type chips; other makers name some bits differently. Clear protection clears BP, SRP and CMP, as -u does, and keeps QE.</div>
+<div class="regbtns"><button class="btn danger" id="b-unprotect">Clear protection<span class="ind"></span></button></div>
+</div>
+<div class="foot">MicroSNANDer &middot; OpenIPC &middot; GPL-2.0</div>
+<script>
+var bits=[['SRP0','SEC','TB','BP2','BP1','BP0','WEL','BUSY'],['SUS','CMP','LB3','LB2','LB1','R','QE','SRP1'],['HOLD','DRV1','DRV0','R','R','WPS','R','R']];
+var protect={SRP0:1,TB:1,BP2:1,BP1:1,BP0:1,CMP:1,SRP1:1,WPS:1};
+var ops=['detect','read','erase','write','registers','unprotect'],timer=null,lastOp='',busyLocal=false;
+var words={detect:'Detecting',read:'Reading',erase:'Erasing',write:'Writing',verify:'Verifying',registers:'Reading registers',unprotect:'Unprotecting'};
+function $(i){return document.getElementById(i)}
+var base=location.origin;	/* without user:password@ of the address, which fetch() refuses */
+function bulb(id,c){$(id).className='bulb'+(c?' '+c:'')}
+function esc(t){return String(t).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function size(n){return n>=1048576?(n/1048576)+' MB':n?(n/1024)+' KB':'-'}
+function hex(v){return '0x'+('0'+v.toString(16)).slice(-2)}
+function render(s){
+ bulb('l-link','ok');$('t-link').textContent='Link';
+ bulb('l-prog',s.programmer?'ok':(s.ok===false&&!s.programmer?'bad':''));
+ bulb('l-chip',s.chip?'ok':(s.ok===false&&s.programmer&&!s.chip?'bad':''));
+ bulb('l-busy',s.busy?'on':'');
+ $('ver').textContent='microsnander '+(s.version||'');
+ var st=$('state'),pct=s.total?Math.floor(100*s.done/s.total):0;
+ if(s.busy){st.textContent=(words[s.phase]||words[s.op]||s.op)+(s.total?' '+pct+'%':'');st.className='state'}
+ else if(s.ok===true){st.textContent=s.op==='read'?'Saved':s.op==='write'?'Written':s.op==='erase'?'Erased':s.op==='unprotect'?'Unprotected':'Ready';st.className='state'}
+ else if(s.ok===false){st.textContent='Failed';st.className='state bad'}
+ else{st.textContent='Stand by';st.className='state off'}
+ $('needle').style.transform='rotate('+(s.busy&&s.total?(-88+176*s.done/s.total):(s.ok===true&&s.total?88:-88))+'deg)';
+ var m='';
+ if(s.programmer)m+='<b>PROGRAMMER</b>'+esc(s.programmer)+'<br>';
+ if(s.chip)m+='<b>CHIP</b>'+esc(s.chip)+' &middot; '+size(s.size)+'<br>';
+ if(s.file)m+='<b>DUMP</b><a href="/dumps/'+encodeURIComponent(s.file)+'" download>'+esc(s.file)+'</a><br>';
+ if(s.message)m+=esc(s.message);
+ $('meta').innerHTML=m||'Press Detect to find the chip.';
+ ops.forEach(function(o){var b=$('b-'+o);b.disabled=!!s.busy;b.classList.toggle('engaged',!!s.busy&&(s.op===o))});
+ if(s.sr){
+  $('regpanel').hidden=false;$('srhex').textContent='SR '+s.sr.map(hex).join(' ');
+  var h='';
+  s.sr.forEach(function(v,i){h+='<div class="name">SR'+(i+1)+'</div>';bits[i].forEach(function(n,k){var on=(v>>(7-k))&1;h+='<div class="bit"><span class="bulb'+(on?(protect[n]?' on':' ok'):'')+'"></span>'+n+'</div>'})});
+  $('regs').innerHTML=h;
+ }else if(!s.busy&&['detect','registers','unprotect'].indexOf(s.op)>=0)$('regpanel').hidden=true;
+ if(!s.busy&&lastOp==='read'&&s.op==='read'&&s.ok&&s.file){lastOp='';location.href=base+'/dumps/'+encodeURIComponent(s.file)}
+ if(!document.body.classList.contains('ready'))setTimeout(function(){document.body.classList.add('ready')},50);	/* the first state is shown at once */
+ if(s.busy&&!timer)timer=setInterval(poll,500);
+ if(!s.busy&&timer){clearInterval(timer);timer=null}
+}
+function offline(){bulb('l-link','bad');$('t-link').textContent='No link';$('state').textContent='Link offline';$('state').className='state bad'}
+function poll(){fetch(base+'/api/state',{cache:'no-store'}).then(function(r){return r.json()}).then(render).catch(offline)}
+function run(op,body,btn){
+ lastOp=op;btn.classList.add('pressed');setTimeout(function(){btn.classList.remove('pressed')},180);
+ $('log').textContent='> '+op+(body?' '+body.byteLength+' bytes':'')+' ... engaging';
+ fetch(base+'/api/'+op,{method:'POST',headers:{'X-MicroSNANDer':'1'},body:body||''}).then(function(r){
+  if(!r.ok)return r.text().then(function(t){$('log').textContent='> '+op+': '+t});
+  $('log').innerHTML='&nbsp;';poll();if(!timer)timer=setInterval(poll,500);
+ }).catch(offline);
+}
+$('b-detect').onclick=function(){run('detect',null,this)};
+$('b-read').onclick=function(){run('read',null,this)};
+$('b-registers').onclick=function(){run('registers',null,this)};
+$('b-erase').onclick=function(){if(confirm('Erase the whole chip?'))run('erase',null,this)};
+$('b-unprotect').onclick=function(){run('unprotect',null,this)};
+$('b-write').onclick=function(){$('file').click()};
+$('file').onchange=function(){
+ var f=$('file').files[0];$('file').value='';
+ if(!f||!confirm('Write '+f.name+' ('+f.size+' bytes) from address 0 into the erased chip, then verify?'))return;
+ f.arrayBuffer().then(function(b){run('write',b,$('b-write'))});
+};
+poll();
+</script>
+</body>
+</html>

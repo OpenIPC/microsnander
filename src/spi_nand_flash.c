@@ -5656,6 +5656,7 @@ long snand_init(void)
 	if(!nandflash_init(0)) {
 		struct SPI_NAND_FLASH_INFO_T *ptr_dev_info_t = _SPI_NAND_GET_DEVICE_INFO_PTR;
 		bsize = ptr_dev_info_t->erase_size;
+		flash_chip_name = ptr_dev_info_t->ptr_name;
 		return (long)(ptr_dev_info_t->device_size);
 	}
 	return -1;

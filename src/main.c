@@ -22,12 +22,14 @@
 #include <unistd.h>
 #include <string.h>
 #include <getopt.h>
+#include <errno.h>
 #include <time.h>
 #include <stdio.h>
 
 #include "flashcmd_api.h"
 #include "programmer.h"
 #include "ch347_spi.h"
+#include "web.h"
 #include "spi_nand_flash.h"
 
 struct flash_cmd prog;
@@ -49,7 +51,24 @@ extern int org;
 #define EHELP	""
 #endif
 
-#define _VER	"1.14.1"
+#define _VER	"1.15.0"
+
+const char *ms_version = _VER;
+
+/* a number in decimal or 0x hexadecimal, all of the argument; -1 if not */
+static int parse_num(const char *arg, const char *opt, long long *val)
+{
+	char *end;
+	int hex = arg[0] == '0' && (arg[1] == 'x' || arg[1] == 'X');
+
+	errno = 0;
+	*val = strtoll(arg, &end, hex ? 16 : 10);
+	if (!*arg || *end || errno || *val < 0) {
+		printf("%s: not a number: %s\n\n", opt, arg);
+		return -1;
+	}
+	return 0;
+}
 
 void title(void)
 {
@@ -80,7 +99,10 @@ void usage(int code)
 		" -u             unprotect chip\n"\
 		" -v             verify after write on chip\n"\
 		" -P <name>      programmer: ch341a, ch347, ezp, auto (default: the one connected)\n"\
-		" -S <speed>     SPI clock of the CH347: 60M, 30M (default), 15M, 7.5M, 3.75M, 1.875M\n";
+		" -S <speed>     SPI clock of the CH347: 60M, 30M (default), 15M, 7.5M, 3.75M, 1.875M\n"\
+		" -W [addr:]port web mode: a page with Detect, Read, Erase, Write, Registers\n"\
+		" -K <password>  web mode: ask for this password (any user name)\n"\
+		" -o <dir>       web mode: where Read saves the dumps (default: the current one)\n";
 	printf(use);
 	exit(code);
 }
@@ -88,7 +110,10 @@ void usage(int code)
 int main(int argc, char* argv[])
 {
 	int c, vr = 0, ret = 0, rc = 1, speed_set = 0;
-	char *str, *fname = NULL, op = 0;
+	char *fname = NULL, op = 0, *web = NULL, *web_key = NULL, *web_dir = NULL;
+#ifdef EEPROM_SUPPORT
+	char *str;
+#endif
 	unsigned char *buf;
 	int long long len = 0, addr = 0, flen = 0, wlen = 0;
 	FILE *fp;
@@ -96,9 +121,9 @@ int main(int argc, char* argv[])
 	title();
 
 #ifdef EEPROM_SUPPORT
-	while ((c = getopt(argc, argv, "diIhveukLl:a:w:r:E:f:8P:S:")) != -1)
+	while ((c = getopt(argc, argv, "diIhveukLl:a:w:r:E:f:8P:S:W:K:o:")) != -1)
 #else
-	while ((c = getopt(argc, argv, "diIhveukLl:a:w:r:P:S:")) != -1)
+	while ((c = getopt(argc, argv, "diIhveukLl:a:w:r:P:S:W:K:o:")) != -1)
 #endif
 	{
 		switch(c)
@@ -171,15 +196,24 @@ int main(int argc, char* argv[])
 				_ondie_ecc_flag = 0;
 				break;
 			case 'l':
-				str = strdup(optarg);
-				len = strtoll(str, NULL, *str && *(str + 1) == 'x' ? 16 : 10);
+				if (parse_num(optarg, "-l", &len))
+					exit(1);
 				break;
 			case 'a':
-				str = strdup(optarg);
-				addr = strtoll(str, NULL, *str && *(str + 1) == 'x' ? 16 : 10);
+				if (parse_num(optarg, "-a", &addr))
+					exit(1);
 				break;
 			case 'v':
 				vr = 1;
+				break;
+			case 'W':
+				web = optarg;
+				break;
+			case 'K':
+				web_key = optarg;
+				break;
+			case 'o':
+				web_dir = optarg;
 				break;
 			case 'i':
 			case 'e':
@@ -205,6 +239,25 @@ int main(int argc, char* argv[])
 			default:
 				usage(1);
 		}
+	}
+
+	if (web) {
+		/* the web mode: the page does the operations, one programmer, auto */
+		int eeprom = 0;
+#ifdef EEPROM_SUPPORT
+		eeprom = eepromsize > 0 || mw_eepromsize > 0;
+#endif
+		/* the page writes whole files from 0 with ECC on: no raw NAND
+		   (-d), no ECC ignore (-I), no BAD page skipping (-k), no EEPROM */
+		if (op || vr || speed_set || !ECC_fcheck || ECC_ignore || Skip_BAD_page || eeprom) {
+			printf("-W runs the web mode: give no -i, -r, -w, -e, -u, -v, -S, -d, -I, -k or -E with it.\n\n");
+			return 1;
+		}
+		return web_serve(web, web_key, web_dir, addr, len);
+	}
+	if (web_key || web_dir) {
+		printf("-K and -o go with -W only.\n\n");
+		return 1;
 	}
 
 	if (op == 0) usage(1);

@@ -2,3 +2,4 @@ build/
 dist/
 src/*.o
 src/microsnander
+src/web_page.h

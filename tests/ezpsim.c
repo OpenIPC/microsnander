@@ -12,6 +12,7 @@ static unsigned long addr;
 static unsigned char sim_id = 0x14;		/* capacity byte of the chip in the socket */
 
 unsigned int bsize;
+const char *flash_chip_name;
 
 const char *snor_lookup(const unsigned char id[3], unsigned long *size, unsigned long *sector, int *addr4b)
 {

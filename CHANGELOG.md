@@ -4,6 +4,39 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.15.0 — 2026-11-03
+
+- Web mode: `-W [address:]port` runs microsnander as a service with a page in the
+  browser: Detect, Read, Erase, Write and Registers for the programmer that is
+  connected. `-K <password>` asks for a password (HTTP basic authentication), `-o <dir>`
+  is where Read saves the dumps.
+  - Read: the whole chip, or the `-a`/`-l` range given at the start, into
+    `flash-YYYYMMDDHHMM-CHIP.bin` (the range adds `-0xADDRESS-0xLENGTH`), which the
+    browser downloads too.
+  - Erase: the whole chip. Write: a file from the browser, from address 0, then read
+    back and compared.
+  - Registers: the bits of status registers 1–3 and Clear protection (as `-u`), for SPI
+    NOR through the CH341A or the CH347.
+  - One operation at a time, in a thread of its own; the page shows its progress on a
+    gauge. The programmer is opened for each operation and closed after it.
+  - The page has the style of the other OpenIPC tools: lamps, gauge, display, brass
+    buttons, and a lamp for every status register bit.
+  - A second read in the same minute does not replace the first dump: `-2`, `-3`, ...
+  - Access: an operation needs a header that only the page sends (no erase or write from a
+    page of another site); a request has to name this machine by its IP address,
+    `localhost` or its host name (DNS rebinding); only regular dump files are served, never
+    links; an empty `-K` is refused. A thread for each connection, up to 16, so a slow
+    client does not hold the others; errors of `accept()` do not stop the service.
+  - `-d`, `-I`, `-k` and the EEPROM options are refused with `-W`.
+- `-a` and `-l` that are not numbers are refused (they were taken as 0).
+- `src/web.c`: a small HTTP/1.0 server, no library needed. The page is
+  `src/web_page.html`, built into the program.
+- `tests/websim.c` runs `web.c` with a fake flash: the requests, the password, the
+  operations, the dump names and downloads.
+- Checked on hardware: CH347 (detect, registers, read of 16 MB in 7 s, download, erase,
+  write and verify), CH341A (registers, clear protection) and EZP2019+ (detect; the
+  registers are reported as not available).
+
 ## 1.14.1 — 2026-11-03
 
 - SPI NOR writes are 2–3 times faster on the CH341A and the CH347 (#29). Writing

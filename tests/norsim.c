@@ -29,6 +29,7 @@ static int fast_clock(clockid_t id, struct timespec *t)
 #undef clock_gettime
 
 unsigned int bsize;
+const char *flash_chip_name;
 
 enum { ORDINARY, SST25, SST26, NO_SR23, QE_SR1, QE_FIXED };
 static int kind;

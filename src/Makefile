@@ -20,7 +20,7 @@ CFLAGS ?= -Os
 ALL_CFLAGS = $(CFLAGS) -std=gnu99 -Wall -D_FILE_OFFSET_BITS=64 $(LIBUSB_CFLAGS)
 LDLIBS = $(LIBUSB_LIBS) -pthread
 
-OBJS = flashcmd_api.o spi_controller.o spi_nand_flash.o spi_nor_flash.o programmer.o ch341a_spi.o ch347_spi.o ezp.o timer.o main.o
+OBJS = flashcmd_api.o spi_controller.o spi_nand_flash.o spi_nor_flash.o programmer.o ch341a_spi.o ch347_spi.o ezp.o web.o timer.o main.o
 
 ifeq ($(EEPROM_SUPPORT),y)
     ALL_CFLAGS += -DEEPROM_SUPPORT
@@ -36,7 +36,13 @@ microsnander: $(OBJS)
 .c.o:
 	$(CC) $(ALL_CFLAGS) -c $<
 
+# the page of the web mode, as a C string
+web_page.h: web_page.html
+	sed 's/\\/\\\\/g; s/"/\\"/g; s/^/"/; s/$$/\\n"/' $< | { echo 'static const char web_page[] ='; cat; echo ';'; } > $@
+
+web.o: web_page.h
+
 clean:
-	rm -f *.o microsnander*
+	rm -f *.o microsnander* web_page.h
 
 .PHONY: all clean
