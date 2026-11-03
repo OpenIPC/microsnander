@@ -115,11 +115,12 @@ public class MainActivity extends Activity {
         };
         buttons[0].setOnClickListener(v -> run(R.string.detecting, true, (fd, vid, pid, p) -> Native.detect(fd, vid, pid)));
         buttons[1].setOnClickListener(v -> read());
-        buttons[2].setOnClickListener(v -> new AlertDialog.Builder(this)
-                .setMessage(R.string.erase_confirm)
+        // Erase and Write detect first: no question and no file picker without a chip
+        buttons[2].setOnClickListener(v -> detectThen(r -> new AlertDialog.Builder(this)
+                .setMessage(getString(R.string.erase_confirm, r.chip, sizeOf(r.size)))
                 .setPositiveButton(R.string.erase, (d, w) -> run(R.string.erasing, false, Native::erase))
-                .setNegativeButton(android.R.string.cancel, null).show());
-        buttons[3].setOnClickListener(v -> pickWrite());
+                .setNegativeButton(android.R.string.cancel, null).show()));
+        buttons[3].setOnClickListener(v -> detectThen(r -> pickWrite()));
         buttons[4].setOnClickListener(v -> run(R.string.reading_registers, true, (fd, vid, pid, p) -> Native.registers(fd, vid, pid)));
         buttons[5].setOnClickListener(v -> run(R.string.unprotecting, true, (fd, vid, pid, p) -> Native.unprotect(fd, vid, pid)));
         saveAs.setOnClickListener(v -> {
@@ -256,10 +257,21 @@ public class MainActivity extends Activity {
     }
 
     private void run(int phase, boolean registersOp, Op op) {
-        runThen(phase, registersOp, op, null);
+        runThen(phase, registersOp, op, null, null);
     }
 
-    private void runThen(int phase, boolean registersOp, Op op, After after) {
+    interface Found { void found(Native.Result r); }
+
+    /** Detect, then next on the screen thread when a chip was found */
+    private void detectThen(Found next) {
+        runThen(R.string.detecting, true, (fd, vid, pid, p) -> Native.detect(fd, vid, pid), null, next);
+    }
+
+    static String sizeOf(long size) {
+        return size >= 1 << 20 ? (size >> 20) + " MB" : (size >> 10) + " KB";
+    }
+
+    private void runThen(int phase, boolean registersOp, Op op, After after, Found next) {
         withDevice(phase, () -> {
             UsbManager u = usb;
             UsbDevice d = findProgrammer();
@@ -276,6 +288,8 @@ public class MainActivity extends Activity {
                     if (a != null) {
                         a.showResult(r, saved);
                         a.showRegisters(lastSr);
+                        if (next != null && r != null && r.ok && !r.chip.isEmpty())
+                            next.found(r);
                     }
                 });
             });
@@ -316,7 +330,7 @@ public class MainActivity extends Activity {
             }
             String where = toDownloads(app, dump);
             return where != null ? app.getString(R.string.dump_is, where) : app.getString(R.string.dump_kept);
-        });
+        }, null);
     }
 
     @Override
@@ -504,8 +518,11 @@ public class MainActivity extends Activity {
     }
 
     private void confirmWrite(Uri u) {
+        Native.Result r = lastResult;
+        if (r == null || !r.ok || r.chip.isEmpty())
+            return;				// the chip of the Detect before the picker
         new AlertDialog.Builder(this)
-                .setMessage(R.string.write_confirm)
+                .setMessage(getString(R.string.write_confirm, r.chip, sizeOf(r.size)))
                 .setPositiveButton(R.string.write, (d, w) -> write(u))
                 .setNegativeButton(android.R.string.cancel, null).show();
     }

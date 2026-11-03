@@ -108,6 +108,8 @@ int main(void)
 
 	check(request("GET", "/", NULL, NULL, 0) == 200 && strstr(body_of(), "<title>MicroSNANDer Web</title>") && strstr(body_of(), "Registers"),
 	      "GET / gives the page");
+	check(strstr(body_of(), "function detectThen") && strstr(body_of(), "(o==='erase'||o==='write')&&!s.chip"),
+	      "  Erase and Write wait for a chip: off without one, a Detect before the question");
 
 	web_password = "secret";
 	check(request("GET", "/api/state", NULL, NULL, 0) == 401 && strstr(resp, "WWW-Authenticate: Basic"), "with -K: no password, 401");
