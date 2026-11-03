@@ -20,6 +20,7 @@ static unsigned char mem[4 << 20];
 static unsigned char cmd[300];
 static int ncmd, nread;
 static int wel, aai, locked;
+static int busy;			/* status reads that still show WIP after WRSR or ULBPR */
 static unsigned char sr;			/* BP bits */
 static unsigned long aai_addr;
 static int spi_fail_at = -1;		/* the Nth AAI command fails on the wire */
@@ -50,7 +51,7 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Read_NByte(u8 *d, u32 len, SPI_CONTROLLER_SP
 	for (u32 i = 0; i < len; i++, nread++) {
 		switch (cmd[0]) {
 		case OPCODE_RDID: d[i] = nread < 5 ? id[nread] : 0; break;
-		case OPCODE_RDSR: d[i] = sr | (wel ? SR_WEL : 0) | (aai ? 0x40 : 0); break;
+		case OPCODE_RDSR: d[i] = sr | (wel ? SR_WEL : 0) | (aai ? 0x40 : 0) | (busy ? SR_WIP : 0); if (busy) busy--; break;
 		case OPCODE_READ: d[i] = mem[(addr() + nread) % sizeof(mem)]; break;
 		default: d[i] = 0;
 		}
@@ -64,10 +65,10 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Chip_Select_High(void)
 		return SPI_CONTROLLER_RTN_NO_ERROR;
 	}
 	switch (cmd[0]) {
-	case OPCODE_WREN: wel = 1; break;
+	case OPCODE_WREN: if (!busy) wel = 1; break;		/* ignored while the chip is busy */
 	case OPCODE_WRDI: wel = 0; aai = 0; break;
-	case OPCODE_WRSR: if (wel && ncmd > 1) sr = cmd[1] & 0xbc; wel = 0; break;
-	case OPCODE_ULBPR: if (wel && kind == SST26) locked = 0; wel = 0; break;
+	case OPCODE_WRSR: if (wel && ncmd > 1) { sr = cmd[1] & 0xbc; busy = 3; } wel = 0; break;
+	case OPCODE_ULBPR: if (wel && kind == SST26) { locked = 0; busy = 3; } wel = 0; break;
 	case OPCODE_PP:
 		if (writable() && ncmd > 4)
 			program(addr(), cmd + 4, kind == SST25 ? 1 : ncmd - 4);	/* SST25: one byte only */
@@ -115,9 +116,9 @@ static void chip(const struct chip_info *e, int k)
 {
 	id[0] = e->id;
 	id[1] = e->jedec_id >> 24; id[2] = e->jedec_id >> 16; id[3] = e->jedec_id >> 8; id[4] = e->jedec_id;
-	kind = k; wel = aai = 0;
+	kind = k; wel = aai = busy = 0;
 	locked = k == SST26;
-	sr = k == SST25 ? 0x1c : 0;		/* SST25: BP bits set at power-up */
+	sr = k == SST25 ? 0x1c : (k == ORDINARY ? 0x1c : 0);	/* BP bits set at power-up */
 	memset(mem, 0x00, sizeof(mem));		/* not erased */
 }
 

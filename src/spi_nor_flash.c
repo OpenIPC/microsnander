@@ -110,6 +110,7 @@ struct chip_info {
 struct chip_info *spi_chip_info;
 
 static int snor_wait_ready(int sleep_ms);
+static int snor_wait_busy(void);
 static int snor_read_sr(u8 opcode, u8 *val);
 static int snor_write_sr(u8 opcode, u8 *val);
 
@@ -169,7 +170,7 @@ int snor_unprotect(void)
 		err |= SPI_CONTROLLER_Chip_Select_Low();
 		err |= SPI_CONTROLLER_Write_One_Byte(OPCODE_ULBPR);
 		err |= SPI_CONTROLLER_Chip_Select_High();
-		if (err) {
+		if (err || snor_wait_busy()) {	/* the unlock done before the next WREN */
 			printf("%s: ULBPR failed\n", __func__);
 			return -1;
 		}
@@ -186,6 +187,8 @@ int snor_unprotect(void)
 		snor_wait_ready(1);
 		snor_write_enable();
 		snor_write_sr(OPCODE_WRSR, &sr);
+		if (snor_wait_busy())	/* the status register write takes time */
+			return -1;
 	}
 
 	/* SST25-type chips have one status register (BP3 and BPL in it) */
@@ -202,6 +205,8 @@ int snor_unprotect(void)
 		snor_wait_ready(1);
 		snor_write_enable();
 		snor_write_sr(OPCODE_WRSR2, &sr);
+		if (snor_wait_busy())	/* the status register write takes time */
+			return -1;
 	}
 
 	if (snor_read_sr(OPCODE_RDSR3, &sr) < 0) {
@@ -214,6 +219,8 @@ int snor_unprotect(void)
 		snor_wait_ready(1);
 		snor_write_enable();
 		snor_write_sr(OPCODE_WRSR3, &sr);
+		if (snor_wait_busy())	/* the status register write takes time */
+			return -1;
 	}
 
 	return 0;
