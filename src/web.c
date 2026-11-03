@@ -102,8 +102,14 @@ static void set_progress(const char *phase, unsigned long long done, unsigned lo
 static void keep_chip(const struct ms_chip *c, int registers_op)
 {
 	pthread_mutex_lock(&st.lock);
-	if (c->programmer[0])
+	if (c->programmer[0] && strcmp(c->programmer, st.programmer)) {
+		/* another programmer: what the last one found is not in it */
 		snprintf(st.programmer, sizeof(st.programmer), "%s", c->programmer);
+		st.chip[0] = 0;
+		st.size = 0;
+		st.warning[0] = 0;
+		st.sr_valid = 0;
+	}
 	if (c->chip[0]) {
 		snprintf(st.chip, sizeof(st.chip), "%s", c->chip);
 		st.size = c->size;
