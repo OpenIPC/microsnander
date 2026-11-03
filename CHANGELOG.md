@@ -4,6 +4,14 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.11.1 — 2026-11-03
+
+- SPI NAND OOB size: 128 bytes for TOSHIBA TC58CVG0S3H and TC58CVG1S3H (was 64), 256
+  bytes for TOSHIBA TC58CVG2S0H and KIOXIA TC58CVG2S0HRAIJ (was 128). It changes raw
+  dumps with `-d`, which now take the whole spare area of each page.
+- README: a section on chips whose data other sources give differently and that are
+  not checked on hardware yet; the title is MicroSNANDer.
+
 ## 1.11.0 — 2026-11-03
 
 - 157 more SPI NOR chips, 284 in all: GD25Q20C, GD25Q40C, GD25Q80C, GD25LQ80C,
