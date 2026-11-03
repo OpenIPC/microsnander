@@ -29,13 +29,16 @@
  * a page program, with the read of a status register or of data, or at CS
  * high. Every transfer is a USB round trip, so a page program is one
  * transfer instead of five. Longer writes go out at once, so their result
- * is the result of the call.
+ * is the result of the call. A held transfer that fails at CS high fails
+ * the next call too (most callers do not check CS high; the next call is
+ * usually the status read that would report the operation done).
  */
-#define SPI_HOLD_MAX	16		/* longest write that is held back */
+#define SPI_HOLD_MAX	4		/* longest write that is held back: an opcode, an address */
 #define SPI_HOLD_BUF	(SPI_HOLD_MAX + 4096 + 256)	/* held bytes plus a page with its spare area */
 
 static u8 held[SPI_HOLD_BUF];
 static u32 nheld;
+static int held_failed;			/* a held transfer failed at CS high */
 
 static int spi_flush(unsigned int readcnt, u8 *readarr)
 {
@@ -48,6 +51,15 @@ static int spi_flush(unsigned int readcnt, u8 *readarr)
 	return ret;
 }
 
+/* the failure of a held transfer, once */
+static int spi_held_failed(void)
+{
+	int f = held_failed;
+
+	held_failed = 0;
+	return f;
+}
+
 SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Enable_Manual_Mode( void )
 {
 	return 0;
@@ -56,11 +68,19 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Enable_Manual_Mode( void )
 SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Write_NByte( u8 *ptr_data, u32 len, SPI_CONTROLLER_SPEED_T speed )
 {
 	(void)speed;
+	if (len <= SPI_HOLD_MAX && nheld + len <= SPI_HOLD_BUF) {
+		memcpy(held + nheld, ptr_data, len);
+		nheld += len;
+		return SPI_CONTROLLER_RTN_NO_ERROR;
+	}
+	/* a transfer goes out: the failure of a held one before it is this call's */
+	if (spi_held_failed()) {
+		nheld = 0;
+		return SPI_CONTROLLER_RTN_WRITE_DATAPFIFO_ERROR;
+	}
 	if (nheld + len <= SPI_HOLD_BUF) {
 		memcpy(held + nheld, ptr_data, len);
 		nheld += len;
-		if (len <= SPI_HOLD_MAX)
-			return SPI_CONTROLLER_RTN_NO_ERROR;
 		return (SPI_CONTROLLER_RTN_T)spi_flush(0, NULL);
 	}
 	if (spi_flush(0, NULL))
@@ -76,6 +96,10 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Write_One_Byte( u8  data )
 SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Read_NByte( u8 *ptr_rtn_data, u32 len, SPI_CONTROLLER_SPEED_T speed )
 {
 	(void)speed;
+	if (spi_held_failed()) {
+		nheld = 0;
+		return SPI_CONTROLLER_RTN_READ_DATAPFIFO_ERROR;
+	}
 	return (SPI_CONTROLLER_RTN_T)spi_flush(len, ptr_rtn_data);
 }
 
@@ -91,6 +115,8 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Chip_Select_High( void )
 {
 	int ret = spi_flush(0, NULL);
 
+	if (ret)
+		held_failed = 1;
 	if (programmer->cs(false))
 		ret = -1;
 	return (SPI_CONTROLLER_RTN_T)ret;

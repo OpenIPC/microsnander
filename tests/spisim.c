@@ -65,6 +65,32 @@ int main(void)
 	SPI_CONTROLLER_Chip_Select_High();
 	check(ret != 0, "  a failed data transfer is the result of the data write");
 
+	/* a held command that fails at CS high fails the next call (the status read) */
+	fail_send = 1;
+	SPI_CONTROLLER_Chip_Select_Low();
+	SPI_CONTROLLER_Write_One_Byte(0x06);
+	ret = SPI_CONTROLLER_Chip_Select_High();
+	fail_send = 0;
+	SPI_CONTROLLER_Chip_Select_Low();
+	SPI_CONTROLLER_Write_One_Byte(0x05);
+	int ret2 = SPI_CONTROLLER_Read_NByte(&v, 1, SPI_CONTROLLER_SPEED_SINGLE);
+	SPI_CONTROLLER_Chip_Select_High();
+	SPI_CONTROLLER_Chip_Select_Low();
+	SPI_CONTROLLER_Write_One_Byte(0x05);
+	int ret3 = SPI_CONTROLLER_Read_NByte(&v, 1, SPI_CONTROLLER_SPEED_SINGLE);
+	SPI_CONTROLLER_Chip_Select_High();
+	check(ret != 0 && ret2 != 0 && ret3 == 0, "a held command that fails at CS high fails the next read, once");
+
+	/* a short data write (a last page of 10 bytes) goes out at once: its result is the call's */
+	fail_send = 1;
+	SPI_CONTROLLER_Chip_Select_Low();
+	SPI_CONTROLLER_Write_One_Byte(0x02);
+	ret = SPI_CONTROLLER_Write_NByte(page, 10, SPI_CONTROLLER_SPEED_SINGLE);
+	fail_send = 0;
+	SPI_CONTROLLER_Chip_Select_High();
+	spi_held_failed();
+	check(ret != 0, "a failed 10-byte data write fails the call");
+
 	/* more than the buffer: the held bytes first, then the data as it is */
 	sends = 0;
 	SPI_CONTROLLER_Chip_Select_Low();
