@@ -258,6 +258,8 @@ int main(int argc, char* argv[])
 		len = flen - addr;
 	else if(!addr && !len)
 		len = flen;
+	/* -k moves data to later pages, but only inside -a/-l (without -l: to the chip end) */
+	Skip_BAD_end = addr + len;
 	buf = (unsigned char *)malloc(len + 1);
 	if (!buf) {
 		printf("Malloc failed for read buffer.\n");

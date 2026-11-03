@@ -113,8 +113,9 @@ written with its OOB (spare) area, for a raw dump.
 
 With `-k` a page that fails ECC on read or fails to program is skipped and the
 data goes on in the next page, so everything after it shifts by a page; each
-skipped page is printed. An operation that would need a page past the chip end
-fails. A page that failed to program is remembered only for `-v` in the same run:
+skipped page is printed. A write stays inside `-a`/`-l` (without `-l`, up to the
+chip end): give `-l` the size of the partition, and a write that needs more room
+than that fails. A read that would need a page past the chip end fails. A page that failed to program is remembered only for `-v` in the same run:
 a later `-k` read may read it as data, and the dump is shifted from there on.
 
 ## Examples

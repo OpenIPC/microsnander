@@ -249,6 +249,14 @@
 int ECC_fcheck = 1;
 int ECC_ignore = 0;
 int Skip_BAD_page = 0;
+unsigned long long Skip_BAD_end = 0;	/* -k keeps the data below this address; 0: the chip end */
+
+static unsigned long long skip_limit(const struct SPI_NAND_FLASH_INFO_T *ptr_dev_info_t)
+{
+	if (Skip_BAD_end && Skip_BAD_end < ptr_dev_info_t->device_size)
+		return Skip_BAD_end;
+	return ptr_dev_info_t->device_size;
+}
 
 /* Pages a -k write skipped for a program failure in this run. Such a page may
    still pass ECC, so a -k read of the same run (verify) skips it too. */
@@ -3392,10 +3400,12 @@ static SPI_NAND_FLASH_RTN_T spi_nand_write_internal( u32 dst_addr, u32 len, u32 
 			printf("\nSkip BAD page 0x%x\n", page_number);
 			if( rtn_status == SPI_NAND_FLASH_RTN_PROGRAM_FAIL && add_skipped_page(page_number) )
 				break;
-			/* the same data goes to the next page, but never past the chip end */
+			/* the same data goes to the next page, but never past -a/-l or the chip end */
 			write_addr += (ptr_dev_info_t->page_size - addr_offset);
-			if( write_addr + remain_len > ptr_dev_info_t->device_size )
+			if( (unsigned long long)write_addr + remain_len > skip_limit(ptr_dev_info_t) ) {
+				printf("No room left for the data after the skipped pages\n");
 				break;
+			}
 			continue;
 		}
 		/* a failed page stops the write: *ptr_rtn_len counts what was written */
@@ -3479,10 +3489,13 @@ static SPI_NAND_FLASH_RTN_T spi_nand_read_internal ( u32 addr, u32 len, u8 *ptr_
 				*status = SPI_NAND_FLASH_RTN_DETECTED_BAD_BLOCK;
 				return (rtn_status);
 			}
-			/* skip BAD page, go to next page, but never past the chip end */
+			/* skip BAD page, go to next page, but never past the chip end; reading
+			   beyond -a/-l changes nothing, and a verify reads only what the write
+			   put inside it */
 			printf("\nSkip BAD page 0x%x\n", page_number);
 			read_addr += (ptr_dev_info_t->page_size - data_offset);
-			if( read_addr + remain_len > ptr_dev_info_t->device_size ) {
+			if( (unsigned long long)read_addr + remain_len > ptr_dev_info_t->device_size ) {
+				printf("No room left for the data after the skipped pages\n");
 				*status = SPI_NAND_FLASH_RTN_DETECTED_BAD_BLOCK;
 				_SPI_NAND_SEMAPHORE_UNLOCK();
 				return (rtn_status);

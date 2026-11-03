@@ -208,6 +208,21 @@ int main(void)
 		      "  a -k read in the same run (verify) gives the data back");
 	}
 
+	/* a -k write stays inside -a/-l: the next partition is not touched */
+	chip(0xef, 0xaa, 0x21);
+	snand_init();
+	Skip_BAD_page = 1;
+	prog_fail[0] = 61;
+	fill(buf, 4, 8);
+	Skip_BAD_end = 64L * PAGE;		/* -a 60 pages -l 4 pages */
+	check(snand_write(buf, 60L * PAGE, 4 * PAGE) < 0, "-k write that needs a page past -a/-l fails");
+	check(page(64)[0] == 0xff && page(64)[PAGE - 1] == 0xff, "  the page after -a/-l is not written");
+	Skip_BAD_end = 65L * PAGE;		/* -l one page longer than the data */
+	for (long p = 60; p < 65; p++) memset(page(p), 0xff, PAGE + OOB);
+	check(snand_write(buf, 60L * PAGE, 4 * PAGE) == 4 * PAGE && !memcmp(page(64), buf + 3 * PAGE, PAGE),
+	      "-k write with room left in -a/-l uses it");
+	Skip_BAD_end = 0;
+
 	/* a page with an ECC error is not served from the driver cache on the next read */
 	chip(0xef, 0xaa, 0x21);
 	snand_init();

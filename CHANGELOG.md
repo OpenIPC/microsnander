@@ -22,6 +22,9 @@ Fixed in the port (the same code in upstream SNANDer):
 - `-k` never goes past the chip end: a skipped page near the end made the write wrap
   to page 0 and overwrite the start of the chip; now such a write or read fails. Each
   skipped page is printed.
+- A `-k` write stays inside `-a`/`-l` (without `-l`, up to the chip end): the shifted
+  data went on into the next partition, which was not erased. Give `-l` the partition
+  size; a write that needs more room fails.
 - Without `-k`, an ECC error in the read that a page write starts with does not fail
   the write, as before.
 - After a skipped page the rest of the data starts at the next page boundary: a last
