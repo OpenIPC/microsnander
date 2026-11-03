@@ -490,7 +490,7 @@ int ch341a_spi_init(void)
 	struct libusb_device *dev;
 	if (!(dev = libusb_get_device(handle))) {
 		printf("Failed to get device from device handle.\n");
-		goto close_handle;
+		goto release_interface;
 	}
 
 	struct libusb_device_descriptor desc;
