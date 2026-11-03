@@ -3,6 +3,7 @@ dist/
 src/*.o
 src/microsnander
 src/web_page.h
+src/usb-backend
 android/.gradle/
 android/build/
 android/app/build/

@@ -36,6 +36,12 @@ microsnander: $(OBJS)
 .c.o:
 	$(CC) $(ALL_CFLAGS) -c $<
 
+# the objects are built for one USB backend: a switch of LIBUSB rebuilds them
+USB_BACKEND = $(if $(filter 1,$(LIBUSB)),libusb,usbfs)
+usb-backend: FORCE
+	@[ "$$(cat $@ 2>/dev/null)" = "$(USB_BACKEND)" ] || echo $(USB_BACKEND) > $@
+$(OBJS): usb-backend usb.h usbfs.h
+
 # the page of the web mode, as a C string
 web_page.h: web_page.html
 	sed 's/\\/\\\\/g; s/"/\\"/g; s/^/"/; s/$$/\\n"/' $< | { echo 'static const char web_page[] ='; cat; echo ';'; } > $@
@@ -43,6 +49,6 @@ web_page.h: web_page.html
 web.o: web_page.h
 
 clean:
-	rm -f *.o microsnander* web_page.h
+	rm -f *.o microsnander* web_page.h usb-backend
 
-.PHONY: all clean
+.PHONY: all clean FORCE
