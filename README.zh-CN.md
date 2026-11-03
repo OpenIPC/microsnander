@@ -214,7 +214,8 @@ microsnander -P ch347 -W 8080 -o /srv/dumps
   启动时指定了 `-a`/`-l` 时，读取该区域。
 - **Erase**：确认后擦除整片芯片。
 - **Write**：在浏览器中选择的文件（引导程序或完整镜像）从地址 0 写入已擦除的芯片，然后读回比较。
-  请先擦除。
+  请先擦除。文件不会保存在内存中：写入前它以无名文件的形式存放在 `-o` 目录中，因此最大 512 MB 的
+  镜像需要该目录有同样大小的可用空间。
 - **Registers**：状态寄存器 1–3 的每一位一个指示灯（位名称与 Winbond 类芯片相同；琥珀色为保护位，
   绿色为其他位），以及 **Clear protection**，与 `-u` 相同：清除 BP、SRP 和 CMP，保留 QE。仅限通过
   CH341A 或 CH347 操作 SPI NOR；EZP 编程器无法读取寄存器。
@@ -276,7 +277,7 @@ root；在电视盒子上会出现在主屏幕，可用遥控器操作）。
   应用使用它。
 - **Read** 将 `flash-YYYYMMDDHHMM-芯片.bin` 保存到“下载”；**Save as…** 可保存到任意位置，**Share**
   可发送给其他应用。
-- **Write** 通过文件选择器选取文件，从地址 0 写入已擦除的芯片，然后校验。**Erase** 擦除整片芯片。
+- **Write** 通过文件选择器选取文件，从地址 0 写入已擦除的芯片，然后校验；文件分段读取，不会整个载入内存。**Erase** 擦除整片芯片。
 - **Registers** 和 **Clear protection** 与 Web 模式相同（通过 CH341A 或 CH347 操作 SPI NOR）。
 - 应用使用与 microsnander 相同的 C 代码（`src/`），由 NDK 编译，libusb 使用 Android USB 管理器
   打开的设备。签名的 APK 在发布版中：[latest](https://github.com/OpenIPC/microsnander/releases/latest) 里的 `microsnander-android.apk`。

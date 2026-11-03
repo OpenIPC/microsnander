@@ -33,8 +33,9 @@ int ms_detect(struct ms_chip *chip, char *msg, size_t n);
 int ms_read(struct ms_chip *chip, FILE *out, unsigned long long addr, unsigned long long len,
 	    ms_progress cb, void *ctx, char *msg, size_t n);	/* len 0: from addr to the end */
 int ms_erase(struct ms_chip *chip, ms_progress cb, void *ctx, char *msg, size_t n);
-int ms_write(struct ms_chip *chip, const unsigned char *data, unsigned long len,
-	     ms_progress cb, void *ctx, char *msg, size_t n);	/* from address 0, then verified */
+/* the whole file from address 0, then verified; the file is read in parts,
+   twice (write, verify), and is not kept in memory */
+int ms_write_file(struct ms_chip *chip, FILE *f, ms_progress cb, void *ctx, char *msg, size_t n);
 int ms_registers(struct ms_chip *chip, char *msg, size_t n);
 int ms_unprotect(struct ms_chip *chip, char *msg, size_t n);
 

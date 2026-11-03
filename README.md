@@ -230,7 +230,9 @@ The page:
   start, Read takes that range.
 - **Erase**: the whole chip, after a confirmation.
 - **Write**: a file chosen in the browser (a loader or a full image) is written from address 0
-  into an erased chip, then read back and compared. Erase first.
+  into an erased chip, then read back and compared. Erase first. The file is not kept in memory:
+  it waits, without a name, in the `-o` directory, so an image of up to 512 MB needs that much
+  free disk space there.
 - **Registers**: a lamp for every bit of status registers 1–3 (bit names as on Winbond-type
   chips; amber: a protection bit, green: another bit) and **Clear protection**, which does
   what `-u` does: it clears BP, SRP and CMP and keeps QE. SPI NOR through the CH341A or the
@@ -300,7 +302,7 @@ with the remote).
 - **Read** saves `flash-YYYYMMDDHHMM-CHIP.bin` to Downloads; **Save as…** puts it anywhere,
   **Share** sends it to another app.
 - **Write** takes a file from the file picker and writes it from address 0 into an erased chip,
-  then verifies it. **Erase** erases the whole chip.
+  then verifies it; the file is read in parts, not held in memory. **Erase** erases the whole chip.
 - **Registers** and **Clear protection** as in the web mode (SPI NOR through the CH341A or the
   CH347).
 - The app runs the same C code as microsnander (`src/`), built with the NDK, with libusb on the
