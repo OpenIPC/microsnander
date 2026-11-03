@@ -47,7 +47,9 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq libusb-1.0-0-dev
 
+      # bash: -eo pipefail, so a make that fails in front of tee fails the step
       - name: Build
+        shell: bash
         run: |
           make -C src clean
           make -C src 2>&1 | tee build.log
@@ -58,6 +60,7 @@ jobs:
           ./src/microsnander -h | head -3
 
       - name: Build with libusb (make LIBUSB=1)
+        shell: bash
         run: |
           make -C src clean
           make -C src LIBUSB=1 2>&1 | tee build-libusb.log
@@ -65,6 +68,7 @@ jobs:
             echo "::error::compiler warnings, see the build log"
             exit 1
           fi
+          ./src/microsnander -h | head -3
           make -C src clean
 
       # main.c against a test double of the programmer: exit codes, option

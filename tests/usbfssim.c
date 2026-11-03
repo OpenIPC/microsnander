@@ -26,7 +26,7 @@ static int fail;
 static void check(int ok, const char *what) { printf("%s %s\n", ok ? "ok  " : "FAIL", what); if (!ok) fail = 1; }
 
 static struct usbdevfs_urb *submitted[16], *done[16];
-static int nsub, ndone, nreaped, bulk_calls;
+static int nsub, ndone, nreaped, bulk_calls, unplugged;
 static unsigned int bulk_timeouts[8];
 
 /* the URB i comes back with this length and status */
@@ -60,7 +60,7 @@ static int fake_ioctl(int fd, unsigned long req, ...)
 		return 0;
 	}
 	if (req == USBDEVFS_REAPURBNDELAY) {
-		if (nreaped >= ndone) { errno = EAGAIN; return -1; }
+		if (nreaped >= ndone) { errno = unplugged ? ENODEV : EAGAIN; return -1; }
 		*(struct usbdevfs_urb **)arg = done[nreaped++];
 		return 0;
 	}
@@ -131,6 +131,16 @@ int main(void)
 	check(!libusb_cancel_transfer(t), "cancel a transfer in flight");
 	libusb_handle_events_timeout(NULL, &tv);
 	check(calls == 1 && t->status == LIBUSB_TRANSFER_CANCELLED, "  it ends cancelled");
+	/* unplugged with a transfer in flight: it ends once, NO_DEVICE */
+	reset();
+	libusb_fill_bulk_transfer(t, &h, 0x82, buf, 40000, cb, NULL, 0);
+	libusb_submit_transfer(t);
+	unplugged = 1;
+	libusb_handle_events_timeout(NULL, &tv);
+	libusb_handle_events_timeout(NULL, &tv);
+	check(calls == 1 && t->status == LIBUSB_TRANSFER_NO_DEVICE && !active && !priv_of(t)->pending,
+	      "unplugged during a transfer: one callback, no device, nothing left in flight");
+	unplugged = 0;
 	libusb_free_transfer(t);
 
 	/* a synchronous bulk transfer: one timeout for all its parts */

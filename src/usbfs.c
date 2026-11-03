@@ -607,11 +607,17 @@ int libusb_handle_events_timeout(libusb_context *ctx, struct timeval *tv)
 
 		while (ioctl(h->fd, USBDEVFS_REAPURBNDELAY, &u) == 0)
 			reaped(u);
-		if (errno == ENODEV)			/* unplugged: nothing comes back */
+		/* unplugged. usbfs answers ENODEV to a reap only when no URB is left
+		   to reap: on the disconnect the kernel kills every URB still in
+		   flight, and they came back above. So no URB of these transfers is
+		   in the kernel any more, and their callbacks may free them. */
+		if (errno == ENODEV)
 			for (struct libusb_transfer *t = active, *next; t; t = next) {
 				next = priv_of(t)->next;
-				if (t->dev_handle == h)
+				if (t->dev_handle == h) {
+					priv_of(t)->pending = 0;
 					finish(t, 1);
+				}
 			}
 	}
 
