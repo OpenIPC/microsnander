@@ -48,7 +48,7 @@ extern int org;
 #define EHELP	""
 #endif
 
-#define _VER	"1.10.1"
+#define _VER	"1.11.0"
 
 void title(void)
 {
