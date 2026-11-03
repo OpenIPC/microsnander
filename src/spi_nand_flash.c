@@ -3526,14 +3526,13 @@ static void spi_nand_select_die ( u32 page_number )
 	}
 }
 
-static SPI_NAND_FLASH_RTN_T ecc_fail_check( u32 page_number )
+/* status: register C0 as the ready poll of the page read left it (the ECC
+   bits are there already, no second read) */
+static SPI_NAND_FLASH_RTN_T ecc_fail_check( u32 page_number, u8 status )
 {
-	u8 status;
 	struct SPI_NAND_FLASH_INFO_T *ptr_dev_info_t;
 	SPI_NAND_FLASH_RTN_T rtn_status = SPI_NAND_FLASH_RTN_NO_ERROR;
 	ptr_dev_info_t = _SPI_NAND_GET_DEVICE_INFO_PTR;
-
-	spi_nand_protocol_get_status_reg_3( &status);
 
 	_SPI_NAND_DEBUG_PRINTF(SPI_NAND_FLASH_DEBUG_LEVEL_1, "ecc_fail_check: status = 0x%x\n", status);
 
@@ -3902,7 +3901,7 @@ static SPI_NAND_FLASH_RTN_T spi_nand_load_page_into_cache( u32 page_number)
 
 		_SPI_NAND_DEBUG_PRINTF(SPI_NAND_FLASH_DEBUG_LEVEL_1, "spi_nand_load_page_into_cache : status = 0x%x\n", status);
 		if (ECC_fcheck && !ECC_ignore)
-			rtn_status = ecc_fail_check(page_number);
+			rtn_status = ecc_fail_check(page_number, status);
 		else
 			rtn_status = 0;
 	}
