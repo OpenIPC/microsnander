@@ -29,6 +29,7 @@
 #include "flashcmd_api.h"
 #include "programmer.h"
 #include "ch347_spi.h"
+#include "selftest.h"
 #include "web.h"
 #include "spi_nand_flash.h"
 
@@ -76,6 +77,8 @@ void usage(int code)
 		" -w <filename>  write chip with data from filename\n"\
 		" -r <filename>  read chip and save data to filename\n"\
 		" -u             unprotect chip\n"\
+		" -t             self-test: protection, then erase, write and read back one block\n"\
+		"                (the first; -a for another) and put its data back\n"\
 		" -v             verify after write on chip\n"\
 		" -P <name>      programmer: ch341a, ch347, ezp, auto (default: the one connected)\n"\
 		" -S <speed>     SPI clock of the CH347: 60M, 30M (default), 15M, 7.5M, 3.75M, 1.875M\n"\
@@ -96,7 +99,7 @@ int main(int argc, char* argv[])
 
 	title();
 
-	while ((c = getopt(argc, argv, "diIhveukLl:a:w:r:P:S:W:K:o:")) != -1)
+	while ((c = getopt(argc, argv, "diIhveutkLl:a:w:r:P:S:W:K:o:")) != -1)
 	{
 		switch(c)
 		{
@@ -146,6 +149,7 @@ int main(int argc, char* argv[])
 			case 'i':
 			case 'e':
 			case 'u':
+			case 't':
 				if(!op)
 					op = c;
 				else
@@ -174,7 +178,7 @@ int main(int argc, char* argv[])
 		/* the page writes whole files from 0 with ECC on: no raw NAND
 		   (-d), no ECC ignore (-I), no BAD page skipping (-k) */
 		if (op || vr || speed_set || !ECC_fcheck || ECC_ignore || Skip_BAD_page) {
-			printf("-W runs the web mode: give no -i, -r, -w, -e, -u, -v, -S, -d, -I or -k with it.\n\n");
+			printf("-W runs the web mode: give no -i, -r, -w, -e, -u, -t, -v, -S, -d, -I or -k with it.\n\n");
 			return 1;
 		}
 		return web_serve(web, web_key, web_dir, addr, len);
@@ -203,6 +207,18 @@ int main(int argc, char* argv[])
 
 	if (op == 'i') {
 		rc = 0;
+		goto out;
+	}
+
+	if (op == 't') {
+		struct selftest t = {
+			.cmd = &prog, .chip = flash_chip_name ? flash_chip_name : "chip", .programmer = programmer->name,
+			.size = flen, .addr = addr, .block = bsize, .kind = prog.kind, .lock = prog.lock,
+		};
+
+		if (prog.kind == FLASH_NOR && programmer->send)
+			t.sr_valid = !snor_read_status(t.sr);
+		rc = selftest(&t);		/* 0 OK, 2 protected, 1 failed */
 		goto out;
 	}
 

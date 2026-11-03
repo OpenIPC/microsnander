@@ -5,16 +5,17 @@
 #include <stdlib.h>
 #include <string.h>
 #include "flashcmd_api.h"
+const char *flash_chip_name = "W25Q80";
 int ECC_fcheck = 1, ECC_ignore = 0, Skip_BAD_page = 0; unsigned long long Skip_BAD_end; unsigned char _ondie_ecc_flag = 1; unsigned int bsize = 4096;
 static unsigned char chip[65536];
 static const char *env(const char *n) { const char *v = getenv(n); return v ? v : ""; }
 static int r(unsigned char *b, unsigned long f, unsigned long l) { if (!strcmp(env("MS_FAIL"),"read")) return -1; if (!strcmp(env("MS_FAIL"),"shortread")) { memcpy(b, chip + f, l / 2); return l / 2; } memcpy(b, chip + f, l); return l; }
-static int w(unsigned char *b, unsigned long t, unsigned long l) { if (!strcmp(env("MS_FAIL"),"write")) return -1; if (!strcmp(env("MS_FAIL"),"partial")) { memcpy(chip + t, b, l / 2); return l / 2; } memcpy(chip + t, b, l); if (*env("MS_CORRUPT")) chip[t + atol(env("MS_CORRUPT"))] ^= 0x5a; return l; }
-static int e(unsigned long o, unsigned long l) { if (!strcmp(env("MS_FAIL"),"erase")) return -2; memset(chip + o, 0xff, l); return 0; }
+static int w(unsigned char *b, unsigned long t, unsigned long l) { if (*env("MS_PROTECT")) return l; if (!strcmp(env("MS_FAIL"),"write")) return -1; if (!strcmp(env("MS_FAIL"),"partial")) { memcpy(chip + t, b, l / 2); return l / 2; } memcpy(chip + t, b, l); if (*env("MS_CORRUPT")) chip[t + atol(env("MS_CORRUPT"))] ^= 0x5a; return l; }
+static int e(unsigned long o, unsigned long l) { if (*env("MS_PROTECT")) return 0; if (!strcmp(env("MS_FAIL"),"erase")) return -2; memset(chip + o, 0xff, l); return 0; }
 static int u(void) { return strcmp(env("MS_FAIL"),"unprotect") ? 0 : -3; }
 #include <strings.h>
 #include "programmer.h"
-static const struct programmer stubprogs[] = { { .key = "ch341a", .name = "CH341A" }, { .key = "ch347", .name = "CH347", .clock = true }, { .key = "ezp", .name = "EZP" } };
+static const struct programmer stubprogs[] = { { .key = "ch341a", .name = "CH341A", .send = (void *)1 }, { .key = "ch347", .name = "CH347", .send = (void *)1, .clock = true }, { .key = "ezp", .name = "EZP" } };
 static const struct programmer *chosen = &stubprogs[0];	/* auto: the stub has a CH341A */
 const struct programmer *programmer;
 int programmer_select(const char *n) {
@@ -33,5 +34,11 @@ long flash_cmd_init(struct flash_cmd *c) {
 	if (!strcmp(env("MS_CHIP"), "none")) return -1;
 	c->flash_read = r; c->flash_write = w; c->flash_erase = e;
 	if (strcmp(env("MS_CHIP"), "nand")) c->flash_unprotect = u;
+	c->kind = !strcmp(env("MS_CHIP"), "nand") ? FLASH_NAND : FLASH_NOR;
+	c->lock = *env("MS_LOCK") ? (int)strtol(env("MS_LOCK"), NULL, 16) : -1;
+	if (programmer && !strcmp(programmer->key, "ezp")) c->kind = FLASH_FIRMWARE;
 	return sizeof(chip);
 }
+
+/* MS_SR=1c0000: the status registers SR1 SR2 SR3 */
+int snor_read_status(unsigned char sr[3]) { unsigned long v = strtoul(*env("MS_SR") ? env("MS_SR") : "000200", NULL, 16); sr[0] = v >> 16; sr[1] = v >> 8; sr[2] = v; return 0; }

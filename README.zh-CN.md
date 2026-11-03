@@ -138,6 +138,8 @@ microsnander [options]
  -w <filename>  write chip with data from filename
  -r <filename>  read chip and save data to filename
  -u             unprotect chip
+ -t             self-test: protection, then erase, write and read back one block
+                (the first; -a for another) and put its data back
  -v             verify after write on chip
  -P <name>      programmer: ch341a, ch347, ezp, auto (default: the one connected)
  -S <speed>     SPI clock of the CH347: 60M, 30M (default), 15M, 7.5M, 3.75M, 1.875M
@@ -146,7 +148,7 @@ microsnander [options]
  -o <dir>       web mode: where Read saves the dumps (default: the current one)
 ```
 
-每次运行只执行一个操作：`-i`、`-e`、`-r`、`-w` 或 `-u`。不指定 `-a` 和 `-l` 时，
+每次运行只执行一个操作：`-i`、`-e`、`-r`、`-w`、`-u` 或 `-t`。不指定 `-a` 和 `-l` 时，
 操作覆盖整片芯片。地址和长度可以是十进制，或带 `0x` 的十六进制。擦除按整块进行：
 长度必须是芯片报告的块大小的整数倍。
 
@@ -160,11 +162,21 @@ SPI NAND 芯片默认使用片内 ECC 读写：文件中只有数据页。使用
 写入失败的页只在同一次运行的 `-v` 中被记住：之后用 `-k` 读取时可能把它当作数据读出，
 转储从该页起会错位。
 
+`-t` 是无需准备的芯片快速检查：读取保护位（SPI NOR：状态寄存器中的 BP、TB、CMP、SRP；SPI NAND：
+块锁定寄存器），然后取一个块（默认第一个块，通常是被锁定的引导程序所在处，或 `-a` 指定的块），保存其数据，
+擦除，写入测试图案，读回，再写回原数据。结果为一行：`OK`（退出码 0）；`PROTECTED`：块接受了命令但数据未变，
+或被保护位保护，`-u` 可清除（退出码 2）；`FAILED` 并给出第一个错误字节的地址（退出码 1）。如果原数据无法写回，
+会保存到同目录的 `selftest-<芯片>-0x<地址>.bin`。EZP 编程器只能擦除整片芯片：使用它们时 `-t` 只读取该块两次，
+不擦除。
+
 ## 示例
 
 ```sh
 # 芯片 ID、型号和容量
 microsnander -i
+
+# 自检：芯片是否受保护，第一个块能否擦除、写入并读回
+microsnander -t
 
 # 完整备份
 microsnander -r full.bin
@@ -230,7 +242,7 @@ microsnander -P ch347 -W 8080 -o /srv/dumps
 - 只使用一个编程器，选择方式与不带 `-W` 时相同；连接了多个时请用 `-P`。
 - 每个操作开始时打开编程器、结束后关闭，因此两次操作之间可以重新插拔，或用普通方式运行 microsnander。
 - 每次只运行一个操作；操作进行中的请求会得到 `409`。操作进行时页面每秒查询两次状态。
-- `-W` 不接受自身的操作（`-i`、`-r`、`-w`、`-e`、`-u`），也不接受 `-v`、`-S`、`-d`、`-I` 或 `-k`：
+- `-W` 不接受自身的操作（`-i`、`-r`、`-w`、`-e`、`-u`、`-t`），也不接受 `-v`、`-S`、`-d`、`-I` 或 `-k`：
   操作由页面完成，在开启 ECC 的情况下从地址 0 写入完整文件，并始终校验。`-K` 和 `-o` 只能与 `-W` 一起使用。
 - 客户端断开时服务继续运行；慢速客户端不会阻塞其他客户端（最多同时 16 个连接）。
 

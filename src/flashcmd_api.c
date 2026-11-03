@@ -34,17 +34,22 @@ long flash_cmd_init(struct flash_cmd *cmd)
 {
 	long flen = -1;
 
+	cmd->lock = -1;
 	if (programmer && programmer->flash_init) {
+		cmd->kind = FLASH_FIRMWARE;
 		if ((flen = programmer->flash_init(cmd)) <= 0)
 			printf("\nFlash not found!!!!\n\n");
 		return warn(flen);
 	}
 
 	if ((flen = snand_init()) > 0) {
+		cmd->kind = FLASH_NAND;
+		cmd->lock = snand_probe_lock;
 		cmd->flash_erase = snand_erase;
 		cmd->flash_write = snand_write;
 		cmd->flash_read  = snand_read;
 	} else if ((flen = snor_init()) > 0) {
+		cmd->kind = FLASH_NOR;
 		cmd->flash_unprotect = snor_unprotect;
 		cmd->flash_erase = snor_erase;
 		cmd->flash_write = snor_write;

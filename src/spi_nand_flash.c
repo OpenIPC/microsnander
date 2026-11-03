@@ -384,6 +384,7 @@ static unsigned long bmt_oob_size = 64;
 static u32 erase_oob_size = 0;
 static u32 ecc_size = 0;
 u32 bsize = 0;
+int snand_probe_lock = -1;
 #if 0
 static unsigned int print_dot = 0;
 #endif
@@ -5178,6 +5179,7 @@ static SPI_NAND_FLASH_RTN_T spi_nand_probe( struct SPI_NAND_FLASH_INFO_T *ptr_rt
 		_SPI_NAND_SEMAPHORE_LOCK();
 		spi_nand_protocol_get_status_reg_1(&feature);
 		_SPI_NAND_PRINTF("Get Status Register 1: 0x%02x\n", feature);
+		snand_probe_lock = feature;
 		spi_nand_protocol_get_status_reg_2(&feature);
 		_SPI_NAND_PRINTF("Get Status Register 2: 0x%02x\n", feature);
 		spi_nand_manufacute_init(ptr_rtn_device_t);

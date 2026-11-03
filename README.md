@@ -150,6 +150,8 @@ microsnander [options]
  -w <filename>  write chip with data from filename
  -r <filename>  read chip and save data to filename
  -u             unprotect chip
+ -t             self-test: protection, then erase, write and read back one block
+                (the first; -a for another) and put its data back
  -v             verify after write on chip
  -P <name>      programmer: ch341a, ch347, ezp, auto (default: the one connected)
  -S <speed>     SPI clock of the CH347: 60M, 30M (default), 15M, 7.5M, 3.75M, 1.875M
@@ -158,7 +160,7 @@ microsnander [options]
  -o <dir>       web mode: where Read saves the dumps (default: the current one)
 ```
 
-One operation per run: `-i`, `-e`, `-r`, `-w` or `-u`. Without `-a` and `-l` the
+One operation per run: `-i`, `-e`, `-r`, `-w`, `-u` or `-t`. Without `-a` and `-l` the
 operation covers the whole chip. Addresses and lengths are decimal or hex with
 `0x`. Erase works on whole blocks: the length must be a multiple of the block size
 the chip reports.
@@ -174,11 +176,24 @@ chip end): give `-l` the size of the partition, and a write that needs more room
 than that fails. A read that would need a page past the chip end fails. A page that failed to program is remembered only for `-v` in the same run:
 a later `-k` read may read it as data, and the dump is shifted from there on.
 
+`-t` is a quick check of the chip, with nothing to prepare: it reads the protection bits
+(SPI NOR: BP, TB, CMP, SRP in the status registers; SPI NAND: the block lock register), then
+takes one block — the first by default, where a locked loader usually is, or the one at `-a` —
+keeps its data, erases it, writes a pattern, reads it back and puts the old data back. It ends
+with one line: `OK` (exit 0), `PROTECTED` — the block took the commands and kept its data, or
+the bits protect it; `-u` clears them (exit 2), or `FAILED` with the address of the first wrong
+byte (exit 1). If the old data cannot be put back, it is saved to
+`selftest-<chip>-0x<address>.bin` next to it. The EZP programmers erase only the whole chip:
+with them `-t` reads the block twice and does not erase it.
+
 ## Examples
 
 ```sh
 # Chip ID, name and size
 microsnander -i
+
+# Self-test: is the chip protected, does its first block erase, take a write and read back
+microsnander -t
 
 # Full backup
 microsnander -r full.bin
@@ -251,7 +266,7 @@ How it works:
   can be replugged, or used by a normal microsnander run.
 - One operation runs at a time; a request while one runs gets `409`. The page polls the state
   twice a second while an operation runs.
-- `-W` takes no operation of its own (`-i`, `-r`, `-w`, `-e`, `-u`) and no `-v`, `-S`, `-d`,
+- `-W` takes no operation of its own (`-i`, `-r`, `-w`, `-e`, `-u`, `-t`) and no `-v`, `-S`, `-d`,
   `-I` or `-k`: the page does the operations, writes whole files from address 0 with ECC on
   and always verifies. `-K` and `-o` go with `-W` only.
 - The service keeps running when a client disconnects; a slow client does not hold the others
