@@ -37,6 +37,14 @@ android {
         resourceConfigurations += listOf("en", "ru", "zh-rCN")
     }
     signingConfigs {
+        // A fixed debug key in the repository (not a secret, as every debug
+        // key): the CI debug APKs install over each other.
+        getByName("debug") {
+            storeFile = rootProject.file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
         create("release") {
             if (releaseKeystore != null) {
                 storeFile = file(releaseKeystore)
