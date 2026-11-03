@@ -207,8 +207,10 @@ jobs:
           signer_of() {
             for bt in $(ls -d "$ANDROID_HOME"/build-tools/* | sort -rV); do
               if out=$("$bt/apksigner" verify --print-certs "$1" 2>&1); then
-                # "Signer #1 certificate ..." or "Signer (minSdkVersion=N...) certificate ..."
-                d=$(echo "$out" | sed -n 's/^Signer[^:]* certificate SHA-256 digest: //p' | head -1)
+                # whole lines only, "Signer #1 certificate ...", "Signer (minSdkVersion=N...) certificate ..." or
+                # "V2 Signer: certificate ..." (build-tools 37), 64 hex digits; one signer only
+                d=$(echo "$out" | sed -nE 's/^(Signer #[0-9]+|Signer \([^)]*\)|V[0-9]+ Signer:) certificate SHA-256 digest: ([0-9a-f]{64})$/\2/p' | sort -u)
+                [ "$(echo "$d" | grep -c .)" -le 1 ] || { echo "$bt/apksigner: more than one signer" >&2; echo "$out" >&2; echo; return 0; }
                 [ -n "$d" ] || { echo "$bt/apksigner printed no signer:" >&2; echo "$out" >&2; }
                 echo "$d"; return 0
               fi
@@ -274,8 +276,10 @@ jobs:
             signer_of() {
               for bt in $(ls -d "$ANDROID_HOME"/build-tools/* | sort -rV); do
                 if out=$("$bt/apksigner" verify --print-certs "$1" 2>&1); then
-                  # "Signer #1 certificate ..." or "Signer (minSdkVersion=N...) certificate ..."
-                  d=$(echo "$out" | sed -n 's/^Signer[^:]* certificate SHA-256 digest: //p' | head -1)
+                  # whole lines only, "Signer #1 certificate ...", "Signer (minSdkVersion=N...) certificate ..." or
+                # "V2 Signer: certificate ..." (build-tools 37), 64 hex digits; one signer only
+                  d=$(echo "$out" | sed -nE 's/^(Signer #[0-9]+|Signer \([^)]*\)|V[0-9]+ Signer:) certificate SHA-256 digest: ([0-9a-f]{64})$/\2/p' | sort -u)
+                  [ "$(echo "$d" | grep -c .)" -le 1 ] || { echo "$bt/apksigner: more than one signer" >&2; echo "$out" >&2; echo; return 0; }
                   [ -n "$d" ] || { echo "$bt/apksigner printed no signer:" >&2; echo "$out" >&2; }
                   echo "$d"; return 0
                 fi
