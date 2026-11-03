@@ -16,8 +16,8 @@ flash of cameras, routers and other boards, removes the write protection of SPI
 NOR chips, and knows 291 SPI NOR and 135 SPI NAND chips.
 
 It is a stripped-down, extended, deeply modified and optimized version of
-[SNANDer](https://github.com/McMCCRU/SNANDer) 1.7.4 by McMCC: Linux only, without
-the EEPROM support, with the `-u` (unprotect) command and the
+[SNANDer](https://github.com/McMCCRU/SNANDer) 1.7.4 by McMCC: Linux only, SPI NOR
+and SPI NAND only (no EEPROM chips), with the `-u` (unprotect) command and the
 flash chips found on OpenIPC hardware added. The release binaries are static and
 have no dependencies, so the same file runs on a PC or right on an ARM camera
 with the programmer plugged into its USB port.
