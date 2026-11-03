@@ -5016,12 +5016,17 @@ static void spi_nand_manufacute_init( struct SPI_NAND_FLASH_INFO_T *ptr_device_t
 			else
 				spi_nand_protocol_die_select_2(_die_id);
 		}
-		spi_nand_protocol_get_status_reg_1(&feature);
-		if (!(feature & 0x78))
+		if (spi_nand_protocol_get_status_reg_1(&feature) != SPI_NAND_FLASH_RTN_NO_ERROR || !(feature & 0x78))
 			continue;
-		feature &= 0x83;
-		spi_nand_protocol_set_status_reg_1(feature);
-		spi_nand_protocol_get_status_reg_1(&feature);
+		unsigned char now = 0xff;	/* what the chip says after the write, not the value written */
+
+		if (spi_nand_protocol_set_status_reg_1(feature & 0x83) != SPI_NAND_FLASH_RTN_NO_ERROR ||
+		    spi_nand_protocol_get_status_reg_1(&now) != SPI_NAND_FLASH_RTN_NO_ERROR) {
+			_SPI_NAND_PRINTF("Warning: the unlock of the block lock register%s could not be checked "
+					 "(0x%02x before it).\n", dies > 1 ? (die ? " of die 1" : " of die 0") : "", feature);
+			continue;
+		}
+		feature = now;
 		if (feature & 0x78)
 			_SPI_NAND_PRINTF("Warning: the block lock register%s stays 0x%02x: some blocks stay locked "
 					 "(erase and program fail there).\n", dies > 1 ? (die ? " of die 1" : " of die 0") : "", feature);
