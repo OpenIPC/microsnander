@@ -39,6 +39,8 @@ h1{font-size:clamp(22px,4.5vw,40px);letter-spacing:.2em;text-transform:uppercase
 .meta{margin-top:10px;font-size:12px;color:var(--dim);letter-spacing:.08em;line-height:1.7;word-break:break-all}
 .meta b{display:inline-block;width:96px;font-weight:normal}
 .meta a{color:var(--amber)}
+.meta .warn{color:var(--amber)}
+.meta .warn.v18{color:var(--red)}
 .btns{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-top:24px}
 @media (max-width:620px){.btns{grid-template-columns:repeat(2,1fr)}}
 .btn{position:relative;border:0;cursor:pointer;font-family:Georgia,'Times New Roman',serif;font-size:14px;letter-spacing:.18em;text-transform:uppercase;color:#2a1c10;padding:18px 6px 14px;border-radius:12px;background:linear-gradient(180deg,#e9cd84,#b08b3c 55%,#7c5c1f);box-shadow:0 7px 0 #4a3510,0 12px 20px rgba(0,0,0,.6),inset 0 1px 0 #fff1c0;transition:transform .1s,box-shadow .1s,filter .2s}
@@ -114,7 +116,7 @@ function hex(v){return '0x'+('0'+v.toString(16)).slice(-2)}
 function render(s){
  bulb('l-link','ok');$('t-link').textContent='Link';
  bulb('l-prog',s.programmer?'ok':(s.ok===false&&!s.programmer?'bad':''));
- bulb('l-chip',s.chip?'ok':(s.ok===false&&s.programmer&&!s.chip?'bad':''));
+ bulb('l-chip',s.chip?(s.voltage==='1.8'?'bad':'ok'):(s.ok===false&&s.programmer&&!s.chip?'bad':''));
  bulb('l-busy',s.busy?'on':'');
  $('ver').textContent='microsnander '+(s.version||'');
  var st=$('state'),pct=s.total?Math.floor(100*s.done/s.total):0;
@@ -125,7 +127,8 @@ function render(s){
  $('needle').style.transform='rotate('+(s.busy&&s.total?(-88+176*s.done/s.total):(s.ok===true&&s.total?88:-88))+'deg)';
  var m='';
  if(s.programmer)m+='<b>PROGRAMMER</b>'+esc(s.programmer)+'<br>';
- if(s.chip)m+='<b>CHIP</b>'+esc(s.chip)+' &middot; '+size(s.size)+'<br>';
+ if(s.chip)m+='<b>CHIP</b>'+esc(s.chip)+' &middot; '+size(s.size)+(s.voltage?' &middot; '+esc(s.voltage)+' V':'')+'<br>';
+ if(s.warning)m+='<span class="warn'+(s.voltage==='1.8'?' v18':'')+'">'+esc(s.warning)+'</span><br>';
  if(s.file)m+='<b>DUMP</b><a href="/dumps/'+encodeURIComponent(s.file)+'" download>'+esc(s.file)+'</a><br>';
  if(s.message)m+=esc(s.message);
  $('meta').innerHTML=m||'Press Detect to find the chip.';

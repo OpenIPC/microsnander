@@ -14,6 +14,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "ops.h"
+#include "voltage.h"
 #include "usb.h"
 
 struct cb { JNIEnv *env; jobject obj; jmethodID m; };
@@ -29,17 +30,19 @@ static void on_progress(void *ctx, const char *phase, unsigned long long done, u
 	(*c->env)->DeleteLocalRef(c->env, p);
 }
 
-/* new Native.Result(ok, message, programmer, chip, size, sr or -1, name) */
+/* new Native.Result(ok, message, programmer, chip, size, sr or -1, name, voltage, warning) */
 static jobject result(JNIEnv *env, int ok, const char *msg, const struct ms_chip *c, const char *name)
 {
 	jclass k = (*env)->FindClass(env, "org/openipc/microsnander/Native$Result");
 	jmethodID init = (*env)->GetMethodID(env, k, "<init>",
-		"(ZLjava/lang/String;Ljava/lang/String;Ljava/lang/String;JILjava/lang/String;)V");
+		"(ZLjava/lang/String;Ljava/lang/String;Ljava/lang/String;JILjava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
 	int sr = c->sr_valid ? (c->sr[0] << 16) | (c->sr[1] << 8) | c->sr[2] : -1;
 
 	return (*env)->NewObject(env, k, init, (jboolean)ok, (*env)->NewStringUTF(env, msg),
 				 (*env)->NewStringUTF(env, c->programmer), (*env)->NewStringUTF(env, c->chip),
-				 (jlong)c->size, (jint)sr, (*env)->NewStringUTF(env, name ? name : ""));
+				 (jlong)c->size, (jint)sr, (*env)->NewStringUTF(env, name ? name : ""),
+				 (*env)->NewStringUTF(env, c->chip[0] ? ms_voltage_name(c->voltage) : ""),
+				 (*env)->NewStringUTF(env, c->chip[0] ? c->warning : ""));
 }
 
 static void use_device(jint fd, jint vid, jint pid)

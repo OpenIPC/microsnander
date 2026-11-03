@@ -24,6 +24,9 @@ import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.MediaStore;
+import android.text.SpannableStringBuilder;
+import android.text.Spanned;
+import android.text.style.ForegroundColorSpan;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
@@ -518,7 +521,7 @@ public class MainActivity extends Activity {
             } catch (IOException | SecurityException e) {
                 //noinspection ResultOfMethodCallIgnored
                 tmp.delete();
-                return new Native.Result(false, app.getString(R.string.cannot_open), "", "", 0, -1, "");
+                return new Native.Result(false, app.getString(R.string.cannot_open), "", "", 0, -1, "", "", "");
             }
             Native.Result r = Native.write(fd, vid, pid, tmp.getPath(), p);
             //noinspection ResultOfMethodCallIgnored
@@ -575,10 +578,18 @@ public class MainActivity extends Activity {
             showFailed(getString(R.string.no_programmer));
             return;
         }
-        StringBuilder m = new StringBuilder();
+        SpannableStringBuilder m = new SpannableStringBuilder();
         if (!r.programmer.isEmpty()) m.append(getString(R.string.programmer_is, r.programmer)).append('\n');
         if (!r.chip.isEmpty())
-            m.append(getString(R.string.chip_is, r.chip, r.size >= 1 << 20 ? (r.size >> 20) + " MB" : (r.size >> 10) + " KB")).append('\n');
+            m.append(getString(R.string.chip_is, r.chip, r.size >= 1 << 20 ? (r.size >> 20) + " MB" : (r.size >> 10) + " KB"))
+             .append(r.voltage.isEmpty() ? "" : " · " + r.voltage + " V").append('\n');
+        if (!r.warning.isEmpty()) {
+            int from = m.length();
+            m.append(r.warning);
+            m.setSpan(new ForegroundColorSpan(col("1.8".equals(r.voltage) ? R.color.red : R.color.amber)),
+                      from, m.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            m.append('\n');
+        }
         if (saved != null) m.append(saved).append('\n');
         m.append(r.message);
         meta.setText(m);

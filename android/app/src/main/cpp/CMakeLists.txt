@@ -27,7 +27,7 @@ file(COPY ${U}/libusb/libusb.h DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/inc/libus
 set(S ${CMAKE_CURRENT_SOURCE_DIR}/../../../../../src)
 add_library(microsnander SHARED
     microsnander-jni.c
-    ${S}/ops.c ${S}/usb.c ${S}/programmer.c ${S}/flashcmd_api.c ${S}/spi_controller.c
+    ${S}/ops.c ${S}/voltage.c ${S}/usb.c ${S}/programmer.c ${S}/flashcmd_api.c ${S}/spi_controller.c
     ${S}/spi_nand_flash.c ${S}/spi_nor_flash.c ${S}/ch341a_spi.c ${S}/ch347_spi.c ${S}/ezp.c ${S}/timer.c)
 target_include_directories(microsnander PRIVATE ${S} ${CMAKE_CURRENT_BINARY_DIR}/inc)
 target_compile_options(microsnander PRIVATE -std=gnu99 -Wall -D_FILE_OFFSET_BITS=64)

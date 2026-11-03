@@ -5,6 +5,7 @@
 #include <sys/wait.h>
 #include "../src/ops.c"
 #include "../src/web.c"
+#include "../src/voltage.c"
 
 #define SIM_SIZE (1 << 20)
 static unsigned char mem[SIM_SIZE];
@@ -13,19 +14,24 @@ const char *ms_version = "test";
 static const char *extra = "";		/* more request headers */
 const char *flash_chip_name;
 static const struct programmer fake = { .key = "ch347", .name = "CH347", .send = (void *)1 };
+static const struct programmer fake341 = { .key = "ch341a", .name = "CH341A", .send = (void *)1 };
+static int use_ch341a, no_chip;		/* the CH341A in place of the CH347; no chip in it */
 const struct programmer *programmer;
 
-int programmer_init(bool need_clock) { (void)need_clock; if (fail_open) return -1; programmer = &fake; opens++; return 0; }
+int programmer_init(bool need_clock) { (void)need_clock; if (fail_open) return -1; programmer = use_ch341a ? &fake341 : &fake; opens++; return 0; }
 int programmer_shutdown(void) { programmer = NULL; return 0; }
 static int f_read(unsigned char *b, unsigned long from, unsigned long len) { memcpy(b, mem + from, len); return len; }
 static int f_write(unsigned char *b, unsigned long to, unsigned long len) { for (unsigned long i = 0; i < len; i++) mem[to + i] &= b[i]; return len; }
 static int f_erase(unsigned long offs, unsigned long len) { memset(mem + offs, 0xff, len); return 0; }
 static int f_unprotect(void) { unprotects++; return 0; }
 static int swap_chip, inits;		/* swap_chip: another chip from the second open on */
+static const char *sim_chip;		/* in place of W25Q80 */
 long flash_cmd_init(struct flash_cmd *c)
 {
 	c->flash_read = f_read; c->flash_write = f_write; c->flash_erase = f_erase; c->flash_unprotect = f_unprotect;
-	flash_chip_name = swap_chip && inits++ ? "W25Q16" : "W25Q80";
+	if (no_chip)
+		return -1;
+	flash_chip_name = sim_chip ? sim_chip : swap_chip && inits++ ? "W25Q16" : "W25Q80";
 	return SIM_SIZE;
 }
 int snor_read_status(unsigned char sr[3]) { sr[0] = 0x1c; sr[1] = 0x02; sr[2] = 0x60; return 0; }
@@ -113,6 +119,32 @@ int main(void)
 	check(strstr(body_of(), "\"programmer\":\"CH347\"") && strstr(body_of(), "\"chip\":\"W25Q80\"") &&
 	      strstr(body_of(), "\"size\":1048576") && strstr(body_of(), "\"sr\":[28,2,96]") && strstr(body_of(), "\"ok\":true"),
 	      "  the state has the programmer, the chip, its size and the status registers");
+	check(strstr(body_of(), "\"voltage\":\"3.3\"") && strstr(body_of(), "\"warning\":\"\""),
+	      "  a 3.3 V chip on the CH347: no warning");
+
+	sim_chip = "W25Q128FW";
+	request("POST", "/api/detect", NULL, NULL, 0);
+	wait_idle();
+	request("GET", "/api/state", NULL, NULL, 0);
+	check(strstr(body_of(), "\"voltage\":\"1.8\"") && strstr(body_of(), "\"warning\":\"W25Q128FW is a 1.8 V chip"),
+	      "  a 1.8 V chip: the voltage and the warning in the state");
+	use_ch341a = 1;
+	request("POST", "/api/detect", NULL, NULL, 0);
+	wait_idle();
+	request("GET", "/api/state", NULL, NULL, 0);
+	check(strstr(body_of(), "\"programmer\":\"CH341A\"") && strstr(body_of(), "1.8 V chip") && strstr(body_of(), "5 V on the chip lines"),
+	      "  the same chip on the CH341A: the 1.8 V and the 5 V warning");
+	use_ch341a = 0; no_chip = 1;
+	request("POST", "/api/detect", NULL, NULL, 0);
+	wait_idle();
+	request("GET", "/api/state", NULL, NULL, 0);
+	check(strstr(body_of(), "\"programmer\":\"CH347\"") && strstr(body_of(), "\"chip\":\"\"") &&
+	      strstr(body_of(), "\"warning\":\"\"") && strstr(body_of(), "\"sr\":null"),
+	      "  then the CH347 with no chip: the chip and the warnings of the CH341A are gone");
+	no_chip = 0;
+	sim_chip = NULL;
+	request("POST", "/api/detect", NULL, NULL, 0);
+	wait_idle();
 
 	check(request("POST", "/api/read", NULL, NULL, 0) == 202, "Read starts");
 	wait_idle();

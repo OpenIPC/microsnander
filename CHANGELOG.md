@@ -4,8 +4,16 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
-## Unreleased
+## 1.17.0 — 2026-11-03
 
+- A warning about 1.8 V chips: the supply voltage is taken from the chip name (56 SPI NOR
+  and 20 SPI NAND chips of 1.8 V, 15 SPI NOR chips of 1.65-3.6 V, by their datasheets).
+  After a 1.8 V chip is found the console prints a warning, the web page lights the Chip
+  lamp red and shows it, the Android app shows it too; `/api/state` and the app get the
+  `voltage` and the `warning`. With the CH341A the warning also reminds that the black
+  board puts 5 V on the chip lines unless it is modified for 3.3 V.
+- Chip names: the Micron N25Q entries are N25Q..A11 (1.8 V) and N25Q..A13 (3 V), as the
+  parts are named, instead of one name for both; `W25Q80` (EF 50 14) is `W25Q80BW`.
 - The EEPROM support is removed: the I2C (24Cxx) and Microwire (93Cxx) EEPROM code of
   the original SNANDer (`make EEPROM_SUPPORT=y`, options `-E`, `-8`, `-f`) and the
   build option (#14). The release binaries were built without it and do not change.

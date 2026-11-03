@@ -47,6 +47,7 @@ sudo ./microsnander -w firmware.bin -v
 - [Web 模式](#web-模式)
 - [Android 应用](#android-应用)
 - [支持的芯片](#支持的芯片)
+- [芯片电压](#芯片电压)
 - [数据不确定的芯片](#数据不确定的芯片)
 - [构建](#构建)
 - [致谢](#致谢)
@@ -289,6 +290,23 @@ Microelectronics FM25Q、GigaDevice、Macronix、Spansion、XMC、XTX、Zbit、G
 GM25Q、ISSI、Micron、Boya、Puya 等）和 135 款 SPI NAND 芯片（Etron、GigaDevice、Heyang、Foresee、ESMT、Dosilicon、XTX、Micron、
 Toshiba/Kioxia、Winbond、Macronix 等）。不在列表中的芯片会显示为未检测到；输出中的
 芯片 ID 可用于添加该芯片。
+
+## 芯片电压
+
+编程器工作在 3.3 V。编程器不测量电压，所以 microsnander 根据芯片型号判断：列表中有 56 款
+SPI NOR 芯片是 1.8 V 型号（GigaDevice GD25L、Macronix MX25U、Winbond W25Q..W、Micron
+N25Q..A11 和 MT25QU、XMC XM25QU 和 XM25LU、Zbit ZB25LQ、Boya BY25Q..L、ISSI IS25WP），
+还有 20 款 SPI NAND 芯片也是（GigaDevice GD5F..R、Winbond W25N..W、Macronix MX35UF、Micron
+MT29F..ABB、ESMT F50D、Dosilicon DS35M）。这些芯片要通过 1.8 V 转接板连接：在 3.3 V 下读取
+不可靠，芯片也可能损坏。GigaDevice GD25W、XMC XM25QW 和 Fudan FM25W 支持 1.65-3.6 V，
+可以直接连接。
+
+找到 1.8 V 芯片后，控制台会输出警告，网页会把 Chip 指示灯点成红色并显示警告，Android 应用
+也一样；`/api/state` 中有 `voltage`（`3.3`、`1.8`、`1.65-3.6`）和 `warning` 字段。不在这些
+列表中的芯片按 3.3 V 处理。
+
+没有 5 V 的 SPI flash 芯片。但黑色 CH341A 板如果没有改成 3.3 V，会在芯片引脚上输出 5 V，
+程序无法检测到这一点：使用 CH341A 时，microsnander 每次找到芯片都会提醒。
 
 ## 数据不确定的芯片
 
