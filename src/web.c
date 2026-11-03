@@ -243,11 +243,11 @@ static void *worker(void *arg)
 }
 
 /* start an operation (with the file to write, which it closes; for the
-   chip confirmed, "" for any); its number, or -1 when one is running */
-static int start(int op, FILE *body, const char *chip, long long size)
+   chip confirmed, "" for any); 0 and its number in *seq, or -1 when one is
+   running (then nothing is started and body is still the caller's) */
+static int start(int op, FILE *body, const char *chip, long long size, unsigned int *seq)
 {
 	pthread_t t;
-	unsigned int seq;
 
 	pthread_mutex_lock(&st.lock);
 	if (st.busy) {
@@ -256,7 +256,7 @@ static int start(int op, FILE *body, const char *chip, long long size)
 	}
 	snprintf(want_chip, sizeof(want_chip), "%s", chip ? chip : "");
 	want_size = size;
-	seq = ++st.seq;
+	*seq = ++st.seq;
 	upload = body;
 	if (body)
 		st.uploading = 0;		/* the upload is the operation's now */
@@ -277,7 +277,7 @@ static int start(int op, FILE *body, const char *chip, long long size)
 		return -1;
 	}
 	pthread_detach(t);
-	return (int)seq;
+	return 0;
 }
 
 /* ---- HTTP ---- */
@@ -636,8 +636,9 @@ static void handle(int fd)
 		want[k] = 0;
 		want_sz = *h == ';' ? strtoll(h + 1, NULL, 10) : 0;
 	}
-	int seq = start(op, body, want, want_sz);
-	if (seq < 0) {
+	unsigned int seq;
+
+	if (start(op, body, want, want_sz, &seq)) {
 		if (body) {
 			fclose(body);
 			upload_done();
@@ -647,7 +648,7 @@ static void handle(int fd)
 	}
 	char started[32];
 
-	snprintf(started, sizeof(started), "Started %d.\n", seq);	/* the number in /api/state "seq" */
+	snprintf(started, sizeof(started), "Started %u.\n", seq);	/* the number in /api/state "seq" */
 	reply_text(fd, "202 Accepted", started);
 }
 
