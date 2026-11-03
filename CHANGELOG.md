@@ -8,7 +8,11 @@ from every push to `main`; this file is the change history.
 
 - SPI NAND OOB size: 128 bytes for TOSHIBA TC58CVG0S3H and TC58CVG1S3H (was 64), 256
   bytes for TOSHIBA TC58CVG2S0H and KIOXIA TC58CVG2S0HRAIJ (was 128). It changes raw
-  dumps with `-d`, which now take the whole spare area of each page.
+  dumps with `-d`, which now take the whole spare area of each page. A raw dump of these
+  chips made by an older version has the old page stride and cannot be written back as
+  it is: pad each page with `0xFF` to the new OOB size first.
+- Raw writes (`-d -w`) take whole pages of data + OOB only, starting on a page; a raw
+  image made with another OOB size is refused instead of landing shifted on every page.
 - README: a section on chips whose data other sources give differently and that are
   not checked on hardware yet; the title is MicroSNANDer.
 

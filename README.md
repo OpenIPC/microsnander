@@ -183,7 +183,10 @@ of `microsnander -i` and the full part number from the chip.
 | PCT25VF010A–PCT25VF032B, PCT26VF016, PCT26VF032 (SPI NOR) | not supported yet: need byte/AAI programming or the ULBPR unlock    | listed as ordinary chips                                            |
 
 The OOB size matters for raw dumps with `-d` (every page is read with its spare
-area); reading and writing with the internal ECC uses only the data area.
+area); reading and writing with the internal ECC uses only the data area. A raw
+write takes whole pages of data + OOB only, so a raw dump of the Toshiba/Kioxia chips
+above made before version 1.11.1 (with the old OOB size) is refused: pad each of its
+pages with `0xFF` to the new OOB size first.
 
 ## Build
 

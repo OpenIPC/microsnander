@@ -5306,6 +5306,21 @@ SPI_NAND_FLASH_RTN_T SPI_NAND_Flash_Write_Nbyte( u32 dst_addr, u32 len, u32 *ptr
 {
 	SPI_NAND_FLASH_RTN_T rtn_status = SPI_NAND_FLASH_RTN_NO_ERROR;
 
+	/* A raw write (ECC off, -d) takes whole pages with their OOB: a raw image
+	   made with another OOB size would land shifted on every page. */
+	if( !ECC_fcheck )
+	{
+		u32 raw_page = _current_flash_info_t.page_size;
+
+		if( (dst_addr % raw_page) || (len % raw_page) )
+		{
+			_SPI_NAND_PRINTF("Raw write (-d) needs whole pages of %u bytes (data + OOB): address 0x%x, length 0x%x.\n"
+					 "A raw image made with another OOB size does not fit this chip.\n", raw_page, dst_addr, len);
+			*ptr_rtn_len = 0;
+			return SPI_NAND_FLASH_RTN_ALIGNED_CHECK_FAIL;
+		}
+	}
+
 	/* *ptr_rtn_len is what spi_nand_write_internal() wrote */
 	rtn_status = spi_nand_write_internal(dst_addr, len, ptr_rtn_len, ptr_buf, speed_node);
 
