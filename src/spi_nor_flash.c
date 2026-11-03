@@ -217,8 +217,10 @@ int snor_unprotect(void)
 		return -1;
 	}
 
-	if (sr != 0xff && (sr & (SR2_QE | SR2_SRP1 | SR2_CMP))) {
-		sr = 0;
+	/* only the protection bits: QE (quad enable) protects nothing, and a
+	   chip set up for quad reads, or one with QE fixed at 1, needs it kept */
+	if (sr != 0xff && (sr & (SR2_SRP1 | SR2_CMP))) {
+		sr &= ~(SR2_SRP1 | SR2_CMP);
 		if (snor_unprotect_write(OPCODE_WRSR2, &sr))
 			return -1;
 	}

@@ -30,10 +30,10 @@ static int fast_clock(clockid_t id, struct timespec *t)
 
 unsigned int bsize;
 
-enum { ORDINARY, SST25, SST26, NO_SR23, QE_SR1 };
+enum { ORDINARY, SST25, SST26, NO_SR23, QE_SR1, QE_FIXED };
 static int kind;
 static unsigned char id[5];
-static unsigned char mem[8 << 20];
+static unsigned char mem[16 << 20];
 static unsigned char cmd[300];
 static int ncmd, nread;
 static int wel, aai, locked;
@@ -42,10 +42,13 @@ static unsigned char sr;			/* BP bits */
 static unsigned long aai_addr;
 static int spi_fail_at = -1;		/* the Nth AAI command fails on the wire */
 static int naai;
+static unsigned char sr2;		/* status register 2: CMP 0x40, QE 0x02, SRP1 0x01 */
+static int sr2_writes;
 static int busy_cmds;			/* commands other than RDSR sent while busy */
 
 static unsigned long addr(void) { return ((unsigned long)cmd[1] << 16) | (cmd[2] << 8) | cmd[3]; }
-static int writable(void) { return wel && !(kind == SST26 ? locked : (sr & 0x3c)); }
+/* BP bits protect a part of the chip; with CMP set and no BP bits, all of it */
+static int writable(void) { return wel && !(kind == SST26 ? locked : (sr & 0x3c) || (sr2 & 0x40)); }
 static void program(unsigned long a, const unsigned char *d, int n) { for (int i = 0; i < n; i++) mem[(a + i) % sizeof(mem)] &= d[i]; }
 static void erase(unsigned long a, unsigned long n) { a -= a % n; memset(mem + a % sizeof(mem), 0xff, n); }
 
@@ -70,7 +73,8 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Read_NByte(u8 *d, u32 len, SPI_CONTROLLER_SP
 		switch (cmd[0]) {
 		case OPCODE_RDID: d[i] = nread < 5 ? id[nread] : 0; break;
 		case OPCODE_RDSR: d[i] = sr | (wel ? SR_WEL : 0) | (aai ? 0x40 : 0) | (busy ? SR_WIP : 0); if (busy) busy--; break;
-		case OPCODE_RDSR2: case OPCODE_RDSR3: d[i] = kind == NO_SR23 ? 0xff : 0; break;
+		case OPCODE_RDSR2: d[i] = kind == NO_SR23 ? 0xff : sr2; break;
+		case OPCODE_RDSR3: d[i] = kind == NO_SR23 ? 0xff : 0; break;
 		case OPCODE_READ: d[i] = mem[(addr() + nread) % sizeof(mem)]; break;
 		default: d[i] = 0;
 		}
@@ -89,6 +93,14 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Chip_Select_High(void)
 	case OPCODE_WREN: if (!busy) wel = 1; break;		/* ignored while the chip is busy */
 	case OPCODE_WRDI: wel = 0; aai = 0; break;
 	case OPCODE_WRSR: if (wel && ncmd > 1) { sr = (cmd[1] & 0xbc) | (kind == QE_SR1 ? 0x40 : 0); busy = 3; } wel = 0; break;
+	case OPCODE_WRSR2:
+		if (kind != NO_SR23 && wel && ncmd > 1) {
+			sr2 = (cmd[1] & 0x43) | (kind == QE_FIXED ? 0x02 : 0);	/* QE stays 1 on a QE-fixed part */
+			sr2_writes++;
+			busy = 3;
+		}
+		if (kind != NO_SR23) wel = 0;	/* a chip without the register ignores the command */
+		break;
 	case OPCODE_ULBPR: if (wel && kind == SST26) { locked = 0; busy = 3; } wel = 0; break;
 	case OPCODE_PP:
 		if (writable() && ncmd > 4) {
@@ -145,7 +157,8 @@ static void chip(const struct chip_info *e, int k)
 {
 	id[0] = e->id;
 	id[1] = e->jedec_id >> 24; id[2] = e->jedec_id >> 16; id[3] = e->jedec_id >> 8; id[4] = e->jedec_id;
-	kind = k; wel = aai = busy = busy_cmds = 0;
+	kind = k; wel = aai = busy = busy_cmds = sr2_writes = 0;
+	sr2 = k == QE_FIXED ? 0x02 : 0;
 	locked = k == SST26;
 	sr = k == SST26 ? 0 : 0x1c;		/* BP bits set at power-up */
 	if (k == QE_SR1) sr = 0x40;		/* quad enable, not protected */
@@ -213,6 +226,18 @@ int main(void)
 	write_read_erase("PCT26VF016", SST26);
 	write_read_erase("XM25QH64A", NO_SR23);
 	write_read_erase("MX25L3205D", QE_SR1);
+	write_read_erase("W25Q128BV", QE_FIXED);
+	check(sr2_writes == 0 && sr2 == 0x02, "W25Q128BV with QE fixed at 1: status register 2 is never written");
+
+	/* CMP protects the whole chip: cleared, QE kept */
+	{
+		chip(find("W25Q32BV"), ORDINARY);
+		snor_init();
+		sr = 0; sr2 = 0x42;
+		check(snor_unprotect() == 0 && sr2 == 0x02, "W25Q32BV: unprotect clears CMP and keeps QE");
+		memset(mem, 0, 65536);
+		check(snor_erase(0, 65536) == 0 && mem[0] == 0xff, "  and the chip erases");
+	}
 
 	/* unprotect of a chip without status registers 2 and 3 */
 	{
