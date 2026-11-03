@@ -4,6 +4,13 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.12.1 — 2026-11-03
+
+- CH341A: the static release binaries detach the kernel driver again. The detach was
+  under `__gnu_linux__`, which the musl toolchain does not define, so on kernels where
+  `spi-ch341` binds the programmer the release binaries stopped with
+  `LIBUSB_ERROR_BUSY` (#24). Found on hardware: CH341A, kernel 7.0.
+
 ## 1.12.0 — 2026-11-03
 
 - SST25VF-type SPI NOR chips without a 256-byte page program are written with a byte
