@@ -4,6 +4,14 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.18.2 — 2026-11-04
+
+- Unprotect (`-u`, Clear protection in the web mode and the app) also clears SRP0 and TB
+  when no BP bit is set: a chip with SRP0 alone (SR 80 00 00) kept it and the message said
+  the protection was cleared. Every status register is read back after its write; one that
+  stays says why: SRP0 with the WP# pin low, SRP1 (locked until a power cycle), or a chip
+  that does not take the write. Bit 6 of SR1 is kept (QE on Macronix-type chips).
+
 ## 1.18.1 — 2026-11-03
 
 - Erase and Write ask nothing and open no file picker without a chip (#42). The Android
