@@ -4,6 +4,13 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.16.3 — 2026-11-03
+
+- Release: the signer check takes the digest from any `Signer ... certificate SHA-256
+  digest` line of `apksigner` (newer versions name the signer by its SDK range) and
+  prints the whole output when there is none. 1.16.2 was not published either: its
+  check found no signer line.
+
 ## 1.16.2 — 2026-11-03
 
 - Release: the check of the APK signer tries the build-tools from the newest down until
