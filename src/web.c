@@ -549,9 +549,10 @@ static void handle(int fd)
 		reply_text(fd, "404 Not Found", "Not found.\n");
 		return;
 	}
-	/* one upload at a time: the others are refused before they take space */
+	/* an upload holds the slot of the operation it brings: another upload is
+	   refused before it takes space, another operation before it runs */
 	pthread_mutex_lock(&st.lock);
-	int busy = st.busy || (op == OP_WRITE && st.uploading);
+	int busy = st.busy || st.uploading;
 	if (!busy && op == OP_WRITE)
 		st.uploading = 1;
 	pthread_mutex_unlock(&st.lock);

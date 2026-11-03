@@ -208,6 +208,7 @@ int main(void)
 	check(strstr(body_of(), "\"ok\":false") && strstr(body_of(), "Verify failed"), "  a write that does not take fails the verify");
 	st.uploading = 1;				/* another upload is coming in */
 	check(request("POST", "/api/write", NULL, img, sizeof(img)) == 409, "  a second upload at the same time: 409, before it takes space");
+	check(request("POST", "/api/erase", NULL, NULL, 0) == 409, "  an erase while a file is coming in: 409");
 	st.uploading = 0;
 	web_dir = "/nonexistent-microsnander";
 	check(request("POST", "/api/write", NULL, img, sizeof(img)) == 500 && strstr(resp, "Cannot store the file"),
