@@ -68,7 +68,8 @@ sudo ./microsnander -w firmware.bin -v
     - `-e` 只能擦除整片芯片：不要带 `-a` 和 `-l`，擦除部分区域会被拒绝；
     - `-w` 只写入已擦除的区域：先读取该区域，若已有数据则拒绝写入；
     - 状态寄存器既不能读也不能写：没有 `-u`，识别芯片时也不显示它们；
-    - 不支持 SPI NAND。
+    - 不支持 SPI NAND，今后也不会支持：其固件只支持 SPI NOR（连芯片 ID 也按 NOR 方式读取，因此 SPI NAND
+      返回的 ID 是错位的），厂商也只为其列出 SPI NOR 和 EEPROM 芯片。SPI NAND 请使用 CH341A 或 CH347。
 
   只连接一个编程器时 microsnander 直接使用它；连接多个时请用 `-P ch341a`、`-P ch347` 或 `-P ezp`
   选择。占用编程器的内核驱动（例如 `spi-ch341`）会在运行期间分离，结束后重新绑定。

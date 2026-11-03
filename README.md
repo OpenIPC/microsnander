@@ -76,7 +76,9 @@ sudo ./microsnander -w firmware.bin -v
       write over data;
     - the status registers can be neither read nor written: no `-u`, and the
       detection does not show them;
-    - no SPI NAND.
+    - no SPI NAND, and none will come: their firmware works with SPI NOR only (it reads even
+      the chip ID as a NOR chip, so a SPI NAND answers with a shifted ID), and the maker lists
+      only SPI NOR and EEPROM chips for them. Use the CH341A or the CH347 for SPI NAND.
 
   With one programmer connected microsnander uses it; with several, choose one with
   `-P ch341a`, `-P ch347` or `-P ezp`. A kernel driver that has taken the programmer (for
