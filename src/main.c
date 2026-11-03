@@ -49,7 +49,7 @@ extern int org;
 #define EHELP	""
 #endif
 
-#define _VER	"1.13.1"
+#define _VER	"1.14.0"
 
 void title(void)
 {
@@ -79,7 +79,7 @@ void usage(int code)
 		" -r <filename>  read chip and save data to filename\n"\
 		" -u             unprotect chip\n"\
 		" -v             verify after write on chip\n"\
-		" -P <name>      programmer: ch341a, ch347, auto (default: the one connected)\n"\
+		" -P <name>      programmer: ch341a, ch347, ezp, auto (default: the one connected)\n"\
 		" -S <speed>     SPI clock of the CH347: 60M, 30M (default), 15M, 7.5M, 3.75M, 1.875M\n";
 	printf(use);
 	exit(code);
@@ -266,7 +266,7 @@ int main(int argc, char* argv[])
 	if (op == 'u') {
 		printf("UNLOCK:\n");
 		if (!prog.flash_unprotect) {
-			printf("Unprotect is not supported for this chip type (SPI NOR only).\n");
+			printf("Unprotect is not supported for this chip type or programmer (SPI NOR through CH341A or CH347 only).\n");
 			goto out;
 		}
 		ret = prog.flash_unprotect();

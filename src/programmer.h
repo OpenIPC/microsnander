@@ -11,15 +11,20 @@
 
 #include <stdbool.h>
 
+struct flash_cmd;
+
 struct programmer {
 	const char *key;		/* -P name */
 	const char *name;
-	unsigned short vid, pid[2];	/* USB IDs; 0: unused */
+	unsigned short vid, pid[3];	/* USB IDs; 0: unused */
 	int (*init)(void);
 	int (*shutdown)(void);
 	int (*send)(unsigned int writecnt, unsigned int readcnt, const unsigned char *writearr, unsigned char *readarr);
 	int (*cs)(bool low);
 	bool clock;			/* the SPI clock can be set (-S) */
+	/* a programmer that runs the SPI in its own firmware: sets up the
+	   flash operations itself (no send/cs); returns the chip size or -1 */
+	long (*flash_init)(struct flash_cmd *cmd);
 };
 
 extern const struct programmer *programmer;	/* the one in use */

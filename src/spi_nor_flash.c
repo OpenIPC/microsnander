@@ -836,6 +836,25 @@ struct chip_info *chip_prob(void)
 	return match;
 }
 
+/* The table entry for a JEDEC ID that a programmer read itself (one that
+   does the SPI in its own firmware): the name, or NULL. */
+const char *snor_lookup(const unsigned char id[3], unsigned long *size, unsigned long *sector, int *addr4b)
+{
+	u32 dev = ((u32)id[1] << 24) | ((u32)id[2] << 16);
+
+	for (unsigned i = 0; i < sizeof(chips_data) / sizeof(chips_data[0]); i++) {
+		const struct chip_info *info = &chips_data[i];
+
+		if (info->id == id[0] && (info->jedec_id & 0xffff0000) == dev) {
+			*size = info->sector_size * info->n_sectors;
+			*sector = info->sector_size;
+			*addr4b = info->addr4b;
+			return info->name;
+		}
+	}
+	return NULL;
+}
+
 long snor_init(void)
 {
 	spi_chip_info = chip_prob();

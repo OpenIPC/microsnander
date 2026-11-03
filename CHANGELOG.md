@@ -4,6 +4,26 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.14.0 — 2026-11-03
+
+- EZP2019, EZP2019+ and EZP2023 programmers (`1fc8:310b`, `310c`, `310d`), `-P ezp`,
+  for SPI NOR chips up to 16 MB. They run the SPI bus in their own firmware and take
+  whole operations only. The chip is found in the SPI NOR table by the JEDEC ID that
+  the programmer reports. Then:
+  - `-r`, `-w` and `-v` work as with the other programmers;
+  - `-e` erases only the whole chip; erasing a part is refused;
+  - `-w` reads the range first and refuses to write over data that is not erased;
+  - the status registers can be neither read nor written, so there is no `-u`;
+  - no SPI NAND.
+- A read stream of these programmers starts right only at a multiple of 256: the read
+  starts there and drops the bytes before the address.
+- Checked on hardware: EZP2019 with a W25Q128 (16 MB). Chip erase 40 s, full read
+  135 s, full write 137 s (plus about 136 s each for the erased check and `-v`). Reads
+  at odd addresses and up to the chip end, and a 4097-byte write at `0x1001`, are
+  identical to the expected data.
+- `tests/ezpsim.c` runs `ezp.c` against a fake libusb that plays the programmer.
+- README: the EZP programmers in the requirements, `-P ezp` and the udev rules.
+
 ## 1.13.1 — 2026-11-03
 
 - SPI NOR unprotect keeps the quad enable bit (QE) of status register 2 and clears

@@ -11,7 +11,7 @@
 [![Platform](https://img.shields.io/badge/platform-Linux-brightgreen)](#требования)
 
 MicroSNANDer — консольный программатор микросхем флеш-памяти SPI NOR и SPI NAND
-для недорогих USB-программаторов CH341A и CH347. Он читает, записывает, стирает и проверяет
+для недорогих USB-программаторов CH341A, CH347 и EZP. Он читает, записывает, стирает и проверяет
 флеш камер, роутеров и других плат, снимает защиту от записи с микросхем SPI NOR и
 знает 291 микросхему SPI NOR и 135 микросхем SPI NAND.
 
@@ -62,9 +62,20 @@ sudo ./microsnander -w firmware.bin -v
   - CH347T (`1a86:55db`) в режиме 1 (UART + SPI + I2C, переключатель или перемычки
     режима) или CH347F (`1a86:55de`). Намного быстрее CH341A (16 МБ читаются примерно за 7 с); частота SPI —
     30 МГц, её меняет `-S`.
+  - EZP2019, EZP2019+ или EZP2023 (`1fc8:310b`, `1fc8:310c`, `1fc8:310d`), для микросхем
+    SPI NOR до 16 МБ. Эти программаторы сами ведут шину SPI в своей прошивке и
+    принимают только целые операции, поэтому с ними:
+    - `-r`, `-w` и `-v` работают как с остальными (16 МБ читаются примерно за 2 мин 15 с);
+    - `-e` стирает только всю микросхему: давайте его без `-a` и `-l`, стирание части
+      отклоняется;
+    - `-w` пишет только в стёртую область: сначала читает её и отказывается писать
+      поверх данных;
+    - регистры состояния нельзя ни прочитать, ни записать: нет `-u`, при определении
+      микросхемы они не показываются;
+    - SPI NAND не поддерживается.
 
   Если подключён один программатор, microsnander работает с ним; если несколько —
-  выберите нужный ключом `-P ch341a` или `-P ch347`. Драйвер ядра, занявший
+  выберите нужный ключом `-P ch341a`, `-P ch347` или `-P ezp`. Драйвер ядра, занявший
   программатор (например, `spi-ch341`), на время работы отключается и потом
   возвращается.
 - Linux на x86_64 или 32-битном ARM (ARMv5TE и новее). Релизные файлы статические
@@ -77,6 +88,9 @@ sudo ./microsnander -w firmware.bin -v
   SUBSYSTEM=="usb", ATTR{idVendor}=="1a86", ATTR{idProduct}=="5512", MODE="0660", GROUP="plugdev"
   SUBSYSTEM=="usb", ATTR{idVendor}=="1a86", ATTR{idProduct}=="55db", MODE="0660", GROUP="plugdev"
   SUBSYSTEM=="usb", ATTR{idVendor}=="1a86", ATTR{idProduct}=="55de", MODE="0660", GROUP="plugdev"
+  SUBSYSTEM=="usb", ATTR{idVendor}=="1fc8", ATTR{idProduct}=="310b", MODE="0660", GROUP="plugdev"
+  SUBSYSTEM=="usb", ATTR{idVendor}=="1fc8", ATTR{idProduct}=="310c", MODE="0660", GROUP="plugdev"
+  SUBSYSTEM=="usb", ATTR{idVendor}=="1fc8", ATTR{idProduct}=="310d", MODE="0660", GROUP="plugdev"
   EOF
   sudo usermod -aG plugdev "$USER"
   sudo udevadm control --reload-rules && sudo udevadm trigger
@@ -114,7 +128,7 @@ microsnander [options]
  -r <filename>  read chip and save data to filename
  -u             unprotect chip
  -v             verify after write on chip
- -P <name>      programmer: ch341a, ch347, auto (default: the one connected)
+ -P <name>      programmer: ch341a, ch347, ezp, auto (default: the one connected)
  -S <speed>     SPI clock of the CH347: 60M, 30M (default), 15M, 7.5M, 3.75M, 1.875M
 ```
 

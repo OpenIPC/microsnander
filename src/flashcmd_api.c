@@ -15,6 +15,7 @@
 
 #include <stdio.h>
 #include "flashcmd_api.h"
+#include "programmer.h"
 
 #ifdef EEPROM_SUPPORT
 #define __EEPROM___	"or EEPROM"
@@ -27,6 +28,12 @@ extern int mw_eepromsize;
 long flash_cmd_init(struct flash_cmd *cmd)
 {
 	long flen = -1;
+
+	if (programmer && programmer->flash_init) {
+		if ((flen = programmer->flash_init(cmd)) <= 0)
+			printf("\nFlash not found!!!!\n\n");
+		return flen;
+	}
 
 #ifdef EEPROM_SUPPORT
 	if ((eepromsize <= 0) && (mw_eepromsize <= 0)) {

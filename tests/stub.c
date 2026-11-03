@@ -14,14 +14,14 @@ static int e(unsigned long o, unsigned long l) { if (!strcmp(env("MS_FAIL"),"era
 static int u(void) { return strcmp(env("MS_FAIL"),"unprotect") ? 0 : -3; }
 #include <strings.h>
 #include "programmer.h"
-static const struct programmer stubprogs[] = { { .key = "ch341a", .name = "CH341A" }, { .key = "ch347", .name = "CH347", .clock = true } };
+static const struct programmer stubprogs[] = { { .key = "ch341a", .name = "CH341A" }, { .key = "ch347", .name = "CH347", .clock = true }, { .key = "ezp", .name = "EZP" } };
 static const struct programmer *chosen = &stubprogs[0];	/* auto: the stub has a CH341A */
 const struct programmer *programmer;
 int programmer_select(const char *n) {
 	if (!strcasecmp(n, "auto")) { chosen = &stubprogs[0]; return 0; }
-	for (int i = 0; i < 2; i++) if (!strcasecmp(n, stubprogs[i].key)) { chosen = &stubprogs[i]; return 0; }
+	for (int i = 0; i < 3; i++) if (!strcasecmp(n, stubprogs[i].key)) { chosen = &stubprogs[i]; return 0; }
 	return -1; }
-const char *programmer_names(void) { return "ch341a, ch347, auto"; }
+const char *programmer_names(void) { return "ch341a, ch347, ezp, auto"; }
 int ch347_set_speed(const char *s) { return strcasecmp(s, "60M") && strcasecmp(s, "30M") && strcasecmp(s, "15M") && strcasecmp(s, "7.5M") && strcasecmp(s, "3.75M") && strcasecmp(s, "1.875M") ? -1 : 0; }
 const char *ch347_speed_list(void) { return "60M, 30M, 15M, 7.5M, 3.75M, 1.875M"; }
 int programmer_init(bool need_clock) { if (need_clock && !chosen->clock) { printf("-S: fixed clock\n"); return -2; } programmer = chosen; if (*env("MS_PROGRAMMER")) printf("programmer: %s\n", programmer->key); FILE *f = fopen("chip.img", "rb"); if (f) { if (fread(chip, 1, sizeof(chip), f) != sizeof(chip)) memset(chip, 0, sizeof(chip)); fclose(f); } return 0; }

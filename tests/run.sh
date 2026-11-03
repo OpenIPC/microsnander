@@ -7,7 +7,8 @@
 # 0xFF, a chip that stays busy. Then ch341a_spi.c against a fake libusb
 # (tests/ch341sim.c): long streams in parts inside the USB timeout. Then the
 # SPI NOR probe (tests/norsim.c): every chip of the table by its JEDEC ID;
-# ch347_spi.c against a fake libusb (tests/ch347sim.c): the CH347 packets.
+# ch347_spi.c against a fake libusb (tests/ch347sim.c): the CH347 packets;
+# ezp.c against a fake libusb (tests/ezpsim.c): the EZP commands and streams.
 #
 #   tests/run.sh            (CC=<compiler> to choose the compiler)
 #
@@ -20,6 +21,7 @@ ${CC:-cc} -std=gnu99 -Wall -Werror -O1 -DSPI_NAND_OIP_TIMEOUT_MS=50 -o "$W/nands
 ${CC:-cc} -std=gnu99 -Wall -Werror -O1 -I"$T/../src" ${LIBUSB_CFLAGS:-} -o "$W/ch341sim" "$T/ch341sim.c" || exit 1
 ${CC:-cc} -std=gnu99 -Wall -Werror -O1 -o "$W/norsim" "$T/norsim.c" "$T/../src/timer.c" || exit 1
 ${CC:-cc} -std=gnu99 -Wall -Werror -O1 -I"$T/../src" ${LIBUSB_CFLAGS:-} -o "$W/ch347sim" "$T/ch347sim.c" || exit 1
+${CC:-cc} -std=gnu99 -Wall -Werror -O1 -I"$T/../src" ${LIBUSB_CFLAGS:-} -o "$W/ezpsim" "$T/ezpsim.c" "$T/../src/timer.c" || exit 1
 cd "$W"; B=./ms; fail=0
 # t <expected exit code> <description> [VAR=value ...] <command>
 t() { exp=$1; d=$2; shift 2; out=$(env "$@" 2>&1); got=$?
@@ -34,6 +36,8 @@ t 1 "conflict -u -r"                  $B -u -r x.bin
 t 1 "conflict -k -I"                  $B -k -I -r x.bin
 t 1 "-P unknown programmer"           $B -P ft2232 -i
 t 0 "-P ch341a"                       $B -P ch341a -i
+t 0 "-P ezp"                          $B -P ezp -i
+t 1 "-P ezp -S 15M is an error"       $B -P ezp -S 15M -i
 t 1 "-S unknown speed"                $B -S 100M -i
 t 0 "-P ch347 -S 15M"                 $B -P ch347 -S 15M -i
 t 1 "-S with the CH341A is an error"  $B -P ch341a -S 15M -i
@@ -79,5 +83,7 @@ grep -a '^ok\|^FAIL' ch341sim.log
 grep -a '^ok\|^FAIL' norsim.log
 ./ch347sim > ch347sim.log 2>&1 || fail=1
 grep -a '^ok\|^FAIL' ch347sim.log
+./ezpsim > ezpsim.log 2>&1 || fail=1
+grep -a '^ok\|^FAIL' ezpsim.log
 [ "$fail" = 0 ] && echo "all tests passed"
 exit $fail
