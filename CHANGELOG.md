@@ -13,7 +13,9 @@ From PR #1 by @atom-bomb, ported from upstream SNANDer (#5):
   W25M02G are now told apart from W25N02KV by the third ID byte.
 - `-k` skips BAD SPI NAND pages: a page that fails ECC on read or fails to program
   is passed over and the data goes on in the next page, so the data after it shifts
-  by a page. Not together with `-I`.
+  by a page. Not together with `-I`. A page that failed to program is remembered for
+  the `-v` of the same run; a later `-k` read does not know it and may read it as
+  data, so its dump is shifted from that page on.
 
 Fixed in the port (the same code in upstream SNANDer):
 
@@ -22,6 +24,12 @@ Fixed in the port (the same code in upstream SNANDer):
   skipped page is printed.
 - Without `-k`, an ECC error in the read that a page write starts with does not fail
   the write, as before.
+- After a skipped page the rest of the data starts at the next page boundary: a last
+  chunk shorter than a page was written into the same failed page again.
+- The fallback READ ID without the dummy byte (Toshiba/Kioxia) checks the third ID
+  byte too: an unknown `EF AA xx` chip was detected as W25N01G.
+- A page that failed ECC is not kept in the driver page cache, so reading it again
+  fails again instead of returning the cached data.
 - `tests/nandsim.c`: an SPI NAND chip simulated at the SPI command level runs
   `spi_nand_flash.c` in `tests/run.sh` (detection, write and read, `-k`).
 

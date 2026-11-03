@@ -2,7 +2,8 @@
    spi_controller.c, and the checks that drive spi_nand_flash.c through it:
    detection by the 2- and 3-byte ID, write and read, and the -k (skip BAD pages) path.
    The row address wraps at the chip end like on a real chip, so a write past the end
-   lands on page 0. */
+   lands on page 0. READ ID (9F) without an address byte answers a dummy byte
+   first, so the probe fallback that reads a dummy byte is exercised too. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -59,7 +60,11 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Read_NByte(u8 *d, u32 len, SPI_CONTROLLER_SP
 	(void)speed;
 	for (u32 i = 0; i < len; i++, nread++) {
 		switch (cmd[0]) {
-		case 0x9f: d[i] = nread < 3 ? id[nread] : 0; break;
+		case 0x9f: {		/* without an address byte a dummy byte comes first, as on Winbond */
+			unsigned int k = ncmd > 1 ? nread : nread - 1;
+			d[i] = (ncmd == 1 && nread == 0) || k >= 3 ? 0 : id[k];
+			break;
+		}
 		case 0x0f: d[i] = feat[cmd[1]]; break;
 		case 0x03: case 0x0b: case 0x3b: case 0x6b: {
 			unsigned int c = col() + nread;
@@ -187,6 +192,28 @@ int main(void)
 	fill(buf, 1, 5);
 	check(snand_write(buf, 30L * PAGE, PAGE) == PAGE && !memcmp(page(30), buf, PAGE),
 	      "without -k an ECC error in the read before a write does not fail the write");
+
+	/* the last chunk is a part of a page: after a skip it goes to the next page */
+	for (int kind = 0; kind < 2; kind++) {
+		chip(0xef, 0xaa, 0x21);
+		snand_init();
+		Skip_BAD_page = 1;
+		if (kind) prog_fail[0] = 41; else ecc_bad[0] = 41;
+		fill(buf, 2, 6 + kind);
+		check(snand_write(buf, 40L * PAGE, PAGE + PAGE / 2) == PAGE + PAGE / 2, kind ?
+		      "-k write, partial last chunk on a program-failed page" : "-k write, partial last chunk on an ECC-failed page");
+		check(!memcmp(page(40), buf, PAGE) && !memcmp(page(42), buf + PAGE, PAGE / 2) && page(42)[PAGE / 2] == 0xff,
+		      "  the partial chunk lands at the start of page 42");
+		check(snand_read(got, 40L * PAGE, PAGE + PAGE / 2) == PAGE + PAGE / 2 && !memcmp(got, buf, PAGE + PAGE / 2),
+		      "  a -k read in the same run (verify) gives the data back");
+	}
+
+	/* a page with an ECC error is not served from the driver cache on the next read */
+	chip(0xef, 0xaa, 0x21);
+	snand_init();
+	ecc_bad[0] = 50;
+	check(snand_read(got, 50L * PAGE, PAGE) < 0 && snand_read(got, 50L * PAGE, PAGE) < 0,
+	      "an ECC-failed page fails again on the second read");
 
 	if (!fail) printf("all nandsim checks passed\n");
 	return fail;

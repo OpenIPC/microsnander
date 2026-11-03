@@ -250,6 +250,35 @@ int ECC_fcheck = 1;
 int ECC_ignore = 0;
 int Skip_BAD_page = 0;
 
+/* Pages a -k write skipped for a program failure in this run. Such a page may
+   still pass ECC, so a -k read of the same run (verify) skips it too. */
+static u32 *_skipped_pages;
+static u32 _skipped_count, _skipped_max;
+
+static int skipped_page(u32 page_number)
+{
+	u32 i;
+
+	for (i = 0; i < _skipped_count; i++)
+		if (_skipped_pages[i] == page_number)
+			return 1;
+	return 0;
+}
+
+static int add_skipped_page(u32 page_number)
+{
+	if (_skipped_count == _skipped_max) {
+		u32 n = _skipped_max ? _skipped_max * 2 : 64;
+		u32 *p = realloc(_skipped_pages, n * sizeof(*p));
+		if (!p)
+			return -1;
+		_skipped_pages = p;
+		_skipped_max = n;
+	}
+	_skipped_pages[_skipped_count++] = page_number;
+	return 0;
+}
+
 static unsigned char _plane_select_bit = 0;
 static unsigned char _die_id = 0;
 int en_oob_write = 0;
@@ -2217,6 +2246,7 @@ static SPI_NAND_FLASH_RTN_T spi_nand_protocol_read_id_3 ( struct SPI_NAND_FLASH_
 	_SPI_NAND_READ_NBYTE( &dummy, _SPI_NAND_LEN_ONE_BYTE, SPI_CONTROLLER_SPEED_SINGLE);
 	_SPI_NAND_READ_NBYTE( &(ptr_rtn_flash_id->mfr_id), _SPI_NAND_LEN_ONE_BYTE, SPI_CONTROLLER_SPEED_SINGLE);
 	_SPI_NAND_READ_NBYTE( &(ptr_rtn_flash_id->dev_id), _SPI_NAND_LEN_ONE_BYTE, SPI_CONTROLLER_SPEED_SINGLE);
+	_SPI_NAND_READ_NBYTE( &(ptr_rtn_flash_id->dev_id_2), _SPI_NAND_LEN_ONE_BYTE, SPI_CONTROLLER_SPEED_SINGLE);
 
 	/* 4. Chip Select High */
 	_SPI_NAND_READ_CHIP_SELECT_HIGH();
@@ -3144,7 +3174,8 @@ static SPI_NAND_FLASH_RTN_T spi_nand_read_page (u32 page_number, SPI_NAND_FLASH_
 			_SPI_NAND_DEBUG_PRINTF_ARRAY(SPI_NAND_FLASH_DEBUG_LEVEL_2, &_current_cache_page_oob_mapping[0], (ptr_dev_info_t->oob_size));
 		}
 noecc:
-		_current_page_num = page_number;
+		/* an ECC-failed page is not cached: the next read checks ECC again */
+		_current_page_num = (rtn_status == SPI_NAND_FLASH_RTN_DETECTED_BAD_BLOCK) ? 0xFFFFFFFF : page_number;
 #if 0
 		print_dot++;
 		if( (print_dot % 20) == 0 )
@@ -3359,8 +3390,10 @@ static SPI_NAND_FLASH_RTN_T spi_nand_write_internal( u32 dst_addr, u32 len, u32 
 		/* skip BAD page or internal error on write page, go to next page */
 		if( Skip_BAD_page && ((rtn_status == SPI_NAND_FLASH_RTN_PROGRAM_FAIL) || (rtn_status == SPI_NAND_FLASH_RTN_DETECTED_BAD_BLOCK)) ) {
 			printf("\nSkip BAD page 0x%x\n", page_number);
-			write_addr += data_len;
-			/* the rest of the data goes to the next pages, but never past the chip end */
+			if( rtn_status == SPI_NAND_FLASH_RTN_PROGRAM_FAIL && add_skipped_page(page_number) )
+				break;
+			/* the same data goes to the next page, but never past the chip end */
+			write_addr += (ptr_dev_info_t->page_size - addr_offset);
 			if( write_addr + remain_len > ptr_dev_info_t->device_size )
 				break;
 			continue;
@@ -3437,7 +3470,10 @@ static SPI_NAND_FLASH_RTN_T spi_nand_read_internal ( u32 addr, u32 len, u8 *ptr_
 
 		_SPI_NAND_DEBUG_PRINTF(SPI_NAND_FLASH_DEBUG_LEVEL_1, "spi_nand_read_internal: read_addr = 0x%x, page_number = 0x%x, data_offset = 0x%x\n", physical_read_addr, page_number, data_offset);
 
-		rtn_status = spi_nand_read_page(page_number, speed_mode);
+		if( Skip_BAD_page && skipped_page(page_number) )
+			rtn_status = SPI_NAND_FLASH_RTN_DETECTED_BAD_BLOCK;
+		else
+			rtn_status = spi_nand_read_page(page_number, speed_mode);
 		if(rtn_status == SPI_NAND_FLASH_RTN_DETECTED_BAD_BLOCK) {
 			if (!Skip_BAD_page) {
 				*status = SPI_NAND_FLASH_RTN_DETECTED_BAD_BLOCK;
@@ -4013,10 +4049,7 @@ static SPI_NAND_FLASH_RTN_T spi_nand_probe( struct SPI_NAND_FLASH_INFO_T *ptr_rt
 
 		for ( i = 0; i < (sizeof(spi_nand_flash_tables) / sizeof(struct SPI_NAND_FLASH_INFO_T)); i++)
 		{
-			_SPI_NAND_DEBUG_PRINTF(SPI_NAND_FLASH_DEBUG_LEVEL_1,"spi_nand_probe: table[%d]: mfr_id = 0x%x, dev_id = 0x%x\n", i, spi_nand_flash_tables[i].mfr_id, spi_nand_flash_tables[i].dev_id );
-
-			if ( ( (ptr_rtn_device_t->mfr_id) == spi_nand_flash_tables[i].mfr_id) &&
-			     ( (ptr_rtn_device_t->dev_id) == spi_nand_flash_tables[i].dev_id)  )
+			if ( spi_nand_compare( ptr_rtn_device_t, &spi_nand_flash_tables[i] ) == SPI_NAND_FLASH_RTN_NO_ERROR )
 			{
 				ecc_size = ((spi_nand_flash_tables[i].device_size / spi_nand_flash_tables[i].erase_size) * ((spi_nand_flash_tables[i].erase_size / spi_nand_flash_tables[i].page_size) * spi_nand_flash_tables[i].oob_size));
 				ptr_rtn_device_t->device_size = ECC_fcheck ? spi_nand_flash_tables[i].device_size : spi_nand_flash_tables[i].device_size + ecc_size;
@@ -4514,6 +4547,7 @@ int snand_write(unsigned char *buf, unsigned long to, unsigned long len)
 
 long snand_init(void)
 {
+	_skipped_count = 0;
 	if(!nandflash_init(0)) {
 		struct SPI_NAND_FLASH_INFO_T *ptr_dev_info_t = _SPI_NAND_GET_DEVICE_INFO_PTR;
 		bsize = ptr_dev_info_t->erase_size;
