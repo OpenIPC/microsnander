@@ -5005,16 +5005,29 @@ static void spi_nand_manufacute_init( struct SPI_NAND_FLASH_INFO_T *ptr_device_t
 	   0x7c, BP3..BP0 and TB at bits 6..2, and 0xC7 kept BP3 and TB: its
 	   first 8 MB took no erase and no program). So check what is left of
 	   BP (bits 3..6) and clear bits 2..6, as the parts that use them want */
-	spi_nand_protocol_get_status_reg_1(&feature);
-	if (feature & 0x78) {
+	/* every die has its own register */
+	int dies = (ptr_device_t->feature & (SPI_NAND_FLASH_DIE_SELECT_1_HAVE | SPI_NAND_FLASH_DIE_SELECT_2_HAVE)) ? 2 : 1;
+
+	for (int die = 0; die < dies; die++) {
+		if (dies > 1) {
+			_die_id = die;
+			if (ptr_device_t->feature & SPI_NAND_FLASH_DIE_SELECT_1_HAVE)
+				spi_nand_protocol_die_select_1(_die_id);
+			else
+				spi_nand_protocol_die_select_2(_die_id);
+		}
+		spi_nand_protocol_get_status_reg_1(&feature);
+		if (!(feature & 0x78))
+			continue;
 		feature &= 0x83;
 		spi_nand_protocol_set_status_reg_1(feature);
 		spi_nand_protocol_get_status_reg_1(&feature);
 		if (feature & 0x78)
-			_SPI_NAND_PRINTF("Warning: the block lock register stays 0x%02x: some blocks stay locked "
-					 "(erase and program fail there).\n", feature);
+			_SPI_NAND_PRINTF("Warning: the block lock register%s stays 0x%02x: some blocks stay locked "
+					 "(erase and program fail there).\n", dies > 1 ? (die ? " of die 1" : " of die 0") : "", feature);
 		else
-			_SPI_NAND_PRINTF("Blocks unlocked (the block lock register is 0x%02x now).\n", feature);
+			_SPI_NAND_PRINTF("Blocks unlocked%s (the block lock register is 0x%02x now).\n",
+					 dies > 1 ? (die ? " on die 1" : " on die 0") : "", feature);
 	}
 }
 

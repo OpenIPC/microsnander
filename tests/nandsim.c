@@ -225,11 +225,12 @@ int main(void)
 		feat[0xa0] = 0x7c;
 		check(snand_init() > 0 && !(feat[0xa0] & 0x7c), "FORESEE F35SQA001G: A0 0x7c at power-up is fully unlocked");
 		for (int i = 0; i < n && !e; i++)
-			if (!strcmp(spi_nand_flash_tables[i].ptr_name, "MICRON MT29F1G01"))
+			if (!strcmp(spi_nand_flash_tables[i].ptr_name, "GIGADEVICE GD5F1GQ4UB"))
 				e = &spi_nand_flash_tables[i];
 		chip(e->mfr_id, e->dev_id, e->dev_id_2);
 		feat[0xa0] = 0x7c;
-		check(snand_init() > 0 && !(feat[0xa0] & 0x78), "  a chip with no unlock of its own (MT29F1G01): its BP bits are cleared too");
+		/* the GigaDevice mask 0xC1 keeps bit 6: only the check after it clears that */
+		check(snand_init() > 0 && !(feat[0xa0] & 0x78), "  a maker mask that keeps a BP bit (GD5F1GQ4UB, 0xC1): the check clears it");
 	}
 
 	chip(0xef, 0xaa, 0x21);
