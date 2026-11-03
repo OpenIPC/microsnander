@@ -189,13 +189,15 @@ int ms_write_file(struct ms_chip *c, FILE *f, ms_progress cb, void *ctx, char *m
 		return -1;
 	}
 	l = end;
+	if (!l) {				/* before the programmer is touched */
+		memset(c, 0, sizeof(*c));
+		say(msg, n, "The file is empty.");
+		return -1;
+	}
 	if (chip_open(c, msg, n))
 		return -1;
-	if (!l || l > (unsigned long long)flen) {
-		if (l)
-			say(msg, n, "The file (0x%llx bytes) is larger than the chip (0x%llx).", l, flen);
-		else
-			say(msg, n, "The file is empty.");
+	if (l > (unsigned long long)flen) {
+		say(msg, n, "The file (0x%llx bytes) is larger than the chip (0x%llx).", l, flen);
 		goto out;
 	}
 	if (!(part = malloc(OPS_PART)) || !(chunk = malloc(OPS_PART))) {

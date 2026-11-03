@@ -3,6 +3,7 @@
    their thread, and the dumps land in a temporary directory. */
 #include <stdlib.h>
 #include <dirent.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include "../src/ops.c"
 #include "../src/web.c"
@@ -206,6 +207,28 @@ int main(void)
 	wait_idle();
 	request("GET", "/api/state", NULL, NULL, 0);
 	check(strstr(body_of(), "\"ok\":false") && strstr(body_of(), "Verify failed"), "  a write that does not take fails the verify");
+	{
+		int opens_before = opens;
+		struct ms_chip c;
+		char m[128];
+		FILE *e = tmpfile();
+		check(ms_write_file(&c, e, NULL, NULL, m, sizeof(m)) < 0 && strstr(m, "empty") && opens == opens_before,
+		      "  an empty file is refused before the programmer is opened");
+		fclose(e);
+	}
+	{						/* an -o path longer than any fixed buffer */
+		static char deep[1200];
+		int k = snprintf(deep, sizeof(deep), "%s", dir);
+		while (k < 1000) {
+			k += snprintf(deep + k, sizeof(deep) - k, "/%s", "a-long-directory-name-for-the-dumps");
+			mkdir(deep, 0755);
+		}
+		web_dir = deep;
+		FILE *f = upload_file();
+		check(f != NULL, "  the file to write is stored under an -o path of over 1000 characters");
+		if (f) fclose(f);
+		web_dir = dir;
+	}
 	st.uploading = 1;				/* another upload is coming in */
 	check(request("POST", "/api/write", NULL, img, sizeof(img)) == 409, "  a second upload at the same time: 409, before it takes space");
 	check(request("POST", "/api/erase", NULL, NULL, 0) == 409, "  an erase while a file is coming in: 409");

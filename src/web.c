@@ -465,14 +465,22 @@ static void upload_done(void)
    to 512 MB. It has no name, it goes when it is closed. */
 static FILE *upload_file(void)
 {
-	char path[512];
-	int fd;
+	static const char tail[] = "/.microsnander-write-XXXXXX";
+	char *path = malloc(strlen(web_dir) + sizeof(tail));	/* -o can be any length */
+	int fd, gone;
 	FILE *f;
 
-	if (snprintf(path, sizeof(path), "%s/.microsnander-write-XXXXXX", web_dir) >= (int)sizeof(path) ||
-	    (fd = mkstemp(path)) < 0)
+	if (!path)
 		return NULL;
-	if (unlink(path)) {			/* a name left would keep the image there */
+	strcpy(path, web_dir);
+	strcat(path, tail);
+	if ((fd = mkstemp(path)) < 0) {
+		free(path);
+		return NULL;
+	}
+	gone = !unlink(path);
+	free(path);
+	if (!gone) {				/* a name left would keep the image there */
 		close(fd);
 		return NULL;
 	}
