@@ -44,6 +44,7 @@ sudo ./microsnander -w firmware.bin -v
 - [发布与固定链接](#发布与固定链接)
 - [用法](#用法)
 - [示例](#示例)
+- [Web 模式](#web-模式)
 - [支持的芯片](#支持的芯片)
 - [数据不确定的芯片](#数据不确定的芯片)
 - [构建](#构建)
@@ -137,6 +138,9 @@ microsnander [options]
  -v             verify after write on chip
  -P <name>      programmer: ch341a, ch347, ezp, auto (default: the one connected)
  -S <speed>     SPI clock of the CH347: 60M, 30M (default), 15M, 7.5M, 3.75M, 1.875M
+ -W [addr:]port web mode: a page with Detect, Read, Erase, Write, Registers
+ -K <password>  web mode: ask for this password (any user name)
+ -o <dir>       web mode: where Read saves the dumps (default: the current one)
 ```
 
 每次运行只执行一个操作：`-i`、`-e`、`-r`、`-w` 或 `-u`。不指定 `-a` 和 `-l` 时，
@@ -179,6 +183,51 @@ microsnander -u
 
 # SPI NAND：带 OOB 区的原始转储，关闭 ECC
 microsnander -d -r raw.bin
+```
+
+## Web 模式
+
+`-W [地址:]端口` 让 microsnander 作为服务运行：在浏览器中打开一个页面，为已连接的编程器提供
+Detect、Read、Erase、Write 和 Registers 按钮。
+
+```sh
+microsnander -W 8080                       # 所有网络接口，端口 8080
+microsnander -W 127.0.0.1:8080 -K secret   # 仅本机访问，并设置密码
+```
+
+- **Detect**：编程器、芯片及其容量，以及状态寄存器。
+- **Read**：整片芯片读入 `flash-YYYYMMDDHHMM-芯片.bin`，例如 `flash-202611031706-W25Q128BV.bin`，
+  保存在 `-o` 目录（默认为当前目录），浏览器也会同时下载。启动时指定了 `-a`/`-l` 时，读取该区域，
+  文件名以 `-0x地址-0x长度.bin` 结尾。
+- **Erase**：擦除整片芯片。
+- **Write**：在浏览器中选择的文件（引导程序或完整镜像）从地址 0 写入已擦除的芯片，然后读回比较。
+- **Registers**：状态寄存器 1–3 的各位；**Clear protection** 与 `-u` 相同。仅限通过 CH341A 或
+  CH347 操作 SPI NOR。
+
+只使用一个编程器，选择方式与不带 `-W` 时相同（连接了多个时请用 `-P`）。每次只运行一个操作；
+每个操作开始时打开编程器、结束后关闭，因此两次操作之间可以重新插拔。
+
+不带 `-K` 时，任何能访问该端口的人都可以擦除芯片。带 `-K` 时浏览器会要求输入密码（用户名任意）。
+页面使用普通 HTTP，密码以明文在网络上传输：请在可信网络中使用，或使用 `-W 127.0.0.1:8080` 加
+SSH 隧道。
+
+作为 systemd 服务运行（用户需在上面 udev 规则中的 `plugdev` 组内）：
+
+```ini
+# /etc/systemd/system/microsnander.service
+[Unit]
+Description=microsnander web mode
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/microsnander -W 8080 -K <password> -o /var/lib/microsnander
+User=microsnander
+Group=plugdev
+StateDirectory=microsnander
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
 ```
 
 ## 支持的芯片

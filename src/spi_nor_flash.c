@@ -855,6 +855,15 @@ const char *snor_lookup(const unsigned char id[3], unsigned long *size, unsigned
 	return NULL;
 }
 
+/* Status registers 1, 2 and 3 of the chip found by snor_init() */
+int snor_read_status(unsigned char sr[3])
+{
+	if (snor_read_sr(OPCODE_RDSR, &sr[0]) < 0 || snor_read_sr(OPCODE_RDSR2, &sr[1]) < 0 ||
+	    snor_read_sr(OPCODE_RDSR3, &sr[2]) < 0)
+		return -1;
+	return 0;
+}
+
 long snor_init(void)
 {
 	spi_chip_info = chip_prob();
@@ -863,6 +872,7 @@ long snor_init(void)
 		return -1;
 
 	bsize = spi_chip_info->sector_size;
+	flash_chip_name = spi_chip_info->name;
 
 	return spi_chip_info->sector_size * spi_chip_info->n_sectors;
 }

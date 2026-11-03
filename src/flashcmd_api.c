@@ -25,6 +25,8 @@ extern int mw_eepromsize;
 #define __EEPROM___	""
 #endif
 
+const char *flash_chip_name;
+
 long flash_cmd_init(struct flash_cmd *cmd)
 {
 	long flen = -1;

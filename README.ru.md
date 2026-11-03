@@ -46,6 +46,7 @@ sudo ./microsnander -w firmware.bin -v
 - [Релизы и постоянные ссылки](#релизы-и-постоянные-ссылки)
 - [Использование](#использование)
 - [Примеры](#примеры)
+- [Веб-режим](#веб-режим)
 - [Поддерживаемые микросхемы](#поддерживаемые-микросхемы)
 - [Микросхемы с неточными данными](#микросхемы-с-неточными-данными)
 - [Сборка](#сборка)
@@ -149,6 +150,9 @@ microsnander [options]
  -v             verify after write on chip
  -P <name>      programmer: ch341a, ch347, ezp, auto (default: the one connected)
  -S <speed>     SPI clock of the CH347: 60M, 30M (default), 15M, 7.5M, 3.75M, 1.875M
+ -W [addr:]port web mode: a page with Detect, Read, Erase, Write, Registers
+ -K <password>  web mode: ask for this password (any user name)
+ -o <dir>       web mode: where Read saves the dumps (default: the current one)
 ```
 
 За один запуск — одна операция: `-i`, `-e`, `-r`, `-w` или `-u`. Без `-a` и `-l`
@@ -195,6 +199,54 @@ microsnander -u
 
 # SPI NAND: «сырой» дамп с областью OOB, ECC выключен
 microsnander -d -r raw.bin
+```
+
+## Веб-режим
+
+`-W [адрес:]порт` запускает microsnander как службу: страница в браузере с кнопками
+Detect, Read, Erase, Write и Registers для подключённого программатора.
+
+```sh
+microsnander -W 8080                       # все интерфейсы, порт 8080
+microsnander -W 127.0.0.1:8080 -K secret   # только этот компьютер, с паролем
+```
+
+- **Detect** — программатор, микросхема и её размер, регистры состояния.
+- **Read** — вся микросхема в файл `flash-ГГГГММДДЧЧММ-МИКРОСХЕМА.bin`, например
+  `flash-202611031706-W25Q128BV.bin`, в каталог `-o` (по умолчанию текущий); браузер сразу
+  его скачивает. Если при запуске заданы `-a`/`-l`, читается эта область, а имя кончается на
+  `-0xАДРЕС-0xДЛИНА.bin`.
+- **Erase** — стирание всей микросхемы.
+- **Write** — файл, выбранный в браузере (загрузчик или полный образ), пишется с адреса 0 в
+  стёртую микросхему, затем читается обратно и сравнивается.
+- **Registers** — биты регистров состояния 1–3; **Clear protection** делает то же, что `-u`.
+  Только SPI NOR через CH341A или CH347.
+
+Работает один программатор, выбранный так же, как без `-W` (если подключено несколько,
+укажите `-P`). Операции идут по одной; программатор открывается на каждую операцию и
+закрывается после неё, так что между операциями его можно переподключить.
+
+Без `-K` стереть микросхему может любой, кто достучится до порта. С `-K` браузер спрашивает
+пароль (имя пользователя — любое). Страница работает по обычному HTTP, и пароль идёт по сети
+незашифрованным: используйте доверенную сеть или `-W 127.0.0.1:8080` и SSH-туннель.
+
+Как служба systemd (пользователь — в группе `plugdev` из правила udev выше):
+
+```ini
+# /etc/systemd/system/microsnander.service
+[Unit]
+Description=microsnander web mode
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/microsnander -W 8080 -K <password> -o /var/lib/microsnander
+User=microsnander
+Group=plugdev
+StateDirectory=microsnander
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
 ```
 
 ## Поддерживаемые микросхемы

@@ -19,6 +19,8 @@ int snor_read(unsigned char *buf, unsigned long from, unsigned long len);
 int snor_erase(unsigned long offs, unsigned long len);
 int snor_write(unsigned char *buf, unsigned long to, unsigned long len);
 int snor_unprotect(void);
+int snor_read_status(unsigned char sr[3]);
+extern const char *flash_chip_name;	/* name of the chip found, for file names */
 const char *snor_lookup(const unsigned char id[3], unsigned long *size, unsigned long *sector, int *addr4b);
 long snor_init(void);
 void support_snor_list(void);

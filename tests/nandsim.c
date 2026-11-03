@@ -12,6 +12,7 @@
 #include "../src/nandcmd_api.h"
 /* the driver is built into this file, so the checks can walk its chip table */
 #include "../src/spi_nand_flash.c"
+const char *flash_chip_name;
 
 int snand_read(unsigned char *buf, unsigned long from, unsigned long len);
 int snand_write(unsigned char *buf, unsigned long to, unsigned long len);

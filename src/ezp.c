@@ -373,6 +373,7 @@ long ezp_flash_init(struct flash_cmd *cmd)
 	cmd->flash_erase = ezp_erase;
 	cmd->flash_unprotect = NULL;
 	bsize = sector;
+	flash_chip_name = name;
 	return ezp_size;
 }
 

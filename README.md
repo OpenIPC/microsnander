@@ -47,6 +47,7 @@ sudo ./microsnander -w firmware.bin -v
 - [Releases and permanent links](#releases-and-permanent-links)
 - [Usage](#usage)
 - [Examples](#examples)
+- [Web mode](#web-mode)
 - [Supported chips](#supported-chips)
 - [Chips with uncertain data](#chips-with-uncertain-data)
 - [Build](#build)
@@ -148,6 +149,9 @@ microsnander [options]
  -v             verify after write on chip
  -P <name>      programmer: ch341a, ch347, ezp, auto (default: the one connected)
  -S <speed>     SPI clock of the CH347: 60M, 30M (default), 15M, 7.5M, 3.75M, 1.875M
+ -W [addr:]port web mode: a page with Detect, Read, Erase, Write, Registers
+ -K <password>  web mode: ask for this password (any user name)
+ -o <dir>       web mode: where Read saves the dumps (default: the current one)
 ```
 
 One operation per run: `-i`, `-e`, `-r`, `-w` or `-u`. Without `-a` and `-l` the
@@ -192,6 +196,54 @@ microsnander -u
 
 # SPI NAND: raw dump with the OOB area, ECC off
 microsnander -d -r raw.bin
+```
+
+## Web mode
+
+`-W [address:]port` runs microsnander as a service: a page in the browser with Detect,
+Read, Erase, Write and Registers for the programmer that is connected.
+
+```sh
+microsnander -W 8080                       # every interface, port 8080
+microsnander -W 127.0.0.1:8080 -K secret   # this computer only, with a password
+```
+
+- **Detect**: the programmer, the chip and its size, and the status registers.
+- **Read**: the whole chip into `flash-YYYYMMDDHHMM-CHIP.bin`, for example
+  `flash-202611031706-W25Q128BV.bin`, in the `-o` directory (the current one by default).
+  The browser downloads it too. With `-a`/`-l` given at the start, Read takes that range,
+  and the name ends in `-0xADDRESS-0xLENGTH.bin`.
+- **Erase**: the whole chip.
+- **Write**: a file chosen in the browser (a loader or a full image), from address 0 into an
+  erased chip, then read back and compared.
+- **Registers**: the bits of status registers 1–3; **Clear protection** does what `-u` does.
+  SPI NOR through the CH341A or the CH347 only.
+
+One programmer is used, chosen as without `-W` (with several connected, give `-P`). One
+operation runs at a time, and the programmer is opened for each operation and closed after it,
+so it can be replugged in between.
+
+Without `-K` anyone who reaches the port can erase the chip. With `-K` the browser asks for
+the password (any user name). The page is plain HTTP, so the password crosses the network
+unencrypted: use a trusted network, or `-W 127.0.0.1:8080` and an SSH tunnel.
+
+As a systemd service (the user in the `plugdev` group of the udev rule above):
+
+```ini
+# /etc/systemd/system/microsnander.service
+[Unit]
+Description=microsnander web mode
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/microsnander -W 8080 -K <password> -o /var/lib/microsnander
+User=microsnander
+Group=plugdev
+StateDirectory=microsnander
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
 ```
 
 ## Supported chips

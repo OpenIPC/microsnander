@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MicroSNANDer</title>
+<style>
+:root { --bg: #f6f7f9; --card: #fff; --text: #1d2330; --muted: #667085; --line: #d9dee7; --accent: #2563eb; --bad: #c62828; --good: #2e7d32; }
+@media (prefers-color-scheme: dark) { :root { --bg: #14171c; --card: #1d2128; --text: #e6e9ef; --muted: #98a2b3; --line: #343a46; --accent: #6b9cff; --bad: #ff6b6b; --good: #63c174; } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, sans-serif; }
+main { max-width: 760px; margin: 0 auto; padding: 16px; }
+h1 { font-size: 20px; margin: 4px 0 14px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; }
+button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--text); cursor: pointer; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.danger { border-color: var(--bad); color: var(--bad); }
+button:disabled { opacity: .45; cursor: default; }
+dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 0; }
+dt { color: var(--muted); }
+dd { margin: 0; font-variant-numeric: tabular-nums; }
+progress { width: 100%; height: 12px; }
+#msg.bad { color: var(--bad); } #msg.good { color: var(--good); }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+td, th { border: 1px solid var(--line); padding: 3px 5px; text-align: center; }
+th { color: var(--muted); font-weight: normal; }
+td.on { background: var(--accent); color: #fff; }
+.muted { color: var(--muted); font-size: 13px; }
+a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+<h1>MicroSNANDer</h1>
+<div class="card">
+  <dl>
+    <dt>Programmer</dt><dd id="prog">—</dd>
+    <dt>Chip</dt><dd id="chip">—</dd>
+    <dt>Size</dt><dd id="size">—</dd>
+  </dl>
+</div>
+<div class="card">
+  <div class="row">
+    <button class="primary" id="b-detect">Detect</button>
+    <button id="b-read">Read</button>
+    <button class="danger" id="b-erase">Erase</button>
+    <button class="danger" id="b-write">Write…</button>
+    <button id="b-registers">Registers</button>
+    <input type="file" id="file" hidden>
+  </div>
+  <p class="muted">Erase clears the whole chip. Write programs the file from address 0 (a loader or a full image) into an erased chip and verifies it.</p>
+  <progress id="bar" max="1" value="0" hidden></progress>
+  <p id="msg"></p>
+  <p id="dl"></p>
+</div>
+<div class="card" id="regs" hidden>
+  <div class="row" style="justify-content: space-between; align-items: center">
+    <strong>Status registers</strong>
+    <button class="danger" id="b-unprotect">Clear protection</button>
+  </div>
+  <p class="muted">Bits as on most Winbond-type chips; other makers name some bits differently. Clear protection clears BP, SRP and CMP, as -u does, and keeps QE.</p>
+  <table id="srt"></table>
+</div>
+</main>
+<script>
+const bits = [
+  ['SRP0', 'SEC', 'TB', 'BP2', 'BP1', 'BP0', 'WEL', 'BUSY'],
+  ['SUS', 'CMP', 'LB3', 'LB2', 'LB1', '(R)', 'QE', 'SRP1'],
+  ['HOLD/RST', 'DRV1', 'DRV0', '(R)', '(R)', 'WPS', '(R)', '(R)'],
+];
+const $ = id => document.getElementById(id);
+const buttons = ['detect', 'read', 'erase', 'write', 'registers', 'unprotect'].map(b => $('b-' + b));
+let lastOp = '', timer = null;
+
+function hex(n) { return '0x' + n.toString(16).padStart(2, '0'); }
+function mb(n) { return n >= 1048576 ? (n / 1048576) + ' MB' : n ? (n / 1024) + ' KB' : '—'; }
+
+function show(s) {
+  $('prog').textContent = s.programmer || '—';
+  $('chip').textContent = s.chip || '—';
+  $('size').textContent = s.size ? mb(s.size) + ' (' + s.size + ' bytes)' : '—';
+  buttons.forEach(b => b.disabled = s.busy);
+  const bar = $('bar');
+  if (s.busy) {
+    bar.hidden = false;
+    if (s.total) { bar.max = s.total; bar.value = s.done; } else { bar.removeAttribute('value'); }
+    $('msg').className = '';
+    $('msg').textContent = (s.phase || s.op) + (s.total ? ' ' + Math.floor(100 * s.done / s.total) + '%' : '') + '…';
+  } else {
+    bar.hidden = true;
+    $('msg').className = s.ok === true ? 'good' : s.ok === false ? 'bad' : '';
+    $('msg').textContent = s.message || '';
+  }
+  if (!s.busy && s.op === 'read' && s.ok && s.file) {
+    $('dl').innerHTML = 'Saved on the server: <a href="/dumps/' + encodeURIComponent(s.file) + '" download>' + s.file + '</a>';
+    if (lastOp === 'read') { lastOp = ''; location.href = '/dumps/' + encodeURIComponent(s.file); }
+  }
+  if (s.sr) {
+    $('regs').hidden = false;
+    let h = '';
+    s.sr.forEach((v, i) => {
+      h += '<tr><th>SR' + (i + 1) + ' ' + hex(v) + '</th>';
+      bits[i].forEach((name, k) => h += '<td class="' + ((v >> (7 - k)) & 1 ? 'on' : '') + '">' + name + '</td>');
+      h += '</tr>';
+    });
+    $('srt').innerHTML = h;
+  } else if (['detect', 'registers', 'unprotect'].includes(s.op) && !s.busy) {
+    $('regs').hidden = true;
+  }
+  if (s.busy && !timer) timer = setInterval(poll, 500);
+  if (!s.busy && timer) { clearInterval(timer); timer = null; }
+}
+
+async function poll() {
+  try { show(await (await fetch('/api/state')).json()); } catch (e) { $('msg').textContent = 'No connection.'; }
+}
+
+async function run(op, body) {
+  $('dl').textContent = '';
+  lastOp = op;
+  const r = await fetch('/api/' + op, { method: 'POST', body: body || '' });
+  if (!r.ok) { $('msg').className = 'bad'; $('msg').textContent = await r.text(); return; }
+  poll();
+  if (!timer) timer = setInterval(poll, 500);
+}
+
+$('b-detect').onclick = () => run('detect');
+$('b-read').onclick = () => run('read');
+$('b-registers').onclick = () => run('registers');
+$('b-erase').onclick = () => { if (confirm('Erase the whole chip?')) run('erase'); };
+$('b-unprotect').onclick = () => run('unprotect');
+$('b-write').onclick = () => $('file').click();
+$('file').onchange = async () => {
+  const f = $('file').files[0];
+  $('file').value = '';
+  if (f && confirm('Write ' + f.name + ' (' + f.size + ' bytes) from address 0 and verify?'))
+    run('write', await f.arrayBuffer());
+};
+poll();
+</script>
+</body>
+</html>

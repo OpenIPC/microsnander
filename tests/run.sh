@@ -10,7 +10,8 @@
 # ch347_spi.c against a fake libusb (tests/ch347sim.c): the CH347 packets;
 # ezp.c against a fake libusb (tests/ezpsim.c): the EZP commands and streams;
 # spi_controller.c against a recording programmer (tests/spisim.c): short
-# writes held while CS is low go out in one transfer.
+# writes held while CS is low go out in one transfer; web.c with a fake
+# flash (tests/websim.c): the requests, the operations, the dump names.
 #
 #   tests/run.sh            (CC=<compiler> to choose the compiler)
 #
@@ -25,6 +26,8 @@ ${CC:-cc} -std=gnu99 -Wall -Werror -O1 -o "$W/norsim" "$T/norsim.c" "$T/../src/t
 ${CC:-cc} -std=gnu99 -Wall -Werror -O1 -I"$T/../src" ${LIBUSB_CFLAGS:-} -o "$W/ch347sim" "$T/ch347sim.c" || exit 1
 ${CC:-cc} -std=gnu99 -Wall -Werror -O1 -I"$T/../src" ${LIBUSB_CFLAGS:-} -o "$W/ezpsim" "$T/ezpsim.c" "$T/../src/timer.c" || exit 1
 ${CC:-cc} -std=gnu99 -Wall -Werror -O1 -I"$T/../src" -o "$W/spisim" "$T/spisim.c" || exit 1
+make -s -C "$T/../src" web_page.h || exit 1
+${CC:-cc} -std=gnu99 -Wall -Werror -O1 -I"$T/../src" -o "$W/websim" "$T/websim.c" -pthread || exit 1
 cd "$W"; B=./ms; fail=0
 # t <expected exit code> <description> [VAR=value ...] <command>
 t() { exp=$1; d=$2; shift 2; out=$(env "$@" 2>&1); got=$?
@@ -40,6 +43,13 @@ t 1 "conflict -k -I"                  $B -k -I -r x.bin
 t 1 "-P unknown programmer"           $B -P ft2232 -i
 t 0 "-P ch341a"                       $B -P ch341a -i
 t 0 "-P ezp"                          $B -P ezp -i
+t 0 "-W 8080 (web mode)"              $B -W 8080
+t 1 "-W with -r is an error"          $B -W 8080 -r x.bin
+t 1 "-W with -v is an error"          $B -W 8080 -v
+t 1 "-K without -W is an error"       $B -K pw -i
+t 1 "-o without -W is an error"       $B -o /tmp -i
+$B -W 127.0.0.1:8080 -K pw -o /srv -a 0x1000 -l 0x2000 | grep -q '^web: 127.0.0.1:8080 key=pw dir=/srv addr=0x1000 len=0x2000' && echo "ok   -W passes the address, password, dump directory and range" || { echo "FAIL -W arguments"; fail=1; }
+$B -h | grep -q '^ -W ' && $B -h | grep -q '^ -K ' && $B -h | grep -q '^ -o ' && echo "ok   -h lists -W, -K and -o" || { echo "FAIL -h without -W/-K/-o"; fail=1; }
 t 1 "-P ezp -S 15M is an error"       $B -P ezp -S 15M -i
 t 1 "-S unknown speed"                $B -S 100M -i
 t 0 "-P ch347 -S 15M"                 $B -P ch347 -S 15M -i
@@ -90,5 +100,7 @@ grep -a '^ok\|^FAIL' ch347sim.log
 grep -a '^ok\|^FAIL' ezpsim.log
 ./spisim > spisim.log 2>&1 || fail=1
 grep -a '^ok\|^FAIL' spisim.log
+./websim > websim.log 2>&1 || fail=1
+grep -a '^ok\|^FAIL' websim.log
 [ "$fail" = 0 ] && echo "all tests passed"
 exit $fail
