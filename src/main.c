@@ -35,7 +35,7 @@
 struct flash_cmd prog;
 extern unsigned int bsize;
 
-#define _VER	"1.18.0"
+#define _VER	"1.18.1"
 
 const char *ms_version = _VER;
 
