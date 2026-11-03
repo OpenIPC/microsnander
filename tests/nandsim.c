@@ -29,7 +29,7 @@ static unsigned char id[3];
 static unsigned char feat[256];
 static unsigned char cmd[16];
 static unsigned int ncmd, nread;
-static long ecc_bad[MAXBAD], prog_fail[MAXBAD];
+static long ecc_bad[MAXBAD], prog_fail[MAXBAD], erase_fail[MAXBAD];	/* erase_fail: block numbers */
 static unsigned int nprog;		/* program executes (0x10) */
 static int col_hi_read = -1, col_hi_load = -1;	/* high column byte of the last read from cache / program load */
 static int stuck_busy;			/* the status register always shows OIP */
@@ -105,6 +105,8 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Chip_Select_High(void)
 		for (unsigned int i = 0; i < sizeof(cache); i++) p[i] &= cache[i];
 		break;
 	case 0xd8:				/* block erase, 64 pages */
+		feat[0xc0] &= ~0x04;
+		if (in(erase_fail, row() / 64)) { feat[0xc0] |= 0x04; break; }
 		memset(mem + (row() & ~63UL) * (PAGE + OOB), 0xff, 64 * (PAGE + OOB));
 		break;
 	}
@@ -129,7 +131,7 @@ static void chip(unsigned char a, unsigned char b, unsigned char c)
 	id[0] = a; id[1] = b; id[2] = c;
 	memset(mem, 0xff, (size_t)PAGES * (PAGE + OOB));
 	memset(feat, 0, sizeof(feat));
-	for (int i = 0; i < MAXBAD; i++) ecc_bad[i] = prog_fail[i] = -1;
+	for (int i = 0; i < MAXBAD; i++) ecc_bad[i] = prog_fail[i] = erase_fail[i] = -1;
 	Skip_BAD_page = 0;
 	nprog = 0;
 	stuck_busy = 0;
@@ -307,6 +309,17 @@ int main(void)
 	check(snand_write(buf, 90L * PAGE, 3 * PAGE) == 3 * PAGE && !memcmp(page(93), buf + 2 * PAGE, PAGE),
 	      "-k write: a 0xFF page over an ECC-failed page goes to the next page");
 	check(snand_read(got, 90L * PAGE, 3 * PAGE) == 3 * PAGE && !memcmp(got, buf, 3 * PAGE), "  and reads back in place");
+
+	/* a block that fails to erase fails the erase, wherever it is in the range */
+	chip(0xef, 0xaa, 0x21);
+	snand_init();
+	check(snand_erase(0, 4 * 128 * 1024) == 0, "erase of 4 blocks");
+	erase_fail[0] = 1;
+	memset(page(3 * 64), 0x00, PAGE);
+	check(snand_erase(0, 4 * 128 * 1024) != 0, "erase fails when block 1 of 4 does not erase");
+	check(page(3 * 64)[0] == 0xff, "  the blocks after it are still erased");
+	erase_fail[0] = 3;
+	check(snand_erase(0, 4 * 128 * 1024) != 0, "erase fails when the last block does not erase");
 
 	/* a chip that stays busy (OIP) makes the operation fail instead of hanging */
 	chip(0xef, 0xaa, 0x21);
