@@ -38,6 +38,7 @@
     <string name="cannot_save">The dump could not be saved there.</string>
     <string name="cannot_open">The file could not be opened.</string>
     <string name="pick_file">A file to write (Downloads)</string>
+    <string name="write_again">The app was restarted while the file was picked: press Write again.</string>
     <string name="no_files">No .bin file in Downloads: copy the image there first.</string>
     <string name="no_picker_save">This device has no file picker: the dump is in Downloads, or use Share.</string>
     <string name="status_registers">STATUS REGISTERS</string>

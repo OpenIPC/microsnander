@@ -113,7 +113,9 @@ function bulb(id,c){$(id).className='bulb'+(c?' '+c:'')}
 function esc(t){return String(t).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
 function size(n){return n>=1048576?(n/1048576)+' MB':n?(n/1024)+' KB':'-'}
 function hex(v){return '0x'+('0'+v.toString(16)).slice(-2)}
+var seen=0;	/* the newest operation number shown: an older state does not come back */
 function render(s){
+ if(s.seq<seen&&s.seq!==0)return;seen=s.seq;	/* 0: the server started again */
  bulb('l-link','ok');$('t-link').textContent='Link';
  bulb('l-prog',s.programmer?'ok':(s.ok===false&&!s.programmer?'bad':''));
  bulb('l-chip',s.chip?(s.voltage==='1.8'?'bad':'ok'):(s.ok===false&&s.programmer&&!s.chip?'bad':''));
@@ -156,7 +158,7 @@ function run(op,body,btn,accepted,chip){
  fetch(base+'/api/'+op,{method:'POST',headers:h,body:body||''}).then(function(r){
   return r.text().then(function(t){
    if(!r.ok){$('log').textContent='> '+op+': '+t;return}
-   $('log').innerHTML='&nbsp;';poll();if(!timer)timer=setInterval(poll,500);if(accepted)accepted(parseInt(t.split(' ')[1],10));
+   $('log').innerHTML='&nbsp;';poll();if(!timer)timer=setInterval(poll,500);var n=parseInt(t.split(' ')[1],10);seen=n;if(accepted)accepted(n);	/* this page's own operation sets it */
   });
  }).catch(offline);
 }

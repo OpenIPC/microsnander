@@ -153,7 +153,16 @@ public class MainActivity extends Activity {
         else
             showIdle(getString(R.string.press_detect));
         showRegisters(lastSr);
-        if (!busy && pendingNext != null) {	// Detect ended while there was no screen
+    }
+
+    /** only a screen in front takes the step after Detect (a dialog, the file picker) */
+    private static boolean resumed;
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        resumed = true;
+        if (!busy && pendingNext != null) {	// Detect ended while no screen was in front
             Found f = pendingNext;
             Native.Result r = pendingFor;
             boolean fresh = SystemClock.elapsedRealtime() - pendingAt < PENDING_MS;
@@ -162,6 +171,12 @@ public class MainActivity extends Activity {
             if (fresh)
                 f.found(this, r);
         }
+    }
+
+    @Override
+    protected void onPause() {
+        resumed = false;
+        super.onPause();
     }
 
     @Override
@@ -316,9 +331,10 @@ public class MainActivity extends Activity {
                     if (a != null) {
                         a.showResult(r, saved);
                         a.showRegisters(lastSr);
-                        if (found)
+                        if (found && resumed)
                             next.found(a, r);
-                    } else if (found) {
+                    }
+                    if (found && (a == null || !resumed)) {
                         pendingNext = next;
                         pendingFor = r;
                         pendingAt = SystemClock.elapsedRealtime();
@@ -551,8 +567,10 @@ public class MainActivity extends Activity {
 
     private void confirmWrite(Uri u) {
         Native.Result r = lastResult;
-        if (r == null || !r.ok || r.chip.isEmpty())
-            return;				// the chip of the Detect before the picker
+        if (r == null || !r.ok || r.chip.isEmpty()) {	// the app was restarted behind the picker
+            showFailed(getString(R.string.write_again));
+            return;
+        }
         new AlertDialog.Builder(this)
                 .setMessage(getString(R.string.write_confirm, r.chip, sizeOf(r.size)))
                 .setPositiveButton(R.string.write, (d, w) -> write(u, r))
