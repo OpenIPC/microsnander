@@ -38,11 +38,15 @@
 #define CH347_READ_EP		0x86
 #define CH347_PACKET_SIZE	510
 #define CH347_MAX_DATA		(CH347_PACKET_SIZE - 3)
+#define CH347_CS_LEN		13
 #define CH347_TIMEOUT		2000	/* ms */
 
 static libusb_device_handle *ch347;
 static int ch347_iface = -1;
 static int ch347_detached;
+/* CS low is not sent on its own: it goes in front of the next command, in
+   the same USB transfer (one round trip less for every SPI transaction) */
+static int cs_pending;
 static int ch347_divisor = 1;		/* 30 MHz: within the 50 MHz of READ (0x03) of most chips */
 
 static const struct { const char *name; int divisor; } ch347_speeds[] = {
@@ -141,6 +145,7 @@ int ch347_spi_init(void)
 	}
 	if (ch347_configure() < 0)
 		goto release;
+	cs_pending = 0;
 	return 0;
 
 release:
@@ -171,17 +176,51 @@ int ch347_spi_shutdown(void)
 	return 0;
 }
 
+static int cs_packet(unsigned char *cmd, bool low)
+{
+	memset(cmd, 0, CH347_CS_LEN);
+	cmd[0] = CH347_CMD_SPI_CS_CTRL;
+	cmd[1] = CH347_CS_LEN - 3;
+	cmd[3] = (low ? CH347_CS_ASSERT : CH347_CS_DEASSERT) | CH347_CS_CHANGE;	/* CS1; CS2 is left as it is */
+	return CH347_CS_LEN;
+}
+
 int ch347_cs(bool low)
 {
-	unsigned char cmd[13] = {
-		[0] = CH347_CMD_SPI_CS_CTRL,
-		[1] = 10,
-		[3] = (low ? CH347_CS_ASSERT : CH347_CS_DEASSERT) | CH347_CS_CHANGE,	/* CS1; CS2 is left as it is */
-	};
+	unsigned char cmd[CH347_CS_LEN];
 
 	if (!ch347)
 		return -1;
-	return bulk(CH347_WRITE_EP, cmd, sizeof(cmd), NULL);
+	if (low) {
+		cs_pending = 1;
+		return 0;
+	}
+	if (cs_pending) {		/* nothing went out between: CS never went low */
+		cs_pending = 0;
+		return 0;
+	}
+	return bulk(CH347_WRITE_EP, cmd, cs_packet(cmd, false), NULL);
+}
+
+/* the commands of pkt in one USB transfer, a CS low still to go in front */
+static int send_out(const unsigned char *pkt, int len)
+{
+	unsigned char buf[CH347_PACKET_SIZE];
+	int k = 0;
+
+	if (cs_pending) {
+		cs_pending = 0;
+		k = cs_packet(buf, true);
+		if (k + len > CH347_PACKET_SIZE) {
+			if (bulk(CH347_WRITE_EP, buf, k, NULL))
+				return -1;
+			k = 0;
+		}
+	}
+	if (!k)
+		return bulk(CH347_WRITE_EP, (unsigned char *)pkt, len, NULL);
+	memcpy(buf + k, pkt, len);
+	return bulk(CH347_WRITE_EP, buf, k + len, NULL);
 }
 
 static int ch347_write(unsigned int len, const unsigned char *data)
@@ -196,7 +235,7 @@ static int ch347_write(unsigned int len, const unsigned char *data)
 		pkt[1] = n & 0xff;
 		pkt[2] = n >> 8;
 		memcpy(pkt + 3, data, n);
-		if (bulk(CH347_WRITE_EP, pkt, n + 3, NULL) || bulk(CH347_READ_EP, resp, sizeof(resp), &got))
+		if (send_out(pkt, n + 3) || bulk(CH347_READ_EP, resp, sizeof(resp), &got))
 			return -1;
 		/* the answer: SPI_OUT, length 1, status 0 */
 		if (got != sizeof(resp) || resp[0] != CH347_CMD_SPI_OUT || resp[3] != 0) {
@@ -215,7 +254,7 @@ static int ch347_read(unsigned int len, unsigned char *data)
 	unsigned char pkt[CH347_PACKET_SIZE];
 	unsigned int done = 0;
 
-	if (bulk(CH347_WRITE_EP, cmd, sizeof(cmd), NULL))
+	if (send_out(cmd, sizeof(cmd)))
 		return -1;
 	while (done < len) {
 		int got;
@@ -252,7 +291,7 @@ static int ch347_out_in(unsigned int writecnt, unsigned int readcnt, const unsig
 	pkt[2] = n >> 8;
 	memcpy(pkt + 3, writearr, writecnt);
 	memset(pkt + 3 + writecnt, 0xff, readcnt);
-	if (bulk(CH347_WRITE_EP, pkt, n + 3, NULL) || bulk(CH347_READ_EP, pkt, sizeof(pkt), &got))
+	if (send_out(pkt, n + 3) || bulk(CH347_READ_EP, pkt, sizeof(pkt), &got))
 		return -1;
 	if (got != (int)n + 3 || pkt[0] != CH347_CMD_SPI_OUT_IN || (pkt[1] | (pkt[2] << 8)) != n) {
 		printf("CH347: bad answer to a transfer (%d bytes, command %02x)\n", got, got ? pkt[0] : 0);
