@@ -4912,9 +4912,7 @@ static void spi_nand_manufacute_init( struct SPI_NAND_FLASH_INFO_T *ptr_device_t
 			((ptr_device_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_FORESEE) && (ptr_device_t->dev_id == _SPI_NAND_DEVICE_ID_FS35ND04GS2Y2)) ||
 			((ptr_device_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_FORESEE) && (ptr_device_t->dev_id == _SPI_NAND_DEVICE_ID_F35UQA512M)) ||
 			((ptr_device_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_FORESEE) && (ptr_device_t->dev_id == _SPI_NAND_DEVICE_ID_F35UQA001G)) ||
-			((ptr_device_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_FORESEE) && (ptr_device_t->dev_id == _SPI_NAND_DEVICE_ID_F35UQA002G)) ||
-			((ptr_device_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_FORESEE) && (ptr_device_t->dev_id == _SPI_NAND_DEVICE_ID_F35SQA001G)) ||
-			((ptr_device_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_FORESEE) && (ptr_device_t->dev_id == _SPI_NAND_DEVICE_ID_F35SQA002G)))
+			((ptr_device_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_FORESEE) && (ptr_device_t->dev_id == _SPI_NAND_DEVICE_ID_F35UQA002G)))
 	{
 		/* 1. Unlock All block */
 		spi_nand_protocol_get_status_reg_1(&feature);
@@ -4968,8 +4966,11 @@ static void spi_nand_manufacute_init( struct SPI_NAND_FLASH_INFO_T *ptr_device_t
 		spi_nand_protocol_get_status_reg_1(&feature);
 		_SPI_NAND_DEBUG_PRINTF(SPI_NAND_FLASH_DEBUG_LEVEL_1, "After Unlock all block setup, the status register1 = 0x%x\n", feature);
 	}
-	else if((ptr_device_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_FORESEE) && (ptr_device_t->dev_id == _SPI_NAND_DEVICE_ID_F35SQA512M))
+	else if(((ptr_device_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_FORESEE) && (ptr_device_t->dev_id == _SPI_NAND_DEVICE_ID_F35SQA512M)) ||
+		((ptr_device_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_FORESEE) && (ptr_device_t->dev_id == _SPI_NAND_DEVICE_ID_F35SQA001G)) ||
+		((ptr_device_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_FORESEE) && (ptr_device_t->dev_id == _SPI_NAND_DEVICE_ID_F35SQA002G)))
 	{
+		/* BP3..BP0 and TB at bits 6..2 (A0 = 0x7c at power-up): all cleared */
 		/* 1. Unlock All block */
 		spi_nand_protocol_get_status_reg_1(&feature);
 		feature &= 0x83;
@@ -4997,6 +4998,23 @@ static void spi_nand_manufacute_init( struct SPI_NAND_FLASH_INFO_T *ptr_device_t
 
 		spi_nand_protocol_get_status_reg_2(&feature);
 		_SPI_NAND_DEBUG_PRINTF(SPI_NAND_FLASH_DEBUG_LEVEL_1, "After enable qual mode setup, the status register2 = 0x%x\n", feature);
+	}
+
+	/* the unlock above is per maker, with its own mask; a mask that misses a
+	   bit leaves blocks locked (the FORESEE F35SQA001G powers up with A0 =
+	   0x7c, BP3..BP0 and TB at bits 6..2, and 0xC7 kept BP3 and TB: its
+	   first 8 MB took no erase and no program). So check what is left of
+	   BP (bits 3..6) and clear bits 2..6, as the parts that use them want */
+	spi_nand_protocol_get_status_reg_1(&feature);
+	if (feature & 0x78) {
+		feature &= 0x83;
+		spi_nand_protocol_set_status_reg_1(feature);
+		spi_nand_protocol_get_status_reg_1(&feature);
+		if (feature & 0x78)
+			_SPI_NAND_PRINTF("Warning: the block lock register stays 0x%02x: some blocks stay locked "
+					 "(erase and program fail there).\n", feature);
+		else
+			_SPI_NAND_PRINTF("Blocks unlocked (the block lock register is 0x%02x now).\n", feature);
 	}
 }
 

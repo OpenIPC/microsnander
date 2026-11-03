@@ -4,6 +4,14 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.19.1 — 2026-11-04
+
+- SPI NAND: the FORESEE F35SQA001G and F35SQA002G are fully unlocked. They power up with the
+  block lock register at 0x7c (BP3..BP0 and TB at bits 6..2); the unlock kept BP3 and TB
+  (0x44), and the first 8 MB took no erase and no program. After the unlock of every maker,
+  BP bits left in the register are cleared as well, and a register that stays locked is
+  told instead of erases and programs that fail.
+
 ## 1.19.0 — 2026-11-04
 
 - `-t`: a short self-test of the chip, with nothing to prepare. It reads the protection
