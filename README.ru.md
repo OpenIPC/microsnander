@@ -48,6 +48,7 @@ sudo ./microsnander -w firmware.bin -v
 - [Примеры](#примеры)
 - [Веб-режим](#веб-режим)
 - [Приложение для Android](#приложение-для-android)
+- [SigmaStar ISP](#sigmastar-isp)
 - [Поддерживаемые микросхемы](#поддерживаемые-микросхемы)
 - [Напряжение микросхем](#напряжение-микросхем)
 - [Микросхемы с неточными данными](#микросхемы-с-неточными-данными)
@@ -334,6 +335,33 @@ Android TV (Android 5.0 и новее, без root; на приставке он
   `microsnander-android.apk` в [latest](https://github.com/OpenIPC/microsnander/releases/latest).
 
 Сборка: `cd android && gradle assembleDebug` с Android SDK и NDK r27c.
+
+## SigmaStar ISP
+
+`-m sigmastar` работает с флешкой платы SigmaStar (MStar) прямо на плате, без выпаивания: через
+ISP-мост SoC по I2C. Так восстанавливают плату с испорченным загрузчиком
+([OpenIPC wiki: SigmaStar unbrick](https://github.com/OpenIPC/wiki/blob/master/en/sigmastar-unbrick.md)).
+
+- Подключение: UART SoC к I2C программатора, TX к SDA, RX к SCL, и GND. Плата питается сама;
+  если мост не отвечает, помогает перезапуск питания платы.
+- I2C — от CH341A или CH347 (CH347T в режиме 1, CH347F), программатор выбирается как обычно:
+  `-P` или сам; у программаторов EZP I2C нет.
+- `-S` в этом режиме — частота I2C: `20K`, `100K` (по умолчанию), `400K`, `750K`.
+- `-q` выводит адреса I2C, которые отвечают, — для проверки подключения (мост — `0x49`, порт
+  отладки SoC — `0x59`).
+- Остальное — как с микросхемой в панельке: `-i`, `-r`, `-w`, `-e`, `-v`, `-a`, `-l`, SPI NOR и
+  SPI NAND. В веб-режиме и в приложении для Android этого режима нет.
+
+```sh
+microsnander -q                                  # должны ответить 0x49 и 0x59
+microsnander -m sigmastar -i                     # флешка платы
+microsnander -m sigmastar -r backup.bin          # сначала копия
+microsnander -m sigmastar -a 0 -l 0x40000 -e     # область загрузчика, затем
+microsnander -m sigmastar -w u-boot.bin -v       # рабочий загрузчик
+```
+
+Режим медленный: данные идут по I2C, примерно по 20–25 байт за транзакцию. Загрузчик в несколько
+сотен КБ — минуты; вся микросхема на 16 МБ — намного дольше.
 
 ## Поддерживаемые микросхемы
 

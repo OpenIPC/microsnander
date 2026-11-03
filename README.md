@@ -49,6 +49,7 @@ sudo ./microsnander -w firmware.bin -v
 - [Examples](#examples)
 - [Web mode](#web-mode)
 - [Android app](#android-app)
+- [SigmaStar ISP](#sigmastar-isp)
 - [Supported chips](#supported-chips)
 - [Chip voltage](#chip-voltage)
 - [Chips with uncertain data](#chips-with-uncertain-data)
@@ -330,6 +331,33 @@ with the remote).
   `microsnander-android.apk` in [latest](https://github.com/OpenIPC/microsnander/releases/latest).
 
 Build: `cd android && gradle assembleDebug` with the Android SDK and NDK r27c.
+
+## SigmaStar ISP
+
+`-m sigmastar` reaches the SPI flash of a SigmaStar (MStar) board on its SoC, without
+desoldering: through the ISP bridge of the SoC, over I2C. It brings back a board with a broken
+bootloader ([OpenIPC wiki: SigmaStar unbrick](https://github.com/OpenIPC/wiki/blob/master/en/sigmastar-unbrick.md)).
+
+- Wires: the UART of the SoC to the I2C of the programmer, TX to SDA, RX to SCL, and GND. The
+  board is powered on its own; when the bridge does not answer, a power cycle of the board helps.
+- The I2C master is that of the CH341A or the CH347 (CH347T in mode 1, CH347F), chosen as always
+  with `-P` or by itself; the EZP programmers have no I2C.
+- `-S` is the I2C clock in this mode: `20K`, `100K` (default), `400K`, `750K`.
+- `-q` lists the I2C addresses that answer, to check the wiring (the bridge is at `0x49`, the
+  debug port of the SoC at `0x59`).
+- Everything else works as with a chip in the socket: `-i`, `-r`, `-w`, `-e`, `-v`, `-a`, `-l`,
+  SPI NOR and SPI NAND. Not in the web mode or the Android app.
+
+```sh
+microsnander -q                                  # 0x49 and 0x59 must answer
+microsnander -m sigmastar -i                     # the flash of the board
+microsnander -m sigmastar -r backup.bin          # back it up first
+microsnander -m sigmastar -a 0 -l 0x40000 -e     # the loader part, then
+microsnander -m sigmastar -w u-boot.bin -v       # a working loader
+```
+
+It is slow: the data goes over I2C, about 20-25 bytes a transaction. A loader of a few
+hundred KB is minutes; a whole 16 MB chip is much longer.
 
 ## Supported chips
 

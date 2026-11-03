@@ -19,7 +19,7 @@ set -u
 T=$(cd "$(dirname "$0")" && pwd)
 W=$(mktemp -d)
 trap 'rm -rf "$W"' EXIT
-${CC:-cc} -std=gnu99 -Wall -Werror -I"$T/../src" -o "$W/ms" "$T/../src/main.c" "$T/../src/selftest.c" "$T/stub.c" || exit 1
+${CC:-cc} -std=gnu99 -Wall -Werror -I"$T/../src" -o "$W/ms" "$T/../src/main.c" "$T/../src/sigmastar.c" "$T/../src/selftest.c" "$T/stub.c" || exit 1
 ${CC:-cc} -std=gnu99 -Wall -Werror -O1 -DSPI_NAND_OIP_TIMEOUT_MS=50 -o "$W/nandsim" "$T/nandsim.c" "$T/../src/timer.c" || exit 1
 ${CC:-cc} -std=gnu99 -Wall -Werror -O1 -I"$T/../src" ${LIBUSB_CFLAGS:-} -o "$W/ch341sim" "$T/ch341sim.c" || exit 1
 ${CC:-cc} -std=gnu99 -Wall -Werror -O1 -o "$W/norsim" "$T/norsim.c" "$T/../src/timer.c" || exit 1
@@ -27,6 +27,7 @@ ${CC:-cc} -std=gnu99 -Wall -Werror -O1 -I"$T/../src" ${LIBUSB_CFLAGS:-} -o "$W/c
 ${CC:-cc} -std=gnu99 -Wall -Werror -O1 -I"$T/../src" ${LIBUSB_CFLAGS:-} -o "$W/ezpsim" "$T/ezpsim.c" "$T/../src/timer.c" || exit 1
 ${CC:-cc} -std=gnu99 -Wall -Werror -O1 -I"$T/../src" -o "$W/spisim" "$T/spisim.c" || exit 1
 ${CC:-cc} -std=gnu99 -Wall -Werror -O1 -I"$T/../src" -o "$W/usbfssim" "$T/usbfssim.c" || exit 1
+${CC:-cc} -std=gnu99 -Wall -Werror -O1 -I"$T/../src" -o "$W/ispsim" "$T/ispsim.c" || exit 1
 make -s -C "$T/../src" web_page.h || exit 1
 ${CC:-cc} -std=gnu99 -Wall -Werror -O1 -I"$T/../src" -o "$W/websim" "$T/websim.c" -pthread || exit 1
 cd "$W"; B=./ms; fail=0
@@ -61,6 +62,18 @@ t 1 "-S unknown speed"                $B -S 100M -i
 t 0 "-P ch347 -S 15M"                 $B -P ch347 -S 15M -i
 t 1 "-S with the CH341A is an error"  $B -P ch341a -S 15M -i
 t 1 "-S with auto (CH341A) is an error" $B -S 15M -i
+t 1 "-m unknown mode"                 $B -m mstar -i
+t 0 "-m sigmastar -i (CH341A, auto)"  $B -m sigmastar -i
+t 0 "-P ch347 -m sigmastar -i"        $B -P ch347 -m sigmastar -i
+t 1 "-P ezp -m sigmastar: no I2C"     $B -P ezp -m sigmastar -i
+t 1 "-m sigmastar, nothing at 0x49"   MS_I2C=none $B -m sigmastar -i
+t 0 "-m sigmastar -S 400K (CH341A)"   $B -m sigmastar -S 400K -i
+t 0 "-S before -m is the I2C clock"   $B -S 750K -m sigmastar -i
+t 1 "-m sigmastar -S 15M is an error" $B -m sigmastar -S 15M -i
+t 1 "-W with -m is an error"          $B -W 8080 -m sigmastar
+t 1 "-P ezp -q: no I2C"               $B -P ezp -q
+$B -q | grep -q '^40: .* 49 ' && $B -q | grep -q '^50: .* 59 ' && $B -q | grep -q '^00: -- ' && echo "ok   -q lists the I2C addresses that answer" || { echo "FAIL -q"; fail=1; }
+$B -h | grep -q '^ -m sigmastar' && $B -h | grep -q '^ -q ' && echo "ok   -h lists -m and -q" || { echo "FAIL -h without -m/-q"; fail=1; }
 MS_PROGRAMMER=1 $B -P ch347 -i | grep -q '^programmer: ch347' && MS_PROGRAMMER=1 $B -i | grep -q '^programmer: ch341a' && echo "ok   -P chooses the programmer, auto by default" || { echo "FAIL programmer choice"; fail=1; }
 $B -h | grep -q '^ -P ' && $B -h | grep -q '^ -S ' && echo "ok   -h lists -P and -S" || { echo "FAIL -h without -P/-S"; fail=1; }
 $B -h | grep -q '^ -k ' && echo "ok   -h lists -k" || { echo "FAIL -h without -k"; fail=1; }
@@ -133,6 +146,8 @@ grep -a '^ok\|^FAIL' ezpsim.log
 grep -a '^ok\|^FAIL' spisim.log
 ./usbfssim > usbfssim.log 2>&1 || fail=1
 grep -a '^ok\|^FAIL' usbfssim.log
+./ispsim > ispsim.log 2>&1 || fail=1
+grep -a '^ok\|^FAIL' ispsim.log
 ./websim > websim.log 2>&1 || fail=1
 grep -a '^ok\|^FAIL' websim.log
 [ "$fail" = 0 ] && echo "all tests passed"

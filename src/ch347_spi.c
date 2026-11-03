@@ -274,3 +274,86 @@ int ch347_spi_send_command(unsigned int writecnt, unsigned int readcnt, const un
 		return -1;
 	return 0;
 }
+
+/* ---- I2C, for the SigmaStar ISP ----
+   The stream commands of the CH341 (0xAA ...), on the same interface as the
+   SPI. Every byte sent with STM_OUT answers 0x01 for ACK; a read answers its
+   address ACK and then the data. The CH347F first switches its pins to I2C. */
+
+#define CH347_I2C_STREAM	0xAA
+#define CH347_I2C_STM_SET	0x60
+#define CH347_I2C_STM_START	0x74
+#define CH347_I2C_STM_STOP	0x75
+#define CH347_I2C_STM_OUT	0x80
+#define CH347_I2C_STM_IN	0xC0
+#define CH347_I2C_STM_END	0x00
+
+int ch347_i2c_speed(unsigned int speed)
+{
+	unsigned char pkt[16] = { CH347_I2C_STREAM, CH347_I2C_STM_SET | (speed & 3), CH347_I2C_STM_END };
+
+	if (!ch347)
+		return -1;
+	if (ch347_iface == CH347F_IFACE) {
+		static const unsigned char to_i2c[11] = { 0xe2, 0x08, 0x00, 0x00, 0x00, 0x81, 0x81, 0x00, 0x00, 0x00, 0x00 };
+		unsigned char cmd[sizeof(to_i2c)], ans[4];
+		int n = 0;
+
+		memcpy(cmd, to_i2c, sizeof(cmd));
+		if (bulk(CH347_WRITE_EP, cmd, sizeof(cmd), NULL) || bulk(CH347_READ_EP, ans, sizeof(ans), &n) || n != 4) {
+			printf("CH347F: the pins do not switch to I2C.\n");
+			return -1;
+		}
+	}
+	return bulk(CH347_WRITE_EP, pkt, 3, NULL) ? -1 : 0;
+}
+
+int ch347_i2c_write(unsigned char addr, const unsigned char *data, unsigned int len)
+{
+	unsigned char pkt[CH347_I2C_MAX + 8], ans[CH347_PACKET_SIZE];
+	unsigned int n = 0;
+	int got = 0;
+
+	if (!ch347 || len > CH347_I2C_MAX)
+		return -1;
+	pkt[n++] = CH347_I2C_STREAM;
+	pkt[n++] = CH347_I2C_STM_START;
+	pkt[n++] = CH347_I2C_STM_OUT | (len + 1);
+	pkt[n++] = addr << 1;
+	memcpy(pkt + n, data, len);
+	n += len;
+	pkt[n++] = CH347_I2C_STM_STOP;
+	pkt[n++] = CH347_I2C_STM_END;
+	if (bulk(CH347_WRITE_EP, pkt, n, NULL) || bulk(CH347_READ_EP, ans, sizeof(ans), &got) || got != (int)len + 1)
+		return -1;
+	for (int i = 0; i < got; i++)
+		if (ans[i] != 0x01)			/* NACK */
+			return -1;
+	return 0;
+}
+
+int ch347_i2c_read(unsigned char addr, unsigned char *data, unsigned int len)
+{
+	unsigned char pkt[16], ans[CH347_PACKET_SIZE];
+	unsigned int n = 0;
+	int got = 0;
+
+	if (!ch347 || len > CH347_I2C_MAX)
+		return -1;
+	pkt[n++] = CH347_I2C_STREAM;
+	pkt[n++] = CH347_I2C_STM_START;
+	pkt[n++] = CH347_I2C_STM_OUT | 1;
+	pkt[n++] = addr << 1 | 1;
+	if (len > 1)
+		pkt[n++] = CH347_I2C_STM_IN | (len - 1);
+	if (len)
+		pkt[n++] = CH347_I2C_STM_IN;
+	pkt[n++] = CH347_I2C_STM_STOP;
+	pkt[n++] = CH347_I2C_STM_END;
+	if (bulk(CH347_WRITE_EP, pkt, n, NULL) || bulk(CH347_READ_EP, ans, sizeof(ans), &got) ||
+	    got != (int)len + 1 || ans[0] != 0x01)
+		return -1;
+	if (len)
+		memcpy(data, ans + 1, len);
+	return 0;
+}

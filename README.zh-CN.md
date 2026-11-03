@@ -46,6 +46,7 @@ sudo ./microsnander -w firmware.bin -v
 - [示例](#示例)
 - [Web 模式](#web-模式)
 - [Android 应用](#android-应用)
+- [SigmaStar ISP](#sigmastar-isp)
 - [支持的芯片](#支持的芯片)
 - [芯片电压](#芯片电压)
 - [数据不确定的芯片](#数据不确定的芯片)
@@ -297,6 +298,29 @@ root；在电视盒子上会出现在主屏幕，可用遥控器操作）。
   设备（通过其文件描述符和 usbfs 代码，不使用 libusb）。签名的 APK 在发布版中：[latest](https://github.com/OpenIPC/microsnander/releases/latest) 里的 `microsnander-android.apk`。
 
 构建：在安装了 Android SDK 和 NDK r27c 的环境中运行 `cd android && gradle assembleDebug`。
+
+## SigmaStar ISP
+
+`-m sigmastar` 无需拆焊，直接在板上通过 SoC 的 ISP 桥（I2C）访问 SigmaStar（MStar）板的 SPI 闪存，
+用于修复引导程序损坏的板子（[OpenIPC wiki：SigmaStar unbrick](https://github.com/OpenIPC/wiki/blob/master/en/sigmastar-unbrick.md)）。
+
+- 接线：SoC 的 UART 接编程器的 I2C，TX 接 SDA，RX 接 SCL，并连接 GND。板子自行供电；桥无响应时，
+  给板子重新上电通常有效。
+- I2C 主机为 CH341A 或 CH347（CH347T 模式 1、CH347F），照常用 `-P` 选择或自动选择；EZP 编程器没有 I2C。
+- 此模式下 `-S` 为 I2C 时钟：`20K`、`100K`（默认）、`400K`、`750K`。
+- `-q` 列出有响应的 I2C 地址，用于检查接线（桥为 `0x49`，SoC 调试端口为 `0x59`）。
+- 其余与插座中的芯片相同：`-i`、`-r`、`-w`、`-e`、`-v`、`-a`、`-l`，SPI NOR 和 SPI NAND。Web 模式和
+  Android 应用不支持此模式。
+
+```sh
+microsnander -q                                  # 0x49 和 0x59 必须有响应
+microsnander -m sigmastar -i                     # 板上的闪存
+microsnander -m sigmastar -r backup.bin          # 先备份
+microsnander -m sigmastar -a 0 -l 0x40000 -e     # 引导程序区域，然后
+microsnander -m sigmastar -w u-boot.bin -v       # 写入可用的引导程序
+```
+
+此模式较慢：数据通过 I2C 传输，每次事务约 20–25 字节。几百 KB 的引导程序需要几分钟；整片 16 MB 芯片要久得多。
 
 ## 支持的芯片
 
