@@ -242,6 +242,11 @@ int main(void)
 		FILE *e = tmpfile();
 		check(ms_write_file(&c, e, NULL, NULL, m, sizeof(m)) < 0 && strstr(m, "empty") && opens == opens_before,
 		      "  an empty file is refused before the programmer is opened");
+		ms_expect("W25Q16", 2097152);		/* a write for another chip that ends early */
+		check(ms_write_file(&c, e, NULL, NULL, m, sizeof(m)) < 0 && !ms_detect(&c, m, sizeof(m)) && !strcmp(c.chip, "W25Q80"),
+		      "  and its chip check does not stay for the next Detect");
+		ms_expect("W25Q16", 2097152);
+		check(!ms_detect(&c, m, sizeof(m)), "  a Detect is never bound to the chip of an Erase or Write");
 		fclose(e);
 	}
 	{						/* an -o path longer than any fixed buffer */

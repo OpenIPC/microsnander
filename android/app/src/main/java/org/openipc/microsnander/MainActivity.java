@@ -23,6 +23,7 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.provider.MediaStore;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
@@ -155,9 +156,11 @@ public class MainActivity extends Activity {
         if (!busy && pendingNext != null) {	// Detect ended while there was no screen
             Found f = pendingNext;
             Native.Result r = pendingFor;
+            boolean fresh = SystemClock.elapsedRealtime() - pendingAt < PENDING_MS;
             pendingNext = null;
             pendingFor = null;
-            f.found(this, r);
+            if (fresh)
+                f.found(this, r);
         }
     }
 
@@ -274,6 +277,9 @@ public class MainActivity extends Activity {
     /** a Found whose Detect ended with no screen: the next screen runs it */
     private static Found pendingNext;
     private static Native.Result pendingFor;
+    private static long pendingAt;		// when that Detect ended (elapsedRealtime)
+    /** a screen recreated within this keeps the step (a rotation); later it is dropped */
+    private static final long PENDING_MS = 10000;
 
     /** the whole chip, only if it is still the one r found */
     private void erase(Native.Result r) {
@@ -315,6 +321,7 @@ public class MainActivity extends Activity {
                     } else if (found) {
                         pendingNext = next;
                         pendingFor = r;
+                        pendingAt = SystemClock.elapsedRealtime();
                     }
                 });
             });

@@ -50,13 +50,17 @@ void ms_expect(const char *chip, long long size)
 	expect_size = size;
 }
 
-static int chip_open(struct ms_chip *c, char *msg, size_t n)
+/* confirmed: an Erase or a Write, which goes only to the chip of ms_expect();
+   any other operation drops that expectation */
+static int chip_open(struct ms_chip *c, char *msg, size_t n, int confirmed)
 {
 	char want[sizeof(expect_chip)];
 	long long want_size = expect_size;
 
 	memcpy(want, expect_chip, sizeof(want));	/* for this operation only */
 	expect_chip[0] = 0;
+	if (!confirmed)
+		want[0] = 0;
 
 	int ret = programmer_init(false);
 
@@ -126,7 +130,7 @@ void ms_dump_name(char *name, size_t n, const char *chip, int range, unsigned lo
 
 int ms_detect(struct ms_chip *c, char *msg, size_t n)
 {
-	if (chip_open(c, msg, n))
+	if (chip_open(c, msg, n, 0))
 		return -1;
 	read_registers(c);
 	say(msg, n, "Found %s with %s, %lld MB.", c->programmer, c->chip, flen >> 20);
@@ -141,7 +145,7 @@ int ms_read(struct ms_chip *c, FILE *out, unsigned long long a, unsigned long lo
 	unsigned long long l;
 	int ret = -1;
 
-	if (chip_open(c, msg, n))
+	if (chip_open(c, msg, n, 0))
 		return -1;
 	l = len ? len : (a < (unsigned long long)flen ? (unsigned long long)flen - a : 0);
 	if (a >= (unsigned long long)flen || l > (unsigned long long)flen - a) {
@@ -180,7 +184,7 @@ int ms_erase(struct ms_chip *c, ms_progress cb, void *ctx, char *msg, size_t n)
 {
 	int ret = -1;
 
-	if (chip_open(c, msg, n))
+	if (chip_open(c, msg, n, 1))
 		return -1;
 	progress(cb, ctx, "erase", 0, 0);
 	if (prog.flash_erase(0, flen))
@@ -208,16 +212,18 @@ int ms_write_file(struct ms_chip *c, FILE *f, ms_progress cb, void *ctx, char *m
 	int ret = -1;
 
 	if (fseek(f, 0, SEEK_END) || (end = ftell(f)) < 0) {
+		ms_expect(NULL, 0);		/* this write ends before the chip is opened */
 		say(msg, n, "Cannot read the file.");
 		return -1;
 	}
 	l = end;
 	if (!l) {				/* before the programmer is touched */
+		ms_expect(NULL, 0);
 		memset(c, 0, sizeof(*c));
 		say(msg, n, "The file is empty.");
 		return -1;
 	}
-	if (chip_open(c, msg, n))
+	if (chip_open(c, msg, n, 1))
 		return -1;
 	if (l > (unsigned long long)flen) {
 		say(msg, n, "The file (0x%llx bytes) is larger than the chip (0x%llx).", l, flen);
@@ -275,7 +281,7 @@ int ms_registers(struct ms_chip *c, char *msg, size_t n)
 {
 	int ret;
 
-	if (chip_open(c, msg, n))
+	if (chip_open(c, msg, n, 0))
 		return -1;
 	ret = read_registers(c);
 	if (ret)
@@ -290,7 +296,7 @@ int ms_unprotect(struct ms_chip *c, char *msg, size_t n)
 {
 	int ret = -1;
 
-	if (chip_open(c, msg, n))
+	if (chip_open(c, msg, n, 0))
 		return -1;
 	if (!prog.flash_unprotect)
 		say(msg, n, "Clearing the protection is for SPI NOR through the CH341A or the CH347 only.");

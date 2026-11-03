@@ -141,8 +141,10 @@ JNIEXPORT jobject JNICALL FN(write)(JNIEnv *env, jclass cls, jint fd, jint vid, 
 	memset(&c, 0, sizeof(c));
 	if (f)
 		ret = ms_write_file(&c, f, on_progress, &cb, msg, sizeof(msg));
-	else
+	else {
+		ms_expect(NULL, 0);		/* no write: the next operation is not bound to the chip */
 		snprintf(msg, sizeof(msg), "Cannot read the file.");
+	}
 	if (f)
 		fclose(f);
 	(*env)->ReleaseStringUTFChars(env, jpath, path);
