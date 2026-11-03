@@ -116,11 +116,12 @@ public class MainActivity extends Activity {
         buttons[0].setOnClickListener(v -> run(R.string.detecting, true, (fd, vid, pid, p) -> Native.detect(fd, vid, pid)));
         buttons[1].setOnClickListener(v -> read());
         // Erase and Write detect first: no question and no file picker without a chip
-        buttons[2].setOnClickListener(v -> detectThen(r -> new AlertDialog.Builder(this)
-                .setMessage(getString(R.string.erase_confirm, r.chip, sizeOf(r.size)))
-                .setPositiveButton(R.string.erase, (d, w) -> run(R.string.erasing, false, Native::erase))
+        // the next step goes to the screen there is when Detect ends (a, not this)
+        buttons[2].setOnClickListener(v -> detectThen((a, r) -> new AlertDialog.Builder(a)
+                .setMessage(a.getString(R.string.erase_confirm, r.chip, sizeOf(r.size)))
+                .setPositiveButton(R.string.erase, (d, w) -> a.erase(r))
                 .setNegativeButton(android.R.string.cancel, null).show()));
-        buttons[3].setOnClickListener(v -> detectThen(r -> pickWrite()));
+        buttons[3].setOnClickListener(v -> detectThen((a, r) -> a.pickWrite()));
         buttons[4].setOnClickListener(v -> run(R.string.reading_registers, true, (fd, vid, pid, p) -> Native.registers(fd, vid, pid)));
         buttons[5].setOnClickListener(v -> run(R.string.unprotecting, true, (fd, vid, pid, p) -> Native.unprotect(fd, vid, pid)));
         saveAs.setOnClickListener(v -> {
@@ -151,6 +152,13 @@ public class MainActivity extends Activity {
         else
             showIdle(getString(R.string.press_detect));
         showRegisters(lastSr);
+        if (!busy && pendingNext != null) {	// Detect ended while there was no screen
+            Found f = pendingNext;
+            Native.Result r = pendingFor;
+            pendingNext = null;
+            pendingFor = null;
+            f.found(this, r);
+        }
     }
 
     @Override
@@ -260,7 +268,20 @@ public class MainActivity extends Activity {
         runThen(phase, registersOp, op, null, null);
     }
 
-    interface Found { void found(Native.Result r); }
+    /** what comes after a Detect that found a chip, on the screen there is then */
+    interface Found { void found(MainActivity a, Native.Result r); }
+
+    /** a Found whose Detect ended with no screen: the next screen runs it */
+    private static Found pendingNext;
+    private static Native.Result pendingFor;
+
+    /** the whole chip, only if it is still the one r found */
+    private void erase(Native.Result r) {
+        run(R.string.erasing, false, (fd, vid, pid, p) -> {
+            Native.expect(r.chip, r.size);
+            return Native.erase(fd, vid, pid, p);
+        });
+    }
 
     /** Detect, then next on the screen thread when a chip was found */
     private void detectThen(Found next) {
@@ -285,11 +306,15 @@ public class MainActivity extends Activity {
                     if (r != null && (registersOp || r.sr >= 0))
                         lastSr = r.sr;		// Read, Erase and Write leave the last registers shown
                     MainActivity a = current.get();
+                    boolean found = next != null && r != null && r.ok && !r.chip.isEmpty();
                     if (a != null) {
                         a.showResult(r, saved);
                         a.showRegisters(lastSr);
-                        if (next != null && r != null && r.ok && !r.chip.isEmpty())
-                            next.found(r);
+                        if (found)
+                            next.found(a, r);
+                    } else if (found) {
+                        pendingNext = next;
+                        pendingFor = r;
                     }
                 });
             });
@@ -523,12 +548,12 @@ public class MainActivity extends Activity {
             return;				// the chip of the Detect before the picker
         new AlertDialog.Builder(this)
                 .setMessage(getString(R.string.write_confirm, r.chip, sizeOf(r.size)))
-                .setPositiveButton(R.string.write, (d, w) -> write(u))
+                .setPositiveButton(R.string.write, (d, w) -> write(u, r))
                 .setNegativeButton(android.R.string.cancel, null).show();
     }
 
     /** the file is staged and written in the worker, the screen busy all along */
-    private void write(Uri u) {
+    private void write(Uri u, Native.Result chip) {
         Context app = getApplicationContext();
         File tmp = new File(getCacheDir(), "write.tmp");
         run(R.string.writing, false, (fd, vid, pid, p) -> {
@@ -540,6 +565,7 @@ public class MainActivity extends Activity {
                 tmp.delete();
                 return new Native.Result(false, app.getString(R.string.cannot_open), "", "", 0, -1, "", "", "");
             }
+            Native.expect(chip.chip, chip.size);	// only into the chip confirmed
             Native.Result r = Native.write(fd, vid, pid, tmp.getPath(), p);
             //noinspection ResultOfMethodCallIgnored
             tmp.delete();

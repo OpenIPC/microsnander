@@ -52,6 +52,9 @@ final class Native {
 
     static synchronized native Result read(int fd, int vid, int pid, String path, Progress progress);
 
+    /** the chip the next operation must find, or it does nothing (Erase and Write) */
+    static synchronized native void expect(String chip, long size);
+
     static synchronized native Result erase(int fd, int vid, int pid, Progress progress);
 
     static synchronized native Result write(int fd, int vid, int pid, String path, Progress progress);

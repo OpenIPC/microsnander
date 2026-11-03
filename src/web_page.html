@@ -147,12 +147,17 @@ function render(s){
 }
 function offline(){bulb('l-link','bad');$('t-link').textContent='No link';$('state').textContent='Link offline';$('state').className='state bad'}
 function poll(){fetch(base+'/api/state',{cache:'no-store'}).then(function(r){return r.json()}).then(render).catch(offline)}
-function run(op,body,btn,accepted){
+/* accepted(n): the operation started as number n ("Started n."); chip: the
+   one confirmed for Erase or Write, the server refuses another one */
+function run(op,body,btn,accepted,chip){
  lastOp=op;btn.classList.add('pressed');setTimeout(function(){btn.classList.remove('pressed')},180);
  $('log').textContent='> '+op+(body?' '+body.byteLength+' bytes':'')+' ... engaging';
- fetch(base+'/api/'+op,{method:'POST',headers:{'X-MicroSNANDer':'1'},body:body||''}).then(function(r){
-  if(!r.ok)return r.text().then(function(t){$('log').textContent='> '+op+': '+t});
-  $('log').innerHTML='&nbsp;';poll();if(!timer)timer=setInterval(poll,500);if(accepted)accepted();
+ var h={'X-MicroSNANDer':'1'};if(chip)h['X-MicroSNANDer-Chip']=chip.chip+';'+chip.size;
+ fetch(base+'/api/'+op,{method:'POST',headers:h,body:body||''}).then(function(r){
+  return r.text().then(function(t){
+   if(!r.ok){$('log').textContent='> '+op+': '+t;return}
+   $('log').innerHTML='&nbsp;';poll();if(!timer)timer=setInterval(poll,500);if(accepted)accepted(parseInt(t.split(' ')[1],10));
+  });
  }).catch(offline);
 }
 $('b-detect').onclick=function(){run('detect',null,this)};
@@ -160,13 +165,15 @@ $('b-read').onclick=function(){run('read',null,this)};
 $('b-registers').onclick=function(){run('registers',null,this)};
 /* Detect again, then cb with the state, only when a chip is there */
 function detectThen(btn,cb){
- /* from the 202 of this Detect on: the state is of this Detect when it is not busy */
- run('detect',null,btn,function wait(){setTimeout(function(){fetch(base+'/api/state',{cache:'no-store'}).then(function(r){return r.json()}).then(function(s){
-  render(s);if(s.busy)return wait();if(s.op==='detect'&&s.ok&&s.chip)cb(s);
- }).catch(offline)},300)});
+ /* the state of this Detect only: its number, and not busy any more */
+ run('detect',null,btn,function(n){(function wait(){setTimeout(function(){fetch(base+'/api/state',{cache:'no-store'}).then(function(r){return r.json()}).then(function(s){
+  render(s);if(s.seq===n&&s.busy)return wait();
+  if(s.seq!==n){$('log').textContent='> another operation ran meanwhile: press again';return}
+  if(s.op==='detect'&&s.ok&&s.chip)cb(s);
+ }).catch(offline)},300)})()});
 }
 function chipName(s){return s.chip+' ('+size(s.size)+')'}
-$('b-erase').onclick=function(){var b=this;detectThen(b,function(s){if(confirm('Erase the whole '+chipName(s)+'?'))run('erase',null,b)})};
+$('b-erase').onclick=function(){var b=this;detectThen(b,function(s){if(confirm('Erase the whole '+chipName(s)+'?'))run('erase',null,b,null,s)})};
 $('b-unprotect').onclick=function(){run('unprotect',null,this)};
 $('b-write').onclick=function(){$('file').click()};
 $('file').onchange=function(){
@@ -174,7 +181,7 @@ $('file').onchange=function(){
  if(!f)return;
  detectThen($('b-write'),function(s){
   if(!confirm('Write '+f.name+' ('+f.size+' bytes) from address 0 into the erased '+chipName(s)+', then verify?'))return;
-  f.arrayBuffer().then(function(b){run('write',b,$('b-write'))});
+  f.arrayBuffer().then(function(b){run('write',b,$('b-write'),null,s)});
  });
 };
 poll();

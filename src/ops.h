@@ -39,6 +39,11 @@ int ms_write_file(struct ms_chip *chip, FILE *f, ms_progress cb, void *ctx, char
 int ms_registers(struct ms_chip *chip, char *msg, size_t n);
 int ms_unprotect(struct ms_chip *chip, char *msg, size_t n);
 
+/* the chip (name and size of a Detect) the next operation must find, or
+   it does nothing: the one the user confirmed an Erase or a Write for.
+   It holds for that one operation; NULL or "" for any chip. */
+void ms_expect(const char *chip, long long size);
+
 /* flash-YYYYMMDDHHMM-CHIP[-0xADDR-0xLEN].bin, local time */
 void ms_dump_name(char *name, size_t n, const char *chip, int range, unsigned long long addr, unsigned long long len);
 

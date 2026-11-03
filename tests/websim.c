@@ -117,7 +117,7 @@ int main(void)
 	check(request("GET", "/api/state", "eDpzZWNyZXQ=", NULL, 0) == 200, "  the right one (any user name), 200");	/* x:secret */
 	web_password = NULL;
 
-	check(request("POST", "/api/detect", NULL, NULL, 0) == 202, "Detect starts");
+	check(request("POST", "/api/detect", NULL, NULL, 0) == 202 && strstr(resp, "Started 1."), "Detect starts, as operation 1");
 	wait_idle();
 	request("GET", "/api/state", NULL, NULL, 0);
 	check(strstr(body_of(), "\"programmer\":\"CH347\"") && strstr(body_of(), "\"chip\":\"W25Q80\"") &&
@@ -125,6 +125,23 @@ int main(void)
 	      "  the state has the programmer, the chip, its size and the status registers");
 	check(strstr(body_of(), "\"voltage\":\"3.3\"") && strstr(body_of(), "\"warning\":\"\""),
 	      "  a 3.3 V chip on the CH347: no warning");
+	check(strstr(body_of(), "\"seq\":1,") != NULL, "  the state is of operation 1");
+
+	/* Erase for a chip confirmed but not in the socket: refused, nothing erased */
+	mem[0] = 0x12;
+	extra = "Host: 127.0.0.1:8080\r\nX-MicroSNANDer-Chip: W25Q16;2097152\r\n";
+	check(request("POST", "/api/erase", NULL, NULL, 0) == 202, "Erase for the W25Q16 confirmed, a W25Q80 in the socket");
+	extra = "";
+	wait_idle();
+	request("GET", "/api/state", NULL, NULL, 0);
+	check(strstr(body_of(), "\"ok\":false") && strstr(body_of(), "not the W25Q16") && mem[0] == 0x12,
+	      "  refused before anything is erased");
+	extra = "Host: 127.0.0.1:8080\r\nX-MicroSNANDer-Chip: W25Q80;1048576\r\n";
+	request("POST", "/api/erase", NULL, NULL, 0);
+	extra = "";
+	wait_idle();
+	request("GET", "/api/state", NULL, NULL, 0);
+	check(strstr(body_of(), "\"ok\":true") && mem[0] == 0xff, "  for the W25Q80 that is there: erased");
 
 	sim_chip = "W25Q128FW";
 	request("POST", "/api/detect", NULL, NULL, 0);
@@ -145,6 +162,15 @@ int main(void)
 	check(strstr(body_of(), "\"programmer\":\"CH347\"") && strstr(body_of(), "\"chip\":\"\"") &&
 	      strstr(body_of(), "\"warning\":\"\"") && strstr(body_of(), "\"sr\":null"),
 	      "  then the CH347 with no chip: the chip and the warnings of the CH341A are gone");
+	use_ch341a = 0; no_chip = 0;
+	request("POST", "/api/detect", NULL, NULL, 0);
+	wait_idle();
+	no_chip = 1;					/* the same programmer, the chip taken out */
+	request("POST", "/api/detect", NULL, NULL, 0);
+	wait_idle();
+	request("GET", "/api/state", NULL, NULL, 0);
+	check(strstr(body_of(), "\"chip\":\"\"") && strstr(body_of(), "\"ok\":false"),
+	      "  a failed Detect on the same programmer forgets the chip: Erase and Write go off");
 	no_chip = 0;
 	sim_chip = NULL;
 	request("POST", "/api/detect", NULL, NULL, 0);

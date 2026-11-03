@@ -39,8 +39,25 @@ static void progress(ms_progress cb, void *ctx, const char *phase, unsigned long
 		cb(ctx, phase, done, total);
 }
 
+/* the chip the user confirmed for the next operation: Erase and Write go
+   only to it; "" takes any */
+static char expect_chip[64];
+static long long expect_size;
+
+void ms_expect(const char *chip, long long size)
+{
+	snprintf(expect_chip, sizeof(expect_chip), "%s", chip ? chip : "");
+	expect_size = size;
+}
+
 static int chip_open(struct ms_chip *c, char *msg, size_t n)
 {
+	char want[sizeof(expect_chip)];
+	long long want_size = expect_size;
+
+	memcpy(want, expect_chip, sizeof(want));	/* for this operation only */
+	expect_chip[0] = 0;
+
 	int ret = programmer_init(false);
 
 	memset(c, 0, sizeof(*c));
@@ -65,6 +82,12 @@ static int chip_open(struct ms_chip *c, char *msg, size_t n)
 	c->size = flen;
 	c->voltage = ms_voltage(c->chip);
 	ms_voltage_warning(c->programmer, c->chip, c->warning, sizeof(c->warning));
+	if (want[0] && (strcmp(c->chip, want) || c->size != want_size)) {
+		say(msg, n, "The chip is %s (%lld MB) now, not the %s (%lld MB) confirmed: nothing done.",
+		    c->chip, c->size >> 20, want, want_size >> 20);
+		programmer_shutdown();
+		return -1;
+	}
 	return 0;
 }
 
