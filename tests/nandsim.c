@@ -9,8 +9,9 @@
 #include <string.h>
 #include "../src/types.h"
 #include "../src/spi_controller.h"
-#include "../src/spi_nand_flash.h"
 #include "../src/nandcmd_api.h"
+/* the driver is built into this file, so the checks can walk its chip table */
+#include "../src/spi_nand_flash.c"
 
 int snand_read(unsigned char *buf, unsigned long from, unsigned long len);
 int snand_write(unsigned char *buf, unsigned long to, unsigned long len);
@@ -30,6 +31,7 @@ static unsigned char cmd[16];
 static unsigned int ncmd, nread;
 static long ecc_bad[MAXBAD], prog_fail[MAXBAD];
 static unsigned int nprog;		/* program executes (0x10) */
+static int col_hi_read = -1, col_hi_load = -1;	/* high column byte of the last read from cache / program load */
 static int stuck_busy;			/* the status register always shows OIP */
 static int busy_after = -1;		/* stay busy from this program execute on */
 
@@ -85,6 +87,8 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Chip_Select_High(void)
 {
 	unsigned char *p;
 	switch (cmd[0]) {
+	case 0x03: case 0x0b: case 0x3b: case 0x6b: col_hi_read = cmd[1]; break;
+	case 0x02: case 0x32: case 0x84: case 0x34: col_hi_load = cmd[1]; break;
 	case 0x1f: feat[cmd[1]] = cmd[2]; break;
 	case 0x06: feat[0xc0] |= 0x02; break;
 	case 0x04: feat[0xc0] &= ~0x02; break;
@@ -154,6 +158,34 @@ int main(void)
 	}
 	chip(0xef, 0xaa, 0x99);
 	check(snand_init() < 0, "EF AA with an unknown third byte is not detected");
+
+	/* every chip of the table is detected by its own ID and gets its own entry;
+	   only the three old entries below share an ID with an earlier one */
+	{
+		const int n = sizeof(spi_nand_flash_tables) / sizeof(spi_nand_flash_tables[0]);
+		int bad = 0, shadowed = 0;
+		for (int i = 0; i < n; i++) {
+			const struct SPI_NAND_FLASH_INFO_T *e = &spi_nand_flash_tables[i];
+			chip(e->mfr_id, e->dev_id, e->dev_id_2);
+			long size = snand_init();
+			const char *got = (_SPI_NAND_GET_DEVICE_INFO_PTR)->ptr_name;
+			if (size != (long)e->device_size || !got || strcmp(got, e->ptr_name)) {
+				int first = -1;
+				for (int j = 0; j < i && first < 0; j++)
+					if (spi_nand_compare(e, &spi_nand_flash_tables[j]) == SPI_NAND_FLASH_RTN_NO_ERROR)
+						first = j;
+				if (first >= 0 && (!strcmp(e->ptr_name, "ZENTEL A5U12A21ASC") || !strcmp(e->ptr_name, "ZENTEL A5U1GA21BWS") ||
+						   !strcmp(e->ptr_name, "MIRA PSU1GS20BN"))) {
+					shadowed++;
+					continue;
+				}
+				printf("     %s: detected as %s, size %ld\n", e->ptr_name, got ? got : "nothing", size);
+				bad++;
+			}
+		}
+		printf("     %d SPI NAND chips in the table\n", n);
+		check(!bad && shadowed == 3, "every SPI NAND chip of the table is detected by its ID");
+	}
 
 	chip(0xef, 0xaa, 0x21);
 	snand_init();
@@ -230,6 +262,21 @@ int main(void)
 	check(snand_write(buf, 60L * PAGE, 4 * PAGE) == 4 * PAGE && !memcmp(page(64), buf + 3 * PAGE, PAGE),
 	      "-k write with room left in -a/-l uses it");
 	Skip_BAD_end = 0;
+
+	/* two planes: the plane bit is column bit 12 on a 2 KB page, bit 13 on a 4 KB page */
+	chip(0xc2, 0x35, 0x03);			/* MX35LF4G24AD: 4 KB page, two planes */
+	snand_init();
+	snand_read(got, 0, 16);
+	check(col_hi_read == 0x00, "4 KB page, plane 0: no plane bit in the column");
+	snand_read(got, 64L * 4096, 16);
+	check(col_hi_read == 0x20, "4 KB page, plane 1: plane bit is column bit 13");
+	fill(buf, 1, 12);
+	snand_write(buf, 64L * 4096, 16);
+	check(col_hi_load == 0x20, "  and the same on program load");
+	chip(0xc2, 0x22, 0x00);			/* MX35LF2GE4AB: 2 KB page, two planes */
+	snand_init();
+	snand_read(got, 64L * 2048, 16);
+	check(col_hi_read == 0x10, "2 KB page, plane 1: plane bit is column bit 12");
 
 	/* a page with an ECC error is not served from the driver cache on the next read */
 	chip(0xef, 0xaa, 0x21);

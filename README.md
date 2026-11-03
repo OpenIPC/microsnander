@@ -13,7 +13,7 @@
 MicroSNANDer is a command-line programmer for SPI NOR and SPI NAND flash chips
 with the cheap CH341A USB programmer. It reads, writes, erases and verifies the
 flash of cameras, routers and other boards, removes the write protection of SPI
-NOR chips, and knows 127 SPI NOR and 81 SPI NAND chips.
+NOR chips, and knows 127 SPI NOR and 135 SPI NAND chips.
 
 It is a stripped-down, extended, deeply modified and optimized version of
 [SNANDer](https://github.com/McMCCRU/SNANDer) 1.7.4 by McMCC: Linux only, without
@@ -150,7 +150,7 @@ microsnander -d -r raw.bin
 
 `microsnander -L` prints the list: 127 SPI NOR chips (Winbond, Eon, Fudan
 Microelectronics FM25Q, GigaDevice, Macronix, Spansion, XMC, XTX, Zbit, Giantec
-GM25Q and others) and 81 SPI NAND chips (Etron, GigaDevice, Heyang, Foresee, ESMT,
+GM25Q and others) and 135 SPI NAND chips (Etron, GigaDevice, Heyang, Foresee, ESMT, Dosilicon, XTX,
 Micron, Toshiba/Kioxia, Winbond, Macronix and others).
 A chip that is not on the list is reported as not detected; its ID from the
 output helps to add it.
