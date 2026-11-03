@@ -60,6 +60,7 @@ extern unsigned int bsize;
 static libusb_device_handle *ezp;
 static int ezp_detached;
 static unsigned int ezp_id;			/* JEDEC ID, 3 bytes */
+static unsigned int ezp_chip_id;		/* the ID the chip was set up with */
 static unsigned long ezp_size;
 
 static const unsigned short ezp_pids[] = { 0x310b, 0x310c, 0x310d };
@@ -150,7 +151,22 @@ static int ezp_detect(void)
 	if (ezp_command(pkt, answer))
 		return -1;
 	ezp_id = (answer[1] << 16) | (answer[2] << 8) | answer[3];
+	/* every operation detects again: it must still be the chip set up */
+	if (ezp_chip_id && ezp_id != ezp_chip_id) {
+		printf("EZP: the chip changed (ID %06x, was %06x): run again.\n", ezp_id, ezp_chip_id);
+		ezp_id = ezp_chip_id;
+		return -1;
+	}
 	return 0;
+}
+
+static int ezp_in_chip(unsigned long addr, unsigned long len)
+{
+	if (addr >= ezp_size || len > ezp_size - addr) {
+		printf("The range 0x%lx + 0x%lx is past the chip end (0x%lx).\n", addr, len, ezp_size);
+		return 0;
+	}
+	return 1;
 }
 
 /* Detect, set the geometry, start a stream at addr */
@@ -222,6 +238,8 @@ static int ezp_read(unsigned char *buf, unsigned long from, unsigned long len)
 
 	if (!len)
 		return 0;
+	if (!ezp_in_chip(from, len))
+		return -1;
 	timer_start();
 	ret = ezp_read_range(buf, from, len, 1);
 	if (!ret)
@@ -266,12 +284,13 @@ fail:
 static int ezp_write(unsigned char *buf, unsigned long to, unsigned long len)
 {
 	static unsigned char chunk[EZP_READ_PART];
-	unsigned long first = to - to % EZP_PAGE, end = to + len, done;
+	unsigned long first = to - to % EZP_PAGE, end, done;
 
 	if (!len)
 		return 0;
-	if (end > ezp_size)
+	if (!ezp_in_chip(to, len))
 		return -1;
+	end = to + len;
 	end += (EZP_PAGE - end % EZP_PAGE) % EZP_PAGE;
 
 	timer_start();
@@ -348,6 +367,7 @@ long ezp_flash_init(struct flash_cmd *cmd)
 	       name, ezp_size >> 20);
 	if (ezp_detect())			/* again, with the chip size */
 		return -1;
+	ezp_chip_id = ezp_id;
 	cmd->flash_read = ezp_read;
 	cmd->flash_write = ezp_write;
 	cmd->flash_erase = ezp_erase;
@@ -392,7 +412,7 @@ int ezp_init(void)
 		libusb_exit(NULL);
 		return -1;
 	}
-	ezp_id = 0;
+	ezp_id = ezp_chip_id = 0;
 	ezp_size = 0;
 	return 0;
 }

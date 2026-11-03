@@ -9,6 +9,7 @@ static unsigned char mem[SIM_SIZE];
 static unsigned char answer[EZP_PKT];
 static int answer_ready, streaming, busy, resets, erases, claimed = -1;
 static unsigned long addr;
+static unsigned char sim_id = 0x14;		/* capacity byte of the chip in the socket */
 
 unsigned int bsize;
 
@@ -45,7 +46,7 @@ int libusb_bulk_transfer(libusb_device_handle *h, unsigned char ep, unsigned cha
 		if (len != EZP_PKT) return LIBUSB_ERROR_IO;
 		memset(answer, 0, sizeof(answer));
 		switch (d[1]) {
-		case EZP_OP_DETECT: answer[1] = 0xef; answer[2] = 0x40; answer[3] = 0x14; answer_ready = 1; streaming = 0; break;
+		case EZP_OP_DETECT: answer[1] = 0xef; answer[2] = 0x40; answer[3] = sim_id; answer_ready = 1; streaming = 0; break;
 		case EZP_OP_SETUP: answer_ready = 1; break;
 		case EZP_OP_START:	/* as the real one: only a multiple of 256 starts right */
 			addr = be(d + 8, 4); if (addr % 256) addr = addr + 0x1000;
@@ -112,6 +113,14 @@ int main(void)
 	int same = 1;
 	for (unsigned i = 0; i < sizeof(r); i++) if (r[i] != mem[12345 + i]) { same = 0; break; }
 	check(same, "  the data in order");
+
+	check(cmd.flash_read(r, SIM_SIZE - 16, 17) < 0 && cmd.flash_read(r, SIM_SIZE, 1) < 0, "a read past the chip end is refused");
+	memset(mem, 0xff, sizeof(mem));
+	check(cmd.flash_write(w, (unsigned long)-1, 1) < 0 && cmd.flash_write(w, SIM_SIZE - 1, 2) < 0, "a write past the chip end, or at a wrapped address, is refused");
+	sim_id = 0x15;					/* another chip put in */
+	check(cmd.flash_write(w, 0, 16) < 0 && mem[0] == 0xff, "another chip in the socket: the write stops");
+	check(cmd.flash_read(r, 0, 16) < 0, "  and so does a read");
+	sim_id = 0x14;
 
 	check(ezp_shutdown() == 0 && resets == 1 && claimed == -1, "shutdown resets the programmer and releases it");
 
