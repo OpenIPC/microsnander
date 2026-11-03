@@ -4,6 +4,16 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.18.0 — 2026-11-03
+
+- No libusb: microsnander talks to the programmers through the Linux usbfs itself
+  (`src/usbfs.c`: devices from `/dev/bus/usb`, bulk and control transfers by ioctl, URBs
+  for the asynchronous CH341A transfers, the kernel driver let go and given back with
+  `USBDEVFS_DISCONNECT`/`CONNECT`, the file descriptor of the Android app). The drivers
+  do not change. The static binaries need no libusb build and are smaller (x86_64 220 KB
+  instead of 319 KB); the Android app builds without it too. `make LIBUSB=1` builds
+  against libusb-1.0 as before, CI builds both.
+
 ## 1.17.1 — 2026-11-03
 
 - Write in the web mode and the Android app goes from the file in parts of 64 KB, read
