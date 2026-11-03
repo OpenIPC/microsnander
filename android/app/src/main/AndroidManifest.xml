@@ -6,6 +6,12 @@
     <uses-feature android:name="android.software.leanback" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
 
+    <!-- the answer to our USB permission request: only our own PendingIntent sends it -->
+    <permission
+        android:name="org.openipc.microsnander.permission.USB_RESULT"
+        android:protectionLevel="signature" />
+    <uses-permission android:name="org.openipc.microsnander.permission.USB_RESULT" />
+
     <!-- Downloads on Android 5-9; from Android 10 the MediaStore needs none -->
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
@@ -29,6 +35,7 @@
 
         <activity
             android:name=".MainActivity"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation|uiMode|density"
             android:exported="true"
             android:launchMode="singleTask">
             <intent-filter>

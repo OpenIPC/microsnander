@@ -1,6 +1,10 @@
 package org.openipc.microsnander;
 
-/** The operations of microsnander (src/ops.c) on the USB device the app opened. */
+/**
+ * The operations of microsnander (src/ops.c) on the USB device the app
+ * opened. One at a time (synchronized): the native code has one programmer
+ * and one chip.
+ */
 final class Native {
     static {
         System.loadLibrary("microsnander");
@@ -37,15 +41,15 @@ final class Native {
         void progress(String phase, long done, long total);
     }
 
-    static native Result detect(int fd, int vid, int pid);
+    static synchronized native Result detect(int fd, int vid, int pid);
 
-    static native Result read(int fd, int vid, int pid, String path, Progress progress);
+    static synchronized native Result read(int fd, int vid, int pid, String path, Progress progress);
 
-    static native Result erase(int fd, int vid, int pid, Progress progress);
+    static synchronized native Result erase(int fd, int vid, int pid, Progress progress);
 
-    static native Result write(int fd, int vid, int pid, String path, Progress progress);
+    static synchronized native Result write(int fd, int vid, int pid, String path, Progress progress);
 
-    static native Result registers(int fd, int vid, int pid);
+    static synchronized native Result registers(int fd, int vid, int pid);
 
-    static native Result unprotect(int fd, int vid, int pid);
+    static synchronized native Result unprotect(int fd, int vid, int pid);
 }

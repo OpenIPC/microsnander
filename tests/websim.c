@@ -21,10 +21,11 @@ static int f_read(unsigned char *b, unsigned long from, unsigned long len) { mem
 static int f_write(unsigned char *b, unsigned long to, unsigned long len) { for (unsigned long i = 0; i < len; i++) mem[to + i] &= b[i]; return len; }
 static int f_erase(unsigned long offs, unsigned long len) { memset(mem + offs, 0xff, len); return 0; }
 static int f_unprotect(void) { unprotects++; return 0; }
+static int swap_chip, inits;		/* swap_chip: another chip from the second open on */
 long flash_cmd_init(struct flash_cmd *c)
 {
 	c->flash_read = f_read; c->flash_write = f_write; c->flash_erase = f_erase; c->flash_unprotect = f_unprotect;
-	flash_chip_name = "W25Q80";
+	flash_chip_name = swap_chip && inits++ ? "W25Q16" : "W25Q80";
 	return SIM_SIZE;
 }
 int snor_read_status(unsigned char sr[3]) { sr[0] = 0x1c; sr[1] = 0x02; sr[2] = 0x60; return 0; }
@@ -147,6 +148,8 @@ int main(void)
 
 	check(request("POST", "/api/erase", NULL, NULL, 0) == 202, "Erase starts");
 	wait_idle();
+	request("GET", "/api/state", NULL, NULL, 0);
+	check(strstr(body_of(), "\"sr\":[28,2,96]") && strstr(body_of(), "\"chip\":\"W25Q80\""), "  the registers and the chip stay shown after it");
 	int erased = 1;
 	for (unsigned i = 0; i < SIM_SIZE; i++) if (mem[i] != 0xff) { erased = 0; break; }
 	check(erased, "  the whole chip is erased");
@@ -170,11 +173,19 @@ int main(void)
 	request("GET", "/api/state", NULL, NULL, 0);
 	check(unprotects == 1 && strstr(body_of(), "\"sr\":[28,2,96]"), "  unprotect, then the registers again");
 
+	swap_chip = 1; inits = 0;			/* another chip in the socket between detect and read */
+	request("POST", "/api/read", NULL, NULL, 0);
+	wait_idle();
+	request("GET", "/api/state", NULL, NULL, 0);
+	check(strstr(body_of(), "\"ok\":false") && strstr(body_of(), "The chip changed"), "a chip changed between the detect and the read: refused");
+	swap_chip = 0;
+
 	fail_open = 1;
 	request("POST", "/api/detect", NULL, NULL, 0);
 	wait_idle();
 	request("GET", "/api/state", NULL, NULL, 0);
-	check(strstr(body_of(), "\"ok\":false") && strstr(body_of(), "No programmer found"), "no programmer: the operation fails with a message");
+	check(strstr(body_of(), "\"ok\":false") && strstr(body_of(), "No programmer found") && strstr(body_of(), "\"programmer\":\"CH347\""),
+	      "no programmer: the operation fails with a message, the last programmer stays shown");
 	fail_open = 0;
 
 	pthread_mutex_lock(&st.lock); st.busy = 1; pthread_mutex_unlock(&st.lock);

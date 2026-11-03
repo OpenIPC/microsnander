@@ -33,6 +33,8 @@
     <string name="dump_is">DUMP  %1$s</string>
     <string name="dump_kept">The dump is kept in the app; use Save as… or Share.</string>
     <string name="saved_as">Saved.</string>
+    <string name="saving">SAVING</string>
+    <string name="cannot_keep">The dump could not be kept in the app.</string>
     <string name="cannot_save">The dump could not be saved there.</string>
     <string name="cannot_open">The file could not be opened.</string>
     <string name="pick_file">A file to write (Downloads)</string>

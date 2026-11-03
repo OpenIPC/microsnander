@@ -94,15 +94,21 @@ static void set_progress(const char *phase, unsigned long long done, unsigned lo
 
 /* ---- the operations, in the worker thread ---- */
 
-/* the chip found by an operation, into the state */
-static void keep_chip(const struct ms_chip *c)
+/* the chip found by an operation, into the state; an operation that found
+   nothing, or reads no registers, leaves the last ones shown */
+static void keep_chip(const struct ms_chip *c, int registers_op)
 {
 	pthread_mutex_lock(&st.lock);
-	snprintf(st.programmer, sizeof(st.programmer), "%s", c->programmer);
-	snprintf(st.chip, sizeof(st.chip), "%s", c->chip);
-	st.size = c->size;
-	st.sr_valid = c->sr_valid;
-	memcpy(st.sr, c->sr, 3);
+	if (c->programmer[0])
+		snprintf(st.programmer, sizeof(st.programmer), "%s", c->programmer);
+	if (c->chip[0]) {
+		snprintf(st.chip, sizeof(st.chip), "%s", c->chip);
+		st.size = c->size;
+	}
+	if (registers_op || c->sr_valid) {
+		st.sr_valid = c->sr_valid;
+		memcpy(st.sr, c->sr, 3);
+	}
 	pthread_mutex_unlock(&st.lock);
 }
 
@@ -146,9 +152,12 @@ static int op_read(struct ms_chip *c, char *msg, size_t n)
 	unsigned long long l;
 	FILE *f;
 
+	struct ms_chip found;
+
 	if (ms_detect(c, msg, n))		/* the chip name for the file */
 		return -1;
-	keep_chip(c);
+	keep_chip(c, 0);
+	found = *c;
 	l = web_len ? web_len : (web_addr < (unsigned long long)c->size ? c->size - web_addr : 0);
 	if (web_addr >= (unsigned long long)c->size || l > (unsigned long long)c->size - web_addr) {
 		snprintf(msg, n, "The range 0x%llx + 0x%llx is past the chip end (0x%llx).", web_addr, l, c->size);
@@ -158,7 +167,14 @@ static int op_read(struct ms_chip *c, char *msg, size_t n)
 		snprintf(msg, n, "Cannot create %.180s: %s", path, strerror(errno));
 		return -1;
 	}
-	if (ms_read(c, f, web_addr, l, on_progress, NULL, msg, n)) {
+	/* the read opens the chip again: it has to be the one the file is named after */
+	int failed = ms_read(c, f, web_addr, l, on_progress, NULL, msg, n);
+
+	if (!failed && (strcmp(c->chip, found.chip) || c->size != found.size)) {
+		snprintf(msg, n, "The chip changed during the read (%.60s, was %.60s): run again.", c->chip, found.chip);
+		failed = 1;
+	}
+	if (failed) {
 		fclose(f);
 		unlink(path);
 		return -1;
@@ -178,7 +194,7 @@ static int op_read(struct ms_chip *c, char *msg, size_t n)
 static void *worker(void *arg)
 {
 	int op = (int)(long)arg, ret = -1;
-	struct ms_chip c;
+	struct ms_chip c = { .size = 0 };
 	char msg[256] = "";
 
 	switch (op) {
@@ -189,7 +205,7 @@ static void *worker(void *arg)
 	case OP_REGISTERS: ret = ms_registers(&c, msg, sizeof(msg)); break;
 	case OP_UNPROTECT: ret = ms_unprotect(&c, msg, sizeof(msg)); break;
 	}
-	keep_chip(&c);
+	keep_chip(&c, op == OP_DETECT || op == OP_REGISTERS || op == OP_UNPROTECT);
 	set_msg("%s", msg);
 	free(upload);
 	upload = NULL;
