@@ -589,6 +589,19 @@ int libusb_handle_events_timeout(libusb_context *ctx, struct timeval *tv)
 	if (poll(fds, n, wait > 0x7fffffff ? 0x7fffffff : (int)wait) < 0 && errno != EINTR)
 		return error_of(errno);
 
+	/* the deadlines first, as libusb does: a URB that came back after its
+	   transfer's deadline ends it as TIMED_OUT, not as done */
+	now = now_ms();
+	for (struct libusb_transfer *t = active; t; t = priv_of(t)->next) {
+		struct urb_priv *p = t->priv;
+
+		if (p->deadline && !p->timed_out && p->deadline <= now) {
+			p->timed_out = 1;		/* its URBs come back later, as TIMED_OUT */
+			p->stopped = 1;
+			discard_rest(t);
+		}
+	}
+
 	for (libusb_device_handle *h = handles; h; h = h->next) {
 		struct usbdevfs_urb *u;
 
@@ -602,15 +615,5 @@ int libusb_handle_events_timeout(libusb_context *ctx, struct timeval *tv)
 			}
 	}
 
-	now = now_ms();
-	for (struct libusb_transfer *t = active; t; t = priv_of(t)->next) {
-		struct urb_priv *p = t->priv;
-
-		if (p->deadline && !p->timed_out && p->deadline <= now) {
-			p->timed_out = 1;		/* its URBs come back later, as TIMED_OUT */
-			p->stopped = 1;
-			discard_rest(t);
-		}
-	}
 	return 0;
 }
