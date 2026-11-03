@@ -20,6 +20,9 @@ struct selftest {
 	int sr_valid;			/* SPI NOR: sr read */
 	unsigned char sr[3];
 	int lock;			/* SPI NAND: A0 when found, -1 */
+	const char *save_dir;		/* where the block goes if it does not come back; NULL: here */
+	char *out;			/* NULL, or the result lines are kept here too */
+	size_t out_size;
 	int block_locks;		/* SPI NOR of the SST26 type: blocks locked at power-up, not in SR */
 };
 

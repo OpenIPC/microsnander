@@ -8,6 +8,7 @@
 #include "../src/ops.c"
 #include "../src/web.c"
 #include "../src/voltage.c"
+#include "../src/selftest.c"
 
 #define SIM_SIZE (1 << 20)
 static unsigned char mem[SIM_SIZE];
@@ -38,7 +39,10 @@ long flash_cmd_init(struct flash_cmd *c)
 }
 char snor_unprotect_why[200];
 int snor_unprotect(void) { return 0; }		/* the real driver is not in this test */
-int snor_read_status(unsigned char sr[3]) { sr[0] = 0x1c; sr[1] = 0x02; sr[2] = 0x60; return 0; }
+unsigned int bsize = 4096;
+int snor_block_locks(void) { return 0; }
+static unsigned char sim_sr1 = 0x1c;		/* BP bits set: a protected chip */
+int snor_read_status(unsigned char sr[3]) { sr[0] = sim_sr1; sr[1] = 0x02; sr[2] = 0x60; return 0; }
 
 static char resp[1 << 21];
 static size_t nresp;
@@ -111,7 +115,7 @@ int main(void)
 	check(request("GET", "/", NULL, NULL, 0) == 200 && strstr(body_of(), "<title>MicroSNANDer Web</title>") && strstr(body_of(), "Registers"),
 	      "GET / gives the page");
 	check(strstr(body_of(), "if(s.seq<seen&&s.seq!==0)return") != NULL, "  an older state does not replace a newer one on the page");
-	check(strstr(body_of(), "function detectThen") && strstr(body_of(), "(o==='erase'||o==='write')&&!s.chip"),
+	check(strstr(body_of(), "function detectThen") && strstr(body_of(), "(o==='erase'||o==='write'||o==='selftest')&&!s.chip"),
 	      "  Erase and Write wait for a chip: off without one, a Detect before the question");
 
 	web_password = "secret";
@@ -274,6 +278,33 @@ int main(void)
 	      "  no place for the file in the dump directory: 500, nothing starts");
 	check(!st.uploading, "  and the upload slot is free again");
 	web_dir = dir;
+
+	/* the self-test: protected (BP set) stops before any erase; then OK on the first block */
+	memcpy(mem, "loader", 6);
+	extra = "Host: 127.0.0.1:8080\r\nX-MicroSNANDer-Chip: W25Q80;1048576\r\n";
+	check(request("POST", "/api/selftest", NULL, NULL, 0) == 202, "Self-test starts for the chip confirmed");
+	extra = "";
+	wait_idle();
+	request("GET", "/api/state", NULL, NULL, 0);
+	check(strstr(body_of(), "\"op\":\"selftest\"") && strstr(body_of(), "\"ok\":false") &&
+	      strstr(body_of(), "PROTECTED, the registers protect part of the chip") && !memcmp(mem, "loader", 6),
+	      "  BP bits set: PROTECTED, nothing erased");
+	sim_sr1 = 0;
+	extra = "Host: 127.0.0.1:8080\r\nX-MicroSNANDer-Chip: W25Q80;1048576\r\n";
+	request("POST", "/api/selftest", NULL, NULL, 0);
+	extra = "";
+	wait_idle();
+	request("GET", "/api/state", NULL, NULL, 0);
+	check(strstr(body_of(), "\"ok\":true") && strstr(body_of(), "Self-test: OK") && !memcmp(mem, "loader", 6),
+	      "  no protection: OK, and the first block holds its old data again");
+	extra = "Host: 127.0.0.1:8080\r\nX-MicroSNANDer-Chip: W25Q16;2097152\r\n";
+	request("POST", "/api/selftest", NULL, NULL, 0);
+	extra = "";
+	wait_idle();
+	request("GET", "/api/state", NULL, NULL, 0);
+	check(strstr(body_of(), "not the W25Q16") != NULL, "  for another chip than the one in the socket: refused");
+	sim_sr1 = 0x1c;
+	check(strstr(web_page, "id=\"b-selftest\" disabled") != NULL, "  the page has the Self-test button, off without a chip");
 
 	check(request("POST", "/api/unprotect", NULL, NULL, 0) == 202, "Clear protection starts");
 	wait_idle();

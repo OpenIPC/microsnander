@@ -113,6 +113,7 @@ public class MainActivity extends Activity {
         buttons = new Button[] {
             findViewById(R.id.b_detect), findViewById(R.id.b_read), findViewById(R.id.b_erase),
             findViewById(R.id.b_write), findViewById(R.id.b_registers), findViewById(R.id.b_unprotect),
+            findViewById(R.id.b_selftest),
         };
         buttons[0].setOnClickListener(v -> run(R.string.detecting, true, (fd, vid, pid, p) -> Native.detect(fd, vid, pid)));
         buttons[1].setOnClickListener(v -> read());
@@ -125,6 +126,11 @@ public class MainActivity extends Activity {
         buttons[3].setOnClickListener(v -> detectThen((a, r) -> a.pickWrite()));
         buttons[4].setOnClickListener(v -> run(R.string.reading_registers, true, (fd, vid, pid, p) -> Native.registers(fd, vid, pid)));
         buttons[5].setOnClickListener(v -> run(R.string.unprotecting, true, (fd, vid, pid, p) -> Native.unprotect(fd, vid, pid)));
+        // the self-test erases the first block and writes it back: Detect, then the question
+        buttons[6].setOnClickListener(v -> detectThen((a, r) -> new AlertDialog.Builder(a)
+                .setMessage(a.getString(R.string.selftest_confirm, r.chip, sizeOf(r.size)))
+                .setPositiveButton(R.string.selftest, (d, w) -> a.selftest(r))
+                .setNegativeButton(android.R.string.cancel, null).show()));
         saveAs.setOnClickListener(v -> {
             File dump = lastDump();
             if (dump == null) return;
@@ -295,6 +301,15 @@ public class MainActivity extends Activity {
     private static long pendingAt;		// when that Detect ended (elapsedRealtime)
     /** a screen recreated within this keeps the step (a rotation); later it is dropped */
     private static final long PENDING_MS = 10000;
+
+    /** -t on the first block, only if it is still the chip r found */
+    private void selftest(Native.Result r) {
+        String dir = new File(getFilesDir(), "dumps").getPath();	// a block that does not come back goes there
+        run(R.string.selftesting, true, (fd, vid, pid, p) -> {
+            Native.expect(r.chip, r.size);
+            return Native.selftest(fd, vid, pid, dir);
+        });
+    }
 
     /** the whole chip, only if it is still the one r found */
     private void erase(Native.Result r) {
