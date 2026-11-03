@@ -1,6 +1,6 @@
 ![OpenIPC logo][logo]
 
-# OpenIPC MicroSNANDer
+# MicroSNANDer
 
 [English](README.md) | [Русский](README.ru.md) | **简体中文**
 
@@ -44,6 +44,7 @@ sudo ./microsnander -w firmware.bin -v
 - [用法](#用法)
 - [示例](#示例)
 - [支持的芯片](#支持的芯片)
+- [数据不确定的芯片](#数据不确定的芯片)
 - [构建](#构建)
 - [致谢](#致谢)
 - [许可证](#许可证)
@@ -147,6 +148,34 @@ Microelectronics FM25Q、GigaDevice、Macronix、Spansion、XMC、XTX、Zbit、G
 GM25Q、ISSI、Micron、Boya、Puya 等）和 135 款 SPI NAND 芯片（Etron、GigaDevice、Heyang、Foresee、ESMT、Dosilicon、XTX、Micron、
 Toshiba/Kioxia、Winbond、Macronix 等）。不在列表中的芯片会显示为未检测到；输出中的
 芯片 ID 可用于添加该芯片。
+
+## 数据不确定的芯片
+
+对于下列 SPI NOR 和 SPI NAND 芯片，其他来源给出的参数与 MicroSNANDer 使用的不同。这些芯片都还没有
+在硬件上验证过，因此读取、写入，尤其是原始转储（`-d`）的结果可能与这里的描述不同。如果
+您有这些芯片，请在 [GitHub Issues](https://github.com/OpenIPC/microsnander/issues)
+中报告其工作情况，并附上 `microsnander -i` 的输出和芯片上的完整型号。
+
+| 芯片                                                       | MicroSNANDer 使用                                    | 其他来源                         |
+|------------------------------------------------------------|------------------------------------------------------|----------------------------------|
+| TOSHIBA TC58CVG0S3H, TC58CVG1S3H                           | OOB 128 字节                                         | OOB 64 字节                      |
+| TOSHIBA TC58CVG2S0H, KIOXIA TC58CVG2S0HRAIJ                | OOB 256 字节                                         | OOB 128 字节                     |
+| MICRON MT29F4G01（ID `2C 36`）                             | 两个 2 Gbit 晶粒，页 2 KB，OOB 128 字节              | 单晶粒，页 4 KB，OOB 256 字节    |
+| 厂商 ID 为 `C9` 的 HEYANG 芯片                             | 状态位 5:4 为 `10` 表示 ECC 不可纠正；解锁清除位 5:3 | 位 5:4 为 `11`；解锁位 6:3       |
+| DOSILICON DS35Q1GA, DS35Q2GA                               | 状态位 5:4 为 `10` 表示 ECC 不可纠正                 | 位 6:4 为 `010`                  |
+| GIGADEVICE GD5F1GM7UE                                      | OOB 128 字节，dual 读取                              | OOB 64 字节，single 读取         |
+| ESMT F50D1G41LB(2M)                                        | OOB 64 字节                                          | OOB 128 字节                     |
+| FORESEE F35SQA001G                                         | OOB 64 字节                                          | OOB 128 字节                     |
+| FORESEE F35SQA512M                                         | dual 读取                                            | single 读取                      |
+| XINCUN XCSP1AAWH-NT                                        | 不检查 ECC 状态：不可纠正的页读取时不报错            | 状态编码未知                     |
+| UNIM UM19C0HISW                                            | 暂不支持                                             | spare 区计入页和块大小的几何参数 |
+| ES25P10–ES25P32、ES25M40A–ES25M16A（SPI NOR）              | 按 ID 中的容量字节确定大小（ES25P10：1 Mbit）        | 两倍大小                         |
+| ISSI `9D 60 1A`、`9D 70 1A`（SPI NOR）                     | IS25LP512M、IS25WP512M，512 Mbit                     | 命名为 IS25LP256D、IS25WP256D    |
+| PCT25VF010A–PCT25VF032B、PCT26VF016、PCT26VF032（SPI NOR） | 暂不支持：需要单字节/AAI 编程或 ULBPR 解锁           | 作为普通芯片列出                 |
+
+OOB 大小只影响使用 `-d` 的原始转储（每页连同 spare 区一起读取）；使用片内 ECC 的读写只
+涉及数据区。原始写入只接受完整的“数据 + OOB”页，因此 1.11.1 之前（使用旧 OOB 大小）
+制作的上述 Toshiba/Kioxia 芯片原始转储会被拒绝：请先把每页用 `0xFF` 补齐到新的 OOB 大小。
 
 ## 构建
 

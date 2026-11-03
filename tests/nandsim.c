@@ -310,6 +310,17 @@ int main(void)
 	      "-k write: a 0xFF page over an ECC-failed page goes to the next page");
 	check(snand_read(got, 90L * PAGE, 3 * PAGE) == 3 * PAGE && !memcmp(got, buf, 3 * PAGE), "  and reads back in place");
 
+	/* raw (-d) writes take whole pages with their OOB */
+	chip(0xef, 0xaa, 0x21);
+	ECC_fcheck = 0;
+	snand_init();
+	fill(buf, 2, 13);
+	check(snand_write(buf, 0, 2 * (PAGE + OOB)) == 2 * (PAGE + OOB), "raw write of two pages with OOB");
+	check(snand_write(buf, 0, 2 * (PAGE + OOB) - 32) < 0, "raw write that is not whole pages (another OOB size) fails");
+	check(snand_write(buf, 100, PAGE + OOB) < 0, "raw write that does not start on a page fails");
+	ECC_fcheck = 1;
+	snand_init();
+
 	/* a block that fails to erase fails the erase, wherever it is in the range */
 	chip(0xef, 0xaa, 0x21);
 	snand_init();

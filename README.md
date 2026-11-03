@@ -1,6 +1,6 @@
 ![OpenIPC logo][logo]
 
-# OpenIPC MicroSNANDer
+# MicroSNANDer
 
 **English** | [Русский](README.ru.md) | [简体中文](README.zh-CN.md)
 
@@ -47,6 +47,7 @@ sudo ./microsnander -w firmware.bin -v
 - [Usage](#usage)
 - [Examples](#examples)
 - [Supported chips](#supported-chips)
+- [Chips with uncertain data](#chips-with-uncertain-data)
 - [Build](#build)
 - [Credits](#credits)
 - [License](#license)
@@ -154,6 +155,38 @@ GM25Q, ISSI, Micron, Boya, Puya and others) and 135 SPI NAND chips (Etron, GigaD
 Micron, Toshiba/Kioxia, Winbond, Macronix and others).
 A chip that is not on the list is reported as not detected; its ID from the
 output helps to add it.
+
+## Chips with uncertain data
+
+For the SPI NOR and SPI NAND chips below, other sources give different parameters than the
+ones MicroSNANDer uses. None of them has been checked on hardware yet, so reading,
+writing and especially raw dumps (`-d`) may behave differently from what is
+described here. If you have one of these chips, please report how it works in
+[GitHub Issues](https://github.com/OpenIPC/microsnander/issues), with the output
+of `microsnander -i` and the full part number from the chip.
+
+| Chip                                                      | MicroSNANDer uses                                                   | Found elsewhere                                                     |
+|-----------------------------------------------------------|---------------------------------------------------------------------|---------------------------------------------------------------------|
+| TOSHIBA TC58CVG0S3H, TC58CVG1S3H                          | OOB 128 bytes                                                       | OOB 64 bytes                                                        |
+| TOSHIBA TC58CVG2S0H, KIOXIA TC58CVG2S0HRAIJ               | OOB 256 bytes                                                       | OOB 128 bytes                                                       |
+| MICRON MT29F4G01 (ID `2C 36`)                             | two 2 Gbit dies, page 2 KB, OOB 128 bytes                           | one die, page 4 KB, OOB 256 bytes                                   |
+| HEYANG chips with maker ID `C9`                           | uncorrectable ECC = `10` in status bits 5:4; unlock clears bits 5:3 | `11` in bits 5:4; unlock bits 6:3                                   |
+| DOSILICON DS35Q1GA, DS35Q2GA                              | uncorrectable ECC = `10` in status bits 5:4                         | `010` in bits 6:4                                                   |
+| GIGADEVICE GD5F1GM7UE                                     | OOB 128 bytes, dual read                                            | OOB 64 bytes, single read                                           |
+| ESMT F50D1G41LB(2M)                                       | OOB 64 bytes                                                        | OOB 128 bytes                                                       |
+| FORESEE F35SQA001G                                        | OOB 64 bytes                                                        | OOB 128 bytes                                                       |
+| FORESEE F35SQA512M                                        | dual read                                                           | single read                                                         |
+| XINCUN XCSP1AAWH-NT                                       | no ECC status check: an uncorrectable page is read without an error | the encoding of its status is unknown                               |
+| UNIM UM19C0HISW                                           | not supported yet                                                   | a geometry with the spare area counted into the page and block size |
+| ES25P10–ES25P32, ES25M40A–ES25M16A (SPI NOR)              | size from the capacity byte of the ID (ES25P10: 1 Mbit)             | twice that size                                                     |
+| ISSI `9D 60 1A`, `9D 70 1A` (SPI NOR)                     | IS25LP512M, IS25WP512M, 512 Mbit                                    | named IS25LP256D, IS25WP256D                                        |
+| PCT25VF010A–PCT25VF032B, PCT26VF016, PCT26VF032 (SPI NOR) | not supported yet: need byte/AAI programming or the ULBPR unlock    | listed as ordinary chips                                            |
+
+The OOB size matters for raw dumps with `-d` (every page is read with its spare
+area); reading and writing with the internal ECC uses only the data area. A raw
+write takes whole pages of data + OOB only, so a raw dump of the Toshiba/Kioxia chips
+above made before version 1.11.1 (with the old OOB size) is refused: pad each of its
+pages with `0xFF` to the new OOB size first.
 
 ## Build
 

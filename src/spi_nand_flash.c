@@ -1438,7 +1438,7 @@ static const struct SPI_NAND_FLASH_INFO_T spi_nand_flash_tables[] = {
 		ptr_name:				"TOSHIBA TC58CVG0S3H",
 		device_size:				_SPI_NAND_CHIP_SIZE_1GBIT,
 		page_size:				_SPI_NAND_PAGE_SIZE_2KBYTE,
-		oob_size:				_SPI_NAND_OOB_SIZE_64BYTE,
+		oob_size:				_SPI_NAND_OOB_SIZE_128BYTE,
 		erase_size:				_SPI_NAND_BLOCK_SIZE_128KBYTE,
 		dummy_mode:				SPI_NAND_FLASH_READ_DUMMY_BYTE_APPEND,
 		read_mode:				SPI_NAND_FLASH_READ_SPEED_MODE_DUAL,
@@ -1453,7 +1453,7 @@ static const struct SPI_NAND_FLASH_INFO_T spi_nand_flash_tables[] = {
 		ptr_name:				"TOSHIBA TC58CVG1S3H",
 		device_size:				_SPI_NAND_CHIP_SIZE_2GBIT,
 		page_size:				_SPI_NAND_PAGE_SIZE_2KBYTE,
-		oob_size:				_SPI_NAND_OOB_SIZE_64BYTE,
+		oob_size:				_SPI_NAND_OOB_SIZE_128BYTE,
 		erase_size:				_SPI_NAND_BLOCK_SIZE_128KBYTE,
 		dummy_mode:				SPI_NAND_FLASH_READ_DUMMY_BYTE_APPEND,
 		read_mode:				SPI_NAND_FLASH_READ_SPEED_MODE_DUAL,
@@ -1468,7 +1468,7 @@ static const struct SPI_NAND_FLASH_INFO_T spi_nand_flash_tables[] = {
 		ptr_name:				"TOSHIBA TC58CVG2S0H",
 		device_size:				_SPI_NAND_CHIP_SIZE_4GBIT,
 		page_size:				_SPI_NAND_PAGE_SIZE_4KBYTE,
-		oob_size:				_SPI_NAND_OOB_SIZE_128BYTE,
+		oob_size:				_SPI_NAND_OOB_SIZE_256BYTE,
 		erase_size:				_SPI_NAND_BLOCK_SIZE_256KBYTE,
 		dummy_mode:				SPI_NAND_FLASH_READ_DUMMY_BYTE_APPEND,
 		read_mode:				SPI_NAND_FLASH_READ_SPEED_MODE_DUAL,
@@ -1483,7 +1483,7 @@ static const struct SPI_NAND_FLASH_INFO_T spi_nand_flash_tables[] = {
 		ptr_name:				"KIOXIA TC58CVG2S0HRAIJ",
 		device_size:				_SPI_NAND_CHIP_SIZE_4GBIT,
 		page_size:				_SPI_NAND_PAGE_SIZE_4KBYTE,
-		oob_size:				_SPI_NAND_OOB_SIZE_128BYTE,
+		oob_size:				_SPI_NAND_OOB_SIZE_256BYTE,
 		erase_size:				_SPI_NAND_BLOCK_SIZE_256KBYTE,
 		dummy_mode:				SPI_NAND_FLASH_READ_DUMMY_BYTE_APPEND,
 		read_mode:				SPI_NAND_FLASH_READ_SPEED_MODE_DUAL,
@@ -5305,6 +5305,21 @@ SPI_NAND_FLASH_RTN_T SPI_NAND_Flash_Write_Nbyte( u32 dst_addr, u32 len, u32 *ptr
 						SPI_NAND_FLASH_WRITE_SPEED_MODE_T speed_node )
 {
 	SPI_NAND_FLASH_RTN_T rtn_status = SPI_NAND_FLASH_RTN_NO_ERROR;
+
+	/* A raw write (ECC off, -d) takes whole pages with their OOB: a raw image
+	   made with another OOB size would land shifted on every page. */
+	if( !ECC_fcheck )
+	{
+		u32 raw_page = _current_flash_info_t.page_size;
+
+		if( (dst_addr % raw_page) || (len % raw_page) )
+		{
+			_SPI_NAND_PRINTF("Raw write (-d) needs whole pages of %u bytes (data + OOB): address 0x%x, length 0x%x.\n"
+					 "A raw image made with another OOB size does not fit this chip.\n", raw_page, dst_addr, len);
+			*ptr_rtn_len = 0;
+			return SPI_NAND_FLASH_RTN_ALIGNED_CHECK_FAIL;
+		}
+	}
 
 	/* *ptr_rtn_len is what spi_nand_write_internal() wrote */
 	rtn_status = spi_nand_write_internal(dst_addr, len, ptr_rtn_len, ptr_buf, speed_node);
