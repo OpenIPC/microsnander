@@ -234,6 +234,7 @@ microsnander -d -r raw.bin
 <p align="center">
   <img src="screenshots/web-reading.png" alt="MicroSNANDer Web во время чтения: лампы, прибор с прогрессом, дисплей, латунные кнопки" width="45%">
   <img src="screenshots/web-registers.png" alt="MicroSNANDer Web после чтения: ссылка на дамп и лампы битов регистров" width="45%">
+  <img src="screenshots/web-selftest.png" alt="MicroSNANDer Web после самотеста: SELF-TEST OK, защита и итог" width="45%">
 </p>
 
 ```sh

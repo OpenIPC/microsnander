@@ -118,6 +118,11 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text="@string/read" />
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
                 <Button
                     android:id="@+id/b_erase"
                     style="@style/Brass"
@@ -125,11 +130,6 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text="@string/erase" />
-            </LinearLayout>
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal">
                 <Button
                     android:id="@+id/b_write"
                     style="@style/Brass"
@@ -137,6 +137,11 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text="@string/write" />
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
                 <Button
                     android:id="@+id/b_registers"
                     style="@style/Brass"

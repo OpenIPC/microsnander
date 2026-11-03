@@ -231,6 +231,7 @@ is connected.
 <p align="center">
   <img src="screenshots/web-reading.png" alt="MicroSNANDer Web while reading: lamps, progress gauge, display, brass buttons" width="45%">
   <img src="screenshots/web-registers.png" alt="MicroSNANDer Web after a read: dump link and status register lamps" width="45%">
+  <img src="screenshots/web-selftest.png" alt="MicroSNANDer Web after a self-test: SELF-TEST OK, the protection and the verdict" width="45%">
 </p>
 
 ```sh
