@@ -10,7 +10,7 @@
 [![Code size](https://img.shields.io/github/languages/code-size/OpenIPC/microsnander)](https://github.com/OpenIPC/microsnander)
 [![Platform](https://img.shields.io/badge/platform-Linux-brightgreen)](#系统要求)
 
-MicroSNANDer 是一个命令行编程器，配合廉价的 CH341A 和 CH347 USB 编程器使用，用于 SPI NOR 和
+MicroSNANDer 是一个命令行编程器，配合廉价的 CH341A、CH347 和 EZP USB 编程器使用，用于 SPI NOR 和
 SPI NAND 闪存芯片。它可以读取、写入、擦除和校验摄像机、路由器及其他开发板的闪存，
 解除 SPI NOR 芯片的写保护，支持 291 款 SPI NOR 和 135 款 SPI NAND 芯片。
 
@@ -58,8 +58,15 @@ sudo ./microsnander -w firmware.bin -v
     1.8 V 转接板。
   - CH347T（`1a86:55db`），处于模式 1（UART + SPI + I2C，由模式开关或跳线设置），或
     CH347F（`1a86:55de`）。速度远快于 CH341A（16 MB 芯片约 7 秒读完）；SPI 时钟为 30 MHz，可用 `-S` 修改。
+  - EZP2019、EZP2019+ 或 EZP2023（USB `1fc8:310b`、`1fc8:310c` 或 `1fc8:310d`），用于 16 MB 及以下的
+    SPI NOR 芯片。这些编程器由自身固件驱动 SPI 总线，只接受完整的操作，因此使用它们时：
+    - `-r`、`-w` 和 `-v` 与其他编程器相同（16 MB 芯片约 2 分 15 秒读完）；
+    - `-e` 只能擦除整片芯片：不要带 `-a` 和 `-l`，擦除部分区域会被拒绝；
+    - `-w` 只写入已擦除的区域：先读取该区域，若已有数据则拒绝写入；
+    - 状态寄存器既不能读也不能写：没有 `-u`，识别芯片时也不显示它们；
+    - 不支持 SPI NAND。
 
-  只连接一个编程器时 microsnander 直接使用它；连接多个时请用 `-P ch341a` 或 `-P ch347`
+  只连接一个编程器时 microsnander 直接使用它；连接多个时请用 `-P ch341a`、`-P ch347` 或 `-P ezp`
   选择。占用编程器的内核驱动（例如 `spi-ch341`）会在运行期间分离，结束后重新绑定。
 - x86_64 或 32 位 ARM（ARMv5TE 及以上）上的 Linux。发布的二进制文件为静态链接（musl，
   内置 libusb），无需安装任何东西。
@@ -70,6 +77,9 @@ sudo ./microsnander -w firmware.bin -v
   SUBSYSTEM=="usb", ATTR{idVendor}=="1a86", ATTR{idProduct}=="5512", MODE="0660", GROUP="plugdev"
   SUBSYSTEM=="usb", ATTR{idVendor}=="1a86", ATTR{idProduct}=="55db", MODE="0660", GROUP="plugdev"
   SUBSYSTEM=="usb", ATTR{idVendor}=="1a86", ATTR{idProduct}=="55de", MODE="0660", GROUP="plugdev"
+  SUBSYSTEM=="usb", ATTR{idVendor}=="1fc8", ATTR{idProduct}=="310b", MODE="0660", GROUP="plugdev"
+  SUBSYSTEM=="usb", ATTR{idVendor}=="1fc8", ATTR{idProduct}=="310c", MODE="0660", GROUP="plugdev"
+  SUBSYSTEM=="usb", ATTR{idVendor}=="1fc8", ATTR{idProduct}=="310d", MODE="0660", GROUP="plugdev"
   EOF
   sudo usermod -aG plugdev "$USER"
   sudo udevadm control --reload-rules && sudo udevadm trigger
@@ -107,7 +117,7 @@ microsnander [options]
  -r <filename>  read chip and save data to filename
  -u             unprotect chip
  -v             verify after write on chip
- -P <name>      programmer: ch341a, ch347, auto (default: the one connected)
+ -P <name>      programmer: ch341a, ch347, ezp, auto (default: the one connected)
  -S <speed>     SPI clock of the CH347: 60M, 30M (default), 15M, 7.5M, 3.75M, 1.875M
 ```
 
