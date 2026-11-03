@@ -15,6 +15,7 @@ static int nresp;
 static unsigned int pending_in;			/* SPI_IN bytes still to send */
 static unsigned int max_out, max_in, nout;
 static int cs_while_write_ok = 1;
+static int nout_in;
 static int bad = 0;	/* 1: write status 1, 2: read answer with another command, 3: empty read answer, 4: length header too big */
 
 static unsigned char pattern(unsigned int i) { return (unsigned char)(i * 29 + (i >> 9)); }
@@ -50,6 +51,12 @@ int libusb_bulk_transfer(libusb_device_handle *h, unsigned char ep, unsigned cha
 			break;
 		case CH347_CMD_SPI_IN:
 			pending_in = d[3] | (d[4] << 8) | (d[5] << 16) | ((unsigned int)d[6] << 24);
+			break;
+		case CH347_CMD_SPI_OUT_IN:		/* sent bytes go out, the pattern comes in */
+			memcpy(mosi + nmosi, d + 3, n); nmosi += n;
+			resp[0] = d[0]; resp[1] = n & 0xff; resp[2] = n >> 8;
+			for (unsigned int i = 0; i < n; i++) resp[3 + i] = pattern(clocked++);
+			nresp = n + 3; nout_in++;
 			break;
 		default: return LIBUSB_ERROR_IO;
 		}
@@ -96,6 +103,11 @@ int main(void)
 	for (unsigned i = 0; i < sizeof(r); i++) if (r[i] != pattern(8 + i)) { same = 0; break; }
 	check(same && max_in <= CH347_PACKET_SIZE, "  read data in order, packets of at most 510 bytes");
 	check(cs_while_write_ok, "  CS stays low while the data goes out");
+	nmosi = 0; clocked = 0; nout_in = 0;
+	unsigned char st[2];
+	w[0] = 0x05;
+	check(ch347_spi_send_command(1, 2, w, st) == 0 && nout_in == 1 && nmosi == 3 && mosi[0] == 0x05 && mosi[1] == 0xff
+	      && st[0] == pattern(1) && st[1] == pattern(2), "a short command and its answer in one full-duplex transfer");
 	check(ch347_cs(false) == 0 && !cs_low, "CS high");
 	bad = 1;
 	check(ch347_spi_send_command(4, 0, w, NULL) < 0, "a write answered with a nonzero status fails");

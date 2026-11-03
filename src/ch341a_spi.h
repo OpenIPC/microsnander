@@ -29,6 +29,7 @@ int ch341a_spi_init(void);
 int ch341a_spi_shutdown(void);
 int ch341a_spi_send_command(unsigned int writecnt, unsigned int readcnt, const unsigned char *writearr, unsigned char *readarr);
 int enable_pins(bool enable);
+int ch341a_cs(bool low);	/* sent with the next stream */
 int config_stream(unsigned int speed);
 
 #endif /* __CH341_SPI_H__ */

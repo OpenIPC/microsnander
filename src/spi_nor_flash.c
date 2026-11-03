@@ -1124,6 +1124,13 @@ int snor_write(unsigned char *buf, unsigned long to, unsigned long len)
 	if (snor_is_sst25_aai())
 		return snor_write_aai(buf, to, len);
 
+	/* the protection is cleared once, before the first page: it stays
+	   cleared, and checking it again for every page is three status reads */
+	if (snor_unprotect() < 0) {
+		timer_end();
+		return -1;
+	}
+
 	/* what page do we start with? */
 	page_offset = to % FLASH_PAGESIZE;
 
@@ -1141,9 +1148,7 @@ int snor_write(unsigned char *buf, unsigned long to, unsigned long len)
 			retlen -= rc;
 			break;
 		}
-		if (snor_unprotect() < 0)
-			break;		/* retlen has what was written */
-		snor_write_enable();	/* after the unprotect, which clears the latch */
+		snor_write_enable();
 
 		SPI_CONTROLLER_Chip_Select_Low();
 		/* Set up the opcode in the write buffer. */

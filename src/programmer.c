@@ -16,7 +16,6 @@
 #include "ch347_spi.h"
 #include "ezp.h"
 
-static int ch341a_cs(bool low) { return enable_pins(low); }
 
 static const struct programmer programmers[] = {
 	{ "ch341a", "CH341A", 0x1a86, { 0x5512 }, ch341a_spi_init, ch341a_spi_shutdown, ch341a_spi_send_command, ch341a_cs, false },

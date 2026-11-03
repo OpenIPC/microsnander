@@ -344,6 +344,23 @@ int enable_pins(bool enable)
 	return ret;
 }
 
+/*
+ * Chip select rides with the data: CS low is not a USB round trip of its
+ * own but the pin commands at the start of the next stream (CS high, then
+ * low, as enable_pins(true) sends them), and CS high is the CS high of that
+ * same sequence, or of enable_pins(false) at shutdown. On the bus the order
+ * is the same: the command ends (a page program or an erase starts) right
+ * before the next command begins.
+ */
+static bool cs_start_pending;
+
+int ch341a_cs(bool low)
+{
+	if (low)
+		cs_start_pending = true;	/* sent with the next stream */
+	return 0;
+}
+
 static int ch341a_spi_send_stream(unsigned int writecnt, unsigned int readcnt, const unsigned char *writearr, unsigned char *readarr)
 {
 	int32_t ret = 0;
@@ -359,6 +376,20 @@ static int ch341a_spi_send_stream(unsigned int writecnt, unsigned int readcnt, c
 	uint8_t rbuf[writecnt + readcnt];
 	/* Initialize the write buffer to zero to prevent writing random stack contents to device. */
 	memset(wbuf[0], 0, CH341_PACKET_LENGTH);
+	if (cs_start_pending) {
+		static const uint8_t cs_start[] = {
+			CH341A_CMD_UIO_STREAM,
+			CH341A_CMD_UIO_STM_OUT | 0x37,	/* CS high: the command before ends */
+			CH341A_CMD_UIO_STM_OUT | 0x37,
+			CH341A_CMD_UIO_STM_OUT | 0x37,
+			CH341A_CMD_UIO_STM_OUT | 0x37,
+			CH341A_CMD_UIO_STM_OUT | 0x37,
+			CH341A_CMD_UIO_STM_OUT | 0x36,	/* CS low: this one begins */
+			CH341A_CMD_UIO_STM_DIR | 0x3F,
+			CH341A_CMD_UIO_STM_END,
+		};
+		memcpy(wbuf[0], cs_start, sizeof(cs_start));
+	}
 
 	uint8_t *ptr = wbuf[0];
 	/* CS usage is optimized by doing both transitions in one packet.
@@ -386,6 +417,7 @@ static int ch341a_spi_send_stream(unsigned int writecnt, unsigned int readcnt, c
 
 	if (ret < 0)
 		return -1;
+	cs_start_pending = false;
 
 	unsigned int i;
 	for (i = 0; i < readcnt; i++) {

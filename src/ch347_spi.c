@@ -9,7 +9,8 @@
  *
  * Protocol: every command is a bulk OUT packet "cmd, length (u16 LE), data"
  * on endpoint 0x06; the chip answers on 0x86. SPI_OUT and SPI_SET_CFG are
- * answered with a 4-byte status, SPI_IN with packets "cmd, length, data".
+ * answered with a 4-byte status, SPI_IN with packets "cmd, length, data",
+ * SPI_OUT_IN with one packet "cmd, length, the bytes clocked in".
  */
 #include <stdio.h>
 #include <string.h>
@@ -25,6 +26,7 @@
 
 #define CH347_CMD_SPI_SET_CFG	0xc0
 #define CH347_CMD_SPI_CS_CTRL	0xc1
+#define CH347_CMD_SPI_OUT_IN	0xc2	/* full duplex: a byte read for every byte sent */
 #define CH347_CMD_SPI_IN	0xc3
 #define CH347_CMD_SPI_OUT	0xc4
 
@@ -236,10 +238,36 @@ static int ch347_read(unsigned int len, unsigned char *data)
 	return 0;
 }
 
+/* A short command and its answer in one round trip: the command bytes, then
+   0xff while the answer is clocked in; the answer is the tail of what comes
+   back. */
+static int ch347_out_in(unsigned int writecnt, unsigned int readcnt, const unsigned char *writearr, unsigned char *readarr)
+{
+	unsigned char pkt[CH347_PACKET_SIZE];
+	unsigned int n = writecnt + readcnt;
+	int got;
+
+	pkt[0] = CH347_CMD_SPI_OUT_IN;
+	pkt[1] = n & 0xff;
+	pkt[2] = n >> 8;
+	memcpy(pkt + 3, writearr, writecnt);
+	memset(pkt + 3 + writecnt, 0xff, readcnt);
+	if (bulk(CH347_WRITE_EP, pkt, n + 3, NULL) || bulk(CH347_READ_EP, pkt, sizeof(pkt), &got))
+		return -1;
+	if (got != (int)n + 3 || pkt[0] != CH347_CMD_SPI_OUT_IN || (pkt[1] | (pkt[2] << 8)) != n) {
+		printf("CH347: bad answer to a transfer (%d bytes, command %02x)\n", got, got ? pkt[0] : 0);
+		return -1;
+	}
+	memcpy(readarr, pkt + 3 + writecnt, readcnt);
+	return 0;
+}
+
 int ch347_spi_send_command(unsigned int writecnt, unsigned int readcnt, const unsigned char *writearr, unsigned char *readarr)
 {
 	if (!ch347)
 		return -1;
+	if (writecnt && readcnt && writecnt + readcnt <= CH347_MAX_DATA)
+		return ch347_out_in(writecnt, readcnt, writearr, readarr);
 	if (writecnt && ch347_write(writecnt, writearr))
 		return -1;
 	if (readcnt && ch347_read(readcnt, readarr))
