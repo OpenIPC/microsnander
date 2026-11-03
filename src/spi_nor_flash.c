@@ -158,14 +158,15 @@ static inline void snor_write_disable(void)
    write enable right before the next erase or program. */
 static int snor_unprotect_write(u8 opcode, u8 *val)
 {
+	int ret;
+
 	if (snor_wait_ready(1))
 		return -1;
 	snor_write_enable();
 	snor_write_sr(opcode, val);
-	if (snor_wait_busy())	/* the status register write takes time */
-		return -1;
+	ret = snor_wait_busy();	/* the status register write takes time */
 	snor_write_disable();
-	return 0;
+	return ret;
 }
 
 /*
@@ -870,6 +871,8 @@ int snor_erase(unsigned long offs, unsigned long len)
 	/* now erase those sectors */
 	while (len > 0) {
 		if (snor_erase_sector(offs)) {
+			printf("\nErase failed at 0x%lx\n", offs);
+			timer_end();
 			return -1;
 		}
 
@@ -1169,7 +1172,10 @@ int snor_write(unsigned char *buf, unsigned long to, unsigned long len)
 
 	snor_write_disable();
 
-	printf("Written 100%% [%ld] of [%ld] bytes      \n", plen - len, plen);
+	if (retlen == (int)plen)
+		printf("Written 100%% [%lu] of [%lu] bytes      \n", plen, plen);
+	else
+		printf("Written [%d] of [%lu] bytes\n", retlen, plen);
 	timer_end();
 
 	return retlen;
