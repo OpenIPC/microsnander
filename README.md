@@ -275,8 +275,8 @@ How it works:
   can be replugged, or used by a normal microsnander run.
 - One operation runs at a time; a request while one runs gets `409`. The page polls the state
   twice a second while an operation runs.
-- `-W` takes no operation of its own (`-i`, `-r`, `-w`, `-e`, `-u`, `-t`) and no `-v`, `-S`, `-d`,
-  `-I` or `-k`: the page does the operations, writes whole files from address 0 with ECC on
+- `-W` takes no operation of its own (`-i`, `-r`, `-w`, `-e`, `-u`, `-t`) and no `-q`, `-m`, `-v`,
+  `-S`, `-d`, `-I` or `-k`: the page does the operations, writes whole files from address 0 with ECC on
   and always verifies. `-K` and `-o` go with `-W` only.
 - The service keeps running when a client disconnects; a slow client does not hold the others
   (up to 16 connections at a time).
