@@ -13,7 +13,7 @@
 MicroSNANDer — консольный программатор микросхем флеш-памяти SPI NOR и SPI NAND
 для недорогого USB-программатора CH341A. Он читает, записывает, стирает и проверяет
 флеш камер, роутеров и других плат, снимает защиту от записи с микросхем SPI NOR и
-знает 127 микросхем SPI NOR и 135 микросхем SPI NAND.
+знает 284 микросхемы SPI NOR и 135 микросхем SPI NAND.
 
 Это урезанная, дополненная, глубоко модифицированная и оптимизированная версия
 [SNANDer](https://github.com/McMCCRU/SNANDer) 1.7.4 от McMCC: только Linux, без поддержки EEPROM в релизной сборке, с командой
@@ -150,9 +150,9 @@ microsnander -d -r raw.bin
 
 ## Поддерживаемые микросхемы
 
-`microsnander -L` выводит список: 127 микросхем SPI NOR (Winbond, Eon, Fudan
+`microsnander -L` выводит список: 284 микросхемы SPI NOR (Winbond, Eon, Fudan
 Microelectronics FM25Q, GigaDevice, Macronix, Spansion, XMC, XTX, Zbit, Giantec
-GM25Q и другие) и 135 микросхем SPI NAND (Etron, GigaDevice, Heyang, Foresee, ESMT, Dosilicon, XTX,
+GM25Q, ISSI, Micron, Boya, Puya и другие) и 135 микросхем SPI NAND (Etron, GigaDevice, Heyang, Foresee, ESMT, Dosilicon, XTX,
 Micron, Toshiba/Kioxia, Winbond, Macronix и другие). Микросхема не из списка
 определяется как ненайденная; её ID из вывода поможет её добавить.
 

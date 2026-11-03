@@ -5,7 +5,8 @@
 # Then spi_nand_flash.c against the SPI NAND simulator tests/nandsim.c:
 # detection by ID, write and read, skipping BAD pages with -k, pages of
 # 0xFF, a chip that stays busy. Then ch341a_spi.c against a fake libusb
-# (tests/ch341sim.c): long streams in parts inside the USB timeout.
+# (tests/ch341sim.c): long streams in parts inside the USB timeout. Then the
+# SPI NOR probe (tests/norsim.c): every chip of the table by its JEDEC ID.
 #
 #   tests/run.sh            (CC=<compiler> to choose the compiler)
 #
@@ -16,6 +17,7 @@ trap 'rm -rf "$W"' EXIT
 ${CC:-cc} -std=gnu99 -Wall -Werror -I"$T/../src" -o "$W/ms" "$T/../src/main.c" "$T/stub.c" || exit 1
 ${CC:-cc} -std=gnu99 -Wall -Werror -O1 -DSPI_NAND_OIP_TIMEOUT_MS=50 -o "$W/nandsim" "$T/nandsim.c" "$T/../src/timer.c" || exit 1
 ${CC:-cc} -std=gnu99 -Wall -Werror -O1 -I"$T/../src" ${LIBUSB_CFLAGS:-} -o "$W/ch341sim" "$T/ch341sim.c" || exit 1
+${CC:-cc} -std=gnu99 -Wall -Werror -O1 -o "$W/norsim" "$T/norsim.c" "$T/../src/timer.c" || exit 1
 cd "$W"; B=./ms; fail=0
 # t <expected exit code> <description> [VAR=value ...] <command>
 t() { exp=$1; d=$2; shift 2; out=$(env "$@" 2>&1); got=$?
@@ -63,5 +65,7 @@ t 1 "-r unwritable file"              $B -r /nonexistent/dir/out.bin
 grep -a '^ok\|^FAIL' nandsim.log
 ./ch341sim > ch341sim.log 2>&1 || fail=1
 grep -a '^ok\|^FAIL' ch341sim.log
+./norsim > norsim.log 2>&1 || fail=1
+grep -a '^ok\|^FAIL' norsim.log
 [ "$fail" = 0 ] && echo "all tests passed"
 exit $fail
