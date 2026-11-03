@@ -170,53 +170,76 @@ int ms_erase(struct ms_chip *c, ms_progress cb, void *ctx, char *msg, size_t n)
 	return ret;
 }
 
-int ms_write(struct ms_chip *c, const unsigned char *data, unsigned long l,
-	     ms_progress cb, void *ctx, char *msg, size_t n)
+/* k bytes of the file from off into buf; 0, or -1. fseek, not fseeko: the
+   Android API 21 has no 64-bit fseeko, and a chip is far below 2 GB */
+static int file_part(FILE *f, unsigned long long off, unsigned char *buf, unsigned long k)
+{
+	return fseek(f, (long)off, SEEK_SET) || fread(buf, 1, k, f) != k ? -1 : 0;
+}
+
+int ms_write_file(struct ms_chip *c, FILE *f, ms_progress cb, void *ctx, char *msg, size_t n)
 {
 	unsigned char *part = NULL, *chunk = NULL;
+	unsigned long long l;
+	long end;
 	int ret = -1;
 
+	if (fseek(f, 0, SEEK_END) || (end = ftell(f)) < 0) {
+		say(msg, n, "Cannot read the file.");
+		return -1;
+	}
+	l = end;
+	if (!l) {				/* before the programmer is touched */
+		memset(c, 0, sizeof(*c));
+		say(msg, n, "The file is empty.");
+		return -1;
+	}
 	if (chip_open(c, msg, n))
 		return -1;
-	if (!l || l > (unsigned long long)flen) {
-		if (l)
-			say(msg, n, "The file (0x%lx bytes) is larger than the chip (0x%llx).", l, flen);
-		else
-			say(msg, n, "The file is empty.");
+	if (l > (unsigned long long)flen) {
+		say(msg, n, "The file (0x%llx bytes) is larger than the chip (0x%llx).", l, flen);
 		goto out;
 	}
 	if (!(part = malloc(OPS_PART)) || !(chunk = malloc(OPS_PART))) {
 		say(msg, n, "Out of memory.");
 		goto out;
 	}
-	for (unsigned long done = 0; done < l; ) {
+	/* the file is read again for the verify: only two parts are in memory */
+	for (unsigned long long done = 0; done < l; ) {
 		unsigned long k = l - done < OPS_PART ? l - done : OPS_PART;
 
 		progress(cb, ctx, "write", done, l);
-		memcpy(chunk, data + done, k);		/* the drivers take a writable buffer */
+		if (file_part(f, done, chunk, k)) {
+			say(msg, n, "Cannot read the file at 0x%llx.", done);
+			goto out;
+		}
 		if (prog.flash_write(chunk, done, k) != (int)k) {
-			say(msg, n, "Write failed at 0x%lx.", done);
+			say(msg, n, "Write failed at 0x%llx.", done);
 			goto out;
 		}
 		done += k;
 	}
-	for (unsigned long done = 0; done < l; ) {
+	for (unsigned long long done = 0; done < l; ) {
 		unsigned long k = l - done < OPS_PART ? l - done : OPS_PART;
 
 		progress(cb, ctx, "verify", done, l);
 		if (prog.flash_read(part, done, k) != (int)k) {
-			say(msg, n, "Read back failed at 0x%lx.", done);
+			say(msg, n, "Read back failed at 0x%llx.", done);
+			goto out;
+		}
+		if (file_part(f, done, chunk, k)) {
+			say(msg, n, "Cannot read the file at 0x%llx.", done);
 			goto out;
 		}
 		for (unsigned long i = 0; i < k; i++)
-			if (part[i] != data[done + i]) {
-				say(msg, n, "Verify failed: 0x%02x at 0x%lx, the file has 0x%02x.", part[i], done + i, data[done + i]);
+			if (part[i] != chunk[i]) {
+				say(msg, n, "Verify failed: 0x%02x at 0x%llx, the file has 0x%02x.", part[i], done + i, chunk[i]);
 				goto out;
 			}
 		done += k;
 	}
 	progress(cb, ctx, "verify", l, l);
-	say(msg, n, "Wrote and verified 0x%lx bytes from address 0.", l);
+	say(msg, n, "Wrote and verified 0x%llx bytes from address 0.", l);
 	ret = 0;
 out:
 	free(part);

@@ -4,6 +4,14 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.17.1 — 2026-11-03
+
+- Write in the web mode and the Android app goes from the file in parts of 64 KB, read
+  again for the verify, instead of the whole image in memory: a SPI NAND image of
+  hundreds of MB on a TV box with little memory. The web mode keeps the uploaded file,
+  without a name, in the `-o` directory until the write ends; no place for it there is
+  an error before the write starts.
+
 ## 1.17.0 — 2026-11-03
 
 - A warning about 1.8 V chips: the supply voltage is taken from the chip name (56 SPI NOR

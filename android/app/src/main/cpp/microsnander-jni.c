@@ -116,7 +116,7 @@ JNIEXPORT jobject JNICALL FN(erase)(JNIEnv *env, jclass cls, jint fd, jint vid, 
 	return result(env, ret == 0, msg, &c, NULL);
 }
 
-/* the file at path from address 0, then verified */
+/* the file at path from address 0, then verified; read in parts, not kept in memory */
 JNIEXPORT jobject JNICALL FN(write)(JNIEnv *env, jclass cls, jint fd, jint vid, jint pid, jstring jpath, jobject progress)
 {
 	struct ms_chip c;
@@ -124,19 +124,15 @@ JNIEXPORT jobject JNICALL FN(write)(JNIEnv *env, jclass cls, jint fd, jint vid, 
 	struct cb cb = make_cb(env, progress);
 	const char *path = (*env)->GetStringUTFChars(env, jpath, NULL);
 	FILE *f = fopen(path, "rb");
-	unsigned char *data = NULL;
-	long len = -1;
 	int ret = -1;
 	(void)cls;
 
 	use_device(fd, vid, pid);
 	memset(&c, 0, sizeof(c));
-	if (f && !fseek(f, 0, SEEK_END) && (len = ftell(f)) > 0 && !fseek(f, 0, SEEK_SET) &&
-	    (data = malloc(len)) && fread(data, 1, len, f) == (size_t)len)
-		ret = ms_write(&c, data, len, on_progress, &cb, msg, sizeof(msg));
+	if (f)
+		ret = ms_write_file(&c, f, on_progress, &cb, msg, sizeof(msg));
 	else
-		snprintf(msg, sizeof(msg), len == 0 ? "The file is empty." : "Cannot read the file.");
-	free(data);
+		snprintf(msg, sizeof(msg), "Cannot read the file.");
 	if (f)
 		fclose(f);
 	(*env)->ReleaseStringUTFChars(env, jpath, path);

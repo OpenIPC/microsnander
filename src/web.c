@@ -55,6 +55,7 @@ static const char *const op_names[] = { "", "detect", "read", "erase", "write", 
 static struct {
 	pthread_mutex_t lock;
 	int busy, op, ok;			/* ok: 1 done, 0 failed, -1 nothing yet */
+	int uploading;				/* a file to write is coming: one at a time */
 	unsigned long long done, total;
 	char phase[16];				/* "", "write", "verify" */
 	char message[256];
@@ -72,8 +73,7 @@ extern const char *ms_version;
 static const char *web_dir = ".";
 static const char *web_password;
 static unsigned long long web_addr, web_len;
-static unsigned char *upload;
-static unsigned long upload_len;
+static FILE *upload;			/* the file to write, unlinked in the dump directory */
 
 static void set_msg(const char *fmt, ...)
 {
@@ -212,13 +212,14 @@ static void *worker(void *arg)
 	case OP_DETECT:    ret = ms_detect(&c, msg, sizeof(msg)); break;
 	case OP_READ:      ret = op_read(&c, msg, sizeof(msg)); break;
 	case OP_ERASE:     ret = ms_erase(&c, on_progress, NULL, msg, sizeof(msg)); break;
-	case OP_WRITE:     ret = ms_write(&c, upload, upload_len, on_progress, NULL, msg, sizeof(msg)); break;
+	case OP_WRITE:     ret = ms_write_file(&c, upload, on_progress, NULL, msg, sizeof(msg)); break;
 	case OP_REGISTERS: ret = ms_registers(&c, msg, sizeof(msg)); break;
 	case OP_UNPROTECT: ret = ms_unprotect(&c, msg, sizeof(msg)); break;
 	}
 	keep_chip(&c, op == OP_DETECT || op == OP_REGISTERS || op == OP_UNPROTECT);
 	set_msg("%s", msg);
-	free(upload);
+	if (upload)
+		fclose(upload);
 	upload = NULL;
 	pthread_mutex_lock(&st.lock);
 	st.ok = ret == 0;
@@ -227,8 +228,9 @@ static void *worker(void *arg)
 	return NULL;
 }
 
-/* start an operation (with the file to write); 0, or -1 when one is running */
-static int start(int op, unsigned char *body, unsigned long blen)
+/* start an operation (with the file to write, which it closes); 0, or -1
+   when one is running */
+static int start(int op, FILE *body)
 {
 	pthread_t t;
 
@@ -238,7 +240,8 @@ static int start(int op, unsigned char *body, unsigned long blen)
 		return -1;
 	}
 	upload = body;
-	upload_len = blen;
+	if (body)
+		st.uploading = 0;		/* the upload is the operation's now */
 	st.busy = 1;
 	st.op = op;
 	st.ok = -1;
@@ -450,6 +453,42 @@ static void send_dump(int fd, const char *name)
 	fclose(f);
 }
 
+/* the upload slot is free again (the upload failed or was refused) */
+static void upload_done(void)
+{
+	pthread_mutex_lock(&st.lock);
+	st.uploading = 0;
+	pthread_mutex_unlock(&st.lock);
+}
+
+/* the file to write goes to the disk, not to memory: a SPI NAND image is up
+   to 512 MB. It has no name, it goes when it is closed. */
+static FILE *upload_file(void)
+{
+	static const char tail[] = "/.microsnander-write-XXXXXX";
+	char *path = malloc(strlen(web_dir) + sizeof(tail));	/* -o can be any length */
+	int fd, gone;
+	FILE *f;
+
+	if (!path)
+		return NULL;
+	strcpy(path, web_dir);
+	strcat(path, tail);
+	if ((fd = mkstemp(path)) < 0) {
+		free(path);
+		return NULL;
+	}
+	gone = !unlink(path);
+	free(path);
+	if (!gone) {				/* a name left would keep the image there */
+		close(fd);
+		return NULL;
+	}
+	if (!(f = fdopen(fd, "w+b")))
+		close(fd);
+	return f;
+}
+
 static void handle(int fd)
 {
 	char head[WEB_HEADERS + 1];
@@ -518,38 +557,56 @@ static void handle(int fd)
 		reply_text(fd, "404 Not Found", "Not found.\n");
 		return;
 	}
+	/* an upload holds the slot of the operation it brings: another upload is
+	   refused before it takes space, another operation before it runs */
 	pthread_mutex_lock(&st.lock);
-	int busy = st.busy;
+	int busy = st.busy || st.uploading;
+	if (!busy && op == OP_WRITE)
+		st.uploading = 1;
 	pthread_mutex_unlock(&st.lock);
 	if (busy) {
 		reply_text(fd, "409 Conflict", "An operation is running.\n");
 		return;
 	}
-	unsigned char *body = NULL;
+	FILE *body = NULL;
 	if (op == OP_WRITE) {
+		char part[16384];
 		size_t have = got - (end + 4 - head);
 
 		if (!clen || clen > WEB_MAX_BODY || have > clen) {
+			upload_done();
 			reply_text(fd, "413 Payload Too Large", "No file, or too large.\n");
 			return;
 		}
-		if (!(body = malloc(clen))) {
-			reply_text(fd, "500 Internal Server Error", "Out of memory.\n");
+		if (!(body = upload_file())) {
+			upload_done();
+			reply_text(fd, "500 Internal Server Error", "Cannot store the file in the dump directory.\n");
 			return;
 		}
-		memcpy(body, end + 4, have);
-		while (have < clen) {
-			ssize_t r = recv(fd, body + have, clen - have, 0);
+		int bad = fwrite(end + 4, 1, have, body) != have;
+		while (!bad && have < clen) {
+			ssize_t r = recv(fd, part, clen - have < sizeof(part) ? clen - have : sizeof(part), 0);
 
 			if (r <= 0) {
-				free(body);
+				fclose(body);
+				upload_done();
 				return;
 			}
+			bad = fwrite(part, 1, r, body) != (size_t)r;
 			have += r;
 		}
+		if (bad || fflush(body)) {
+			fclose(body);
+			upload_done();
+			reply_text(fd, "507 Insufficient Storage", "Cannot store the file in the dump directory.\n");
+			return;
+		}
 	}
-	if (start(op, body, clen)) {
-		free(body);
+	if (start(op, body)) {
+		if (body) {
+			fclose(body);
+			upload_done();
+		}
 		reply_text(fd, "409 Conflict", "An operation is running.\n");
 		return;
 	}

@@ -2,6 +2,8 @@
    it: requests go through a socket pair to handle(), the operations run in
    their thread, and the dumps land in a temporary directory. */
 #include <stdlib.h>
+#include <dirent.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include "../src/ops.c"
 #include "../src/web.c"
@@ -97,7 +99,7 @@ static void check(int ok, const char *what) { printf("%s %s\n", ok ? "ok  " : "F
 
 int main(void)
 {
-	static unsigned char img[5000];
+	static unsigned char img[200000];	/* over three parts of 64 KB */
 	char dir[] = "/tmp/websimXXXXXX";
 
 	if (!mkdtemp(dir)) return 1;
@@ -192,6 +194,12 @@ int main(void)
 	request("GET", "/api/state", NULL, NULL, 0);
 	check(!memcmp(mem, img, sizeof(img)) && mem[sizeof(img)] == 0xff && strstr(body_of(), "\"ok\":true") && strstr(body_of(), "verified"),
 	      "  written from address 0 and verified");
+	int left = 0;
+	DIR *d = opendir(dir);
+	for (struct dirent *e; d && (e = readdir(d)); )
+		left += !strncmp(e->d_name, ".microsnander-write", 19);
+	if (d) closedir(d);
+	check(d && !left, "  the uploaded file was kept on the disk without a name and is gone");
 	request("POST", "/api/write", NULL, img, sizeof(img));	/* over the data: the verify finds it */
 	wait_idle();
 	img[0] ^= 0xff;
@@ -199,6 +207,37 @@ int main(void)
 	wait_idle();
 	request("GET", "/api/state", NULL, NULL, 0);
 	check(strstr(body_of(), "\"ok\":false") && strstr(body_of(), "Verify failed"), "  a write that does not take fails the verify");
+	{
+		int opens_before = opens;
+		struct ms_chip c;
+		char m[128];
+		FILE *e = tmpfile();
+		check(ms_write_file(&c, e, NULL, NULL, m, sizeof(m)) < 0 && strstr(m, "empty") && opens == opens_before,
+		      "  an empty file is refused before the programmer is opened");
+		fclose(e);
+	}
+	{						/* an -o path longer than any fixed buffer */
+		static char deep[1200];
+		int k = snprintf(deep, sizeof(deep), "%s", dir);
+		while (k < 1000) {
+			k += snprintf(deep + k, sizeof(deep) - k, "/%s", "a-long-directory-name-for-the-dumps");
+			mkdir(deep, 0755);
+		}
+		web_dir = deep;
+		FILE *f = upload_file();
+		check(f != NULL, "  the file to write is stored under an -o path of over 1000 characters");
+		if (f) fclose(f);
+		web_dir = dir;
+	}
+	st.uploading = 1;				/* another upload is coming in */
+	check(request("POST", "/api/write", NULL, img, sizeof(img)) == 409, "  a second upload at the same time: 409, before it takes space");
+	check(request("POST", "/api/erase", NULL, NULL, 0) == 409, "  an erase while a file is coming in: 409");
+	st.uploading = 0;
+	web_dir = "/nonexistent-microsnander";
+	check(request("POST", "/api/write", NULL, img, sizeof(img)) == 500 && strstr(resp, "Cannot store the file"),
+	      "  no place for the file in the dump directory: 500, nothing starts");
+	check(!st.uploading, "  and the upload slot is free again");
+	web_dir = dir;
 
 	check(request("POST", "/api/unprotect", NULL, NULL, 0) == 202, "Clear protection starts");
 	wait_idle();
