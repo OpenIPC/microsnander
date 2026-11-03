@@ -48,7 +48,7 @@ extern int org;
 #define EHELP	""
 #endif
 
-#define _VER	"1.8.2"
+#define _VER	"1.9.0"
 
 void title(void)
 {
@@ -67,6 +67,7 @@ void usage(int code)
 		" -h             display this message\n"\
 		" -d             disable internal ECC(use read and write page size + OOB size)\n"\
 		" -I             ECC ignore errors(for read test only)\n"\
+		" -k             skip BAD pages (SPI NAND): use the next page instead\n"\
 		" -L             print list support chips\n"\
 		" -i             read the chip ID info\n"\
 		"" EHELP ""\
@@ -92,9 +93,9 @@ int main(int argc, char* argv[])
 	title();
 
 #ifdef EEPROM_SUPPORT
-	while ((c = getopt(argc, argv, "diIhveuLl:a:w:r:E:f:8")) != -1)
+	while ((c = getopt(argc, argv, "diIhveukLl:a:w:r:E:f:8")) != -1)
 #else
-	while ((c = getopt(argc, argv, "diIhveuLl:a:w:r:")) != -1)
+	while ((c = getopt(argc, argv, "diIhveukLl:a:w:r:")) != -1)
 #endif
 	{
 		switch(c)
@@ -146,6 +147,9 @@ int main(int argc, char* argv[])
 			case 'I':
 				ECC_ignore = 1;
 				break;
+			case 'k':
+				Skip_BAD_page = 1;
+				break;
 			case 'd':
 				ECC_fcheck = 0;
 				_ondie_ecc_flag = 0;
@@ -189,7 +193,7 @@ int main(int argc, char* argv[])
 
 	if (op == 0) usage(1);
 
-	if (op == 'x' || (ECC_ignore && !ECC_fcheck) || (op == 'w' && ECC_ignore)) {
+	if (op == 'x' || (ECC_ignore && !ECC_fcheck) || (ECC_ignore && Skip_BAD_page) || (op == 'w' && ECC_ignore)) {
 		printf("Conflicting options, only one option at a time.\n\n");
 		return 1;
 	}
@@ -254,6 +258,8 @@ int main(int argc, char* argv[])
 		len = flen - addr;
 	else if(!addr && !len)
 		len = flen;
+	/* -k moves data to later pages, but only inside -a/-l (without -l: to the chip end) */
+	Skip_BAD_end = addr + len;
 	buf = (unsigned char *)malloc(len + 1);
 	if (!buf) {
 		printf("Malloc failed for read buffer.\n");

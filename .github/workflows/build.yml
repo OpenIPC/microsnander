@@ -58,7 +58,8 @@ jobs:
           ./src/microsnander -h | head -3
 
       # main.c against a test double of the programmer: exit codes, option
-      # conflicts, unprotect, verify after write
+      # conflicts, unprotect, verify after write; spi_nand_flash.c against an
+      # SPI NAND simulator: detection by ID, write and read, -k
       - name: Tests
         run: tests/run.sh
 

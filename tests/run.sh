@@ -2,6 +2,8 @@
 #
 # tests/run.sh — main.c against tests/stub.c (no programmer needed): exit
 # codes, option conflicts, -u on chips without unprotect, verify after write.
+# Then spi_nand_flash.c against the SPI NAND simulator tests/nandsim.c:
+# detection by ID, write and read, skipping BAD pages with -k.
 #
 #   tests/run.sh            (CC=<compiler> to choose the compiler)
 #
@@ -10,6 +12,7 @@ T=$(cd "$(dirname "$0")" && pwd)
 W=$(mktemp -d)
 trap 'rm -rf "$W"' EXIT
 ${CC:-cc} -std=gnu99 -Wall -Werror -I"$T/../src" -o "$W/ms" "$T/../src/main.c" "$T/stub.c" || exit 1
+${CC:-cc} -std=gnu99 -Wall -Werror -O1 -o "$W/nandsim" "$T/nandsim.c" "$T/../src/spi_nand_flash.c" "$T/../src/timer.c" || exit 1
 cd "$W"; B=./ms; fail=0
 # t <expected exit code> <description> [VAR=value ...] <command>
 t() { exp=$1; d=$2; shift 2; out=$(env "$@" 2>&1); got=$?
@@ -21,6 +24,8 @@ t 1 "unknown option"                  $B -Z
 t 1 "conflict -u -i"                  $B -u -i
 t 1 "conflict -i -u"                  $B -i -u
 t 1 "conflict -u -r"                  $B -u -r x.bin
+t 1 "conflict -k -I"                  $B -k -I -r x.bin
+$B -h | grep -q '^ -k ' && echo "ok   -h lists -k" || { echo "FAIL -h without -k"; fail=1; }
 t 0 "-i detected"                     $B -i
 t 1 "-i chip not found"               MS_CHIP=none $B -i
 t 0 "-u NOR"                          $B -u
@@ -51,5 +56,7 @@ cmp -s out.bin img.bin && echo "ok   -r gives the written image" || { echo "FAIL
 t 1 "-r short read"                  MS_FAIL=shortread $B -r out3.bin
 t 1 "-r read fails"                   MS_FAIL=read $B -r out2.bin
 t 1 "-r unwritable file"              $B -r /nonexistent/dir/out.bin
+./nandsim > nandsim.log 2>&1 || fail=1
+grep -a '^ok\|^FAIL' nandsim.log
 [ "$fail" = 0 ] && echo "all tests passed"
 exit $fail

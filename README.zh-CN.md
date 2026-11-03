@@ -12,7 +12,7 @@
 
 MicroSNANDer 是一个命令行编程器，配合廉价的 CH341A USB 编程器使用，用于 SPI NOR 和
 SPI NAND 闪存芯片。它可以读取、写入、擦除和校验摄像机、路由器及其他开发板的闪存，
-解除 SPI NOR 芯片的写保护，支持 127 款 SPI NOR 和 78 款 SPI NAND 芯片。
+解除 SPI NOR 芯片的写保护，支持 127 款 SPI NOR 和 81 款 SPI NAND 芯片。
 
 它是 McMCC 的 [SNANDer](https://github.com/McMCCRU/SNANDer) 1.7.4 的精简增强版：
 仅支持 Linux，发布版本不含 EEPROM 部分，增加了 `-u`（解除保护）命令以及 OpenIPC
@@ -86,6 +86,7 @@ microsnander [options]
  -h             display this message
  -d             disable internal ECC (use read and write page size + OOB size)
  -I             ECC ignore errors (for read test only)
+ -k             skip BAD pages (SPI NAND): use the next page instead
  -L             print list support chips
  -i             read the chip ID info
  -e             erase chip (full or use with -a [-l])
@@ -103,6 +104,13 @@ microsnander [options]
 
 SPI NAND 芯片默认使用片内 ECC 读写：文件中只有数据页。使用 `-d` 时关闭 ECC，每页
 连同 OOB（spare）区一起读写，用于原始转储。
+
+使用 `-k` 时，读取时 ECC 失败或写入失败的页会被跳过，数据从下一页继续，因此其后的
+内容整体后移一页；每个被跳过的页都会打印出来。写入不会超出 `-a`/`-l` 的范围（不指定
+`-l` 时到芯片末尾）：请用 `-l` 指定分区大小，分区内空间不够的写入会失败。需要用到芯片
+末尾之后的页的读取也会失败。
+写入失败的页只在同一次运行的 `-v` 中被记住：之后用 `-k` 读取时可能把它当作数据读出，
+转储从该页起会错位。
 
 ## 示例
 
@@ -136,7 +144,7 @@ microsnander -d -r raw.bin
 
 `microsnander -L` 会列出支持的芯片：127 款 SPI NOR 芯片（Winbond、Eon、Fudan
 Microelectronics FM25Q、GigaDevice、Macronix、Spansion、XMC、XTX、Zbit、Giantec
-GM25Q 等）和 78 款 SPI NAND 芯片（Etron、GigaDevice、Heyang、Foresee、ESMT、Micron、
+GM25Q 等）和 81 款 SPI NAND 芯片（Etron、GigaDevice、Heyang、Foresee、ESMT、Micron、
 Toshiba/Kioxia、Winbond、Macronix 等）。不在列表中的芯片会显示为未检测到；输出中的
 芯片 ID 可用于添加该芯片。
 

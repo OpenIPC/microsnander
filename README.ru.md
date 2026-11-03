@@ -13,7 +13,7 @@
 MicroSNANDer — консольный программатор микросхем флеш-памяти SPI NOR и SPI NAND
 для недорогого USB-программатора CH341A. Он читает, записывает, стирает и проверяет
 флеш камер, роутеров и других плат, снимает защиту от записи с микросхем SPI NOR и
-знает 127 микросхем SPI NOR и 78 микросхем SPI NAND.
+знает 127 микросхем SPI NOR и 81 микросхем SPI NAND.
 
 Это урезанная и дополненная версия [SNANDer](https://github.com/McMCCRU/SNANDer)
 1.7.4 от McMCC: только Linux, без поддержки EEPROM в релизной сборке, с командой
@@ -90,6 +90,7 @@ microsnander [options]
  -h             display this message
  -d             disable internal ECC (use read and write page size + OOB size)
  -I             ECC ignore errors (for read test only)
+ -k             skip BAD pages (SPI NAND): use the next page instead
  -L             print list support chips
  -i             read the chip ID info
  -e             erase chip (full or use with -a [-l])
@@ -109,6 +110,15 @@ microsnander [options]
 Микросхемы SPI NAND по умолчанию читаются и пишутся со встроенным ECC: в файле
 только страницы данных. С `-d` ECC выключен, и каждая страница читается и пишется
 вместе с областью OOB (spare) — для «сырого» дампа.
+
+С `-k` страница, которая не читается из-за ошибки ECC или не записывается,
+пропускается, и данные идут дальше со следующей страницы, поэтому всё после неё
+сдвигается на страницу; каждая пропущенная страница выводится. Запись не выходит
+за `-a`/`-l` (без `-l` — до конца микросхемы): укажите в `-l` размер раздела, и
+запись, которой не хватит места в нём, завершится ошибкой. Чтение, которому нужна
+страница за концом микросхемы, тоже завершается ошибкой. Страница, которая не
+записалась, запоминается только для `-v` в том же запуске: позднее чтение с `-k`
+может прочитать её как данные, и дамп с этого места сдвинется.
 
 ## Примеры
 
@@ -142,7 +152,7 @@ microsnander -d -r raw.bin
 
 `microsnander -L` выводит список: 127 микросхем SPI NOR (Winbond, Eon, Fudan
 Microelectronics FM25Q, GigaDevice, Macronix, Spansion, XMC, XTX, Zbit, Giantec
-GM25Q и другие) и 78 микросхем SPI NAND (Etron, GigaDevice, Heyang, Foresee, ESMT,
+GM25Q и другие) и 81 микросхем SPI NAND (Etron, GigaDevice, Heyang, Foresee, ESMT,
 Micron, Toshiba/Kioxia, Winbond, Macronix и другие). Микросхема не из списка
 определяется как ненайденная; её ID из вывода поможет её добавить.
 

@@ -4,6 +4,38 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.9.0 — 2026-11-03
+
+From PR #1 by @atom-bomb, ported from upstream SNANDer (#5):
+
+- SPI NAND chips are matched by a 3-byte ID when the table gives one. New chips:
+  Winbond W25N02KV, Macronix MX35LF2GE4AD and XTX XT26G01C; Winbond W25N01G and
+  W25M02G are now told apart from W25N02KV by the third ID byte.
+- `-k` skips BAD SPI NAND pages: a page that fails ECC on read or fails to program
+  is passed over and the data goes on in the next page, so the data after it shifts
+  by a page. Not together with `-I`. A page that failed to program is remembered for
+  the `-v` of the same run; a later `-k` read does not know it and may read it as
+  data, so its dump is shifted from that page on.
+
+Fixed in the port (the same code in upstream SNANDer):
+
+- `-k` never goes past the chip end: a skipped page near the end made the write wrap
+  to page 0 and overwrite the start of the chip; now such a write or read fails. Each
+  skipped page is printed.
+- A `-k` write stays inside `-a`/`-l` (without `-l`, up to the chip end): the shifted
+  data went on into the next partition, which was not erased. Give `-l` the partition
+  size; a write that needs more room fails.
+- Without `-k`, an ECC error in the read that a page write starts with does not fail
+  the write, as before.
+- After a skipped page the rest of the data starts at the next page boundary: a last
+  chunk shorter than a page was written into the same failed page again.
+- The fallback READ ID without the dummy byte (Toshiba/Kioxia) checks the third ID
+  byte too: an unknown `EF AA xx` chip was detected as W25N01G.
+- A page that failed ECC is not kept in the driver page cache, so reading it again
+  fails again instead of returning the cached data.
+- `tests/nandsim.c`: an SPI NAND chip simulated at the SPI command level runs
+  `spi_nand_flash.c` in `tests/run.sh` (detection, write and read, `-k`).
+
 ## 1.8.2 — 2026-11-02
 
 - `EEPROM_SUPPORT=y` build: the Microwire EEPROM info line printed a pointer to an
