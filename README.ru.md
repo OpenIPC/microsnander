@@ -160,7 +160,8 @@ microsnander [options]
                 with -m sigmastar the I2C clock: 20K, 100K (default), 400K, 750K
  -m sigmastar   the flash of a SigmaStar board through the ISP of its SoC: the SoC's UART
                 (TX to SDA, RX to SCL, GND) on the I2C of the CH341A or the CH347
- -q             list the addresses that answer on the I2C of the programmer
+ -q             list the addresses that answer on the I2C of the programmer (alone, or
+                before the operation: -m sigmastar -i -q)
  -W [addr:]port web mode: a page with Detect, Read, Erase, Write, Registers
  -K <password>  web mode: ask for this password (any user name)
  -o <dir>       web mode: where Read saves the dumps (default: the current one)
@@ -352,13 +353,12 @@ ISP-мост SoC по I2C. Так восстанавливают плату с �
   `-P` или сам; у программаторов EZP I2C нет.
 - `-S` в этом режиме — частота I2C: `20K`, `100K` (по умолчанию), `400K`, `750K`.
 - `-q` выводит адреса I2C, которые отвечают, — для проверки подключения (мост — `0x49`, порт
-  отладки SoC — `0x59`).
+  отладки SoC — `0x59`): отдельно или перед операцией, например `-m sigmastar -i -q`.
 - Остальное — как с микросхемой в панельке: `-i`, `-r`, `-w`, `-e`, `-v`, `-a`, `-l`, SPI NOR и
   SPI NAND. В веб-режиме и в приложении для Android этого режима нет.
 
 ```sh
-microsnander -q                                  # должны ответить 0x49 и 0x59
-microsnander -m sigmastar -i                     # флешка платы
+microsnander -m sigmastar -i -q                  # должны ответить 0x49 и 0x59, затем флешка
 microsnander -m sigmastar -r backup.bin          # сначала копия
 microsnander -m sigmastar -a 0 -l 0x40000 -e     # область загрузчика, затем
 microsnander -m sigmastar -w u-boot.bin -v       # рабочий загрузчик

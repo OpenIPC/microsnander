@@ -159,7 +159,8 @@ microsnander [options]
                 with -m sigmastar the I2C clock: 20K, 100K (default), 400K, 750K
  -m sigmastar   the flash of a SigmaStar board through the ISP of its SoC: the SoC's UART
                 (TX to SDA, RX to SCL, GND) on the I2C of the CH341A or the CH347
- -q             list the addresses that answer on the I2C of the programmer
+ -q             list the addresses that answer on the I2C of the programmer (alone, or
+                before the operation: -m sigmastar -i -q)
  -W [addr:]port web mode: a page with Detect, Read, Erase, Write, Registers
  -K <password>  web mode: ask for this password (any user name)
  -o <dir>       web mode: where Read saves the dumps (default: the current one)
@@ -348,13 +349,12 @@ bootloader ([OpenIPC wiki: SigmaStar unbrick](https://github.com/OpenIPC/wiki/bl
   with `-P` or by itself; the EZP programmers have no I2C.
 - `-S` is the I2C clock in this mode: `20K`, `100K` (default), `400K`, `750K`.
 - `-q` lists the I2C addresses that answer, to check the wiring (the bridge is at `0x49`, the
-  debug port of the SoC at `0x59`).
+  debug port of the SoC at `0x59`): alone, or before the operation, as `-m sigmastar -i -q`.
 - Everything else works as with a chip in the socket: `-i`, `-r`, `-w`, `-e`, `-v`, `-a`, `-l`,
   SPI NOR and SPI NAND. Not in the web mode or the Android app.
 
 ```sh
-microsnander -q                                  # 0x49 and 0x59 must answer
-microsnander -m sigmastar -i                     # the flash of the board
+microsnander -m sigmastar -i -q                  # 0x49 and 0x59 must answer, then the flash
 microsnander -m sigmastar -r backup.bin          # back it up first
 microsnander -m sigmastar -a 0 -l 0x40000 -e     # the loader part, then
 microsnander -m sigmastar -w u-boot.bin -v       # a working loader

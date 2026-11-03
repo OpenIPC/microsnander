@@ -86,7 +86,8 @@ void usage(int code)
 		"                with -m sigmastar the I2C clock: 20K, 100K (default), 400K, 750K\n"\
 		" -m sigmastar   the flash of a SigmaStar board through the ISP of its SoC: the SoC's UART\n"\
 		"                (TX to SDA, RX to SCL, GND) on the I2C of the CH341A or the CH347\n"\
-		" -q             list the addresses that answer on the I2C of the programmer\n"\
+		" -q             list the addresses that answer on the I2C of the programmer (alone, or\n"\
+		"                before the operation: -m sigmastar -i -q)\n"\
 		" -W [addr:]port web mode: a page with Detect, Read, Erase, Write, Registers\n"\
 		" -K <password>  web mode: ask for this password (any user name)\n"\
 		" -o <dir>       web mode: where Read saves the dumps (default: the current one)\n";
@@ -98,6 +99,7 @@ int main(int argc, char* argv[])
 {
 	int c, vr = 0, ret = 0, rc = 1, speed_set = 0;
 	const char *speed = NULL;
+	int scan = 0;
 	char *fname = NULL, op = 0, *web = NULL, *web_key = NULL, *web_dir = NULL;
 	unsigned char *buf;
 	int long long len = 0, addr = 0, flen = 0, wlen = 0;
@@ -154,11 +156,13 @@ int main(int argc, char* argv[])
 			case 'o':
 				web_dir = optarg;
 				break;
+			case 'q':			/* before the operation, or alone */
+				scan = 1;
+				break;
 			case 'i':
 			case 'e':
 			case 'u':
 			case 't':
-			case 'q':
 				if(!op)
 					op = c;
 				else
@@ -197,7 +201,7 @@ int main(int argc, char* argv[])
 		/* the web mode: the page does the operations, one programmer, auto */
 		/* the page writes whole files from 0 with ECC on: no raw NAND
 		   (-d), no ECC ignore (-I), no BAD page skipping (-k) */
-		if (op || vr || speed_set || !ECC_fcheck || ECC_ignore || Skip_BAD_page || sigmastar_on()) {
+		if (op || scan || vr || speed_set || !ECC_fcheck || ECC_ignore || Skip_BAD_page || sigmastar_on()) {
 			printf("-W runs the web mode: give no -i, -r, -w, -e, -u, -t, -q, -v, -S, -m, -d, -I or -k with it.\n\n");
 			return 1;
 		}
@@ -208,6 +212,8 @@ int main(int argc, char* argv[])
 		return 1;
 	}
 
+	if (op == 0 && scan)
+		op = 'q';			/* -q alone: only the bus */
 	if (op == 0) usage(1);
 
 	if (op == 'x' || (ECC_ignore && !ECC_fcheck) || (ECC_ignore && Skip_BAD_page) || (op == 'w' && ECC_ignore) ||
@@ -224,8 +230,10 @@ int main(int argc, char* argv[])
 		return 1;
 	}
 
+	if (scan && i2c_scan(programmer))
+		goto out;
 	if (op == 'q') {
-		rc = i2c_scan(programmer) ? 1 : 0;
+		rc = 0;
 		goto out;
 	}
 	if (sigmastar_on()) {
