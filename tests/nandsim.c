@@ -9,8 +9,9 @@
 #include <string.h>
 #include "../src/types.h"
 #include "../src/spi_controller.h"
-#include "../src/spi_nand_flash.h"
 #include "../src/nandcmd_api.h"
+/* the driver is built into this file, so the checks can walk its chip table */
+#include "../src/spi_nand_flash.c"
 
 int snand_read(unsigned char *buf, unsigned long from, unsigned long len);
 int snand_write(unsigned char *buf, unsigned long to, unsigned long len);
@@ -154,6 +155,34 @@ int main(void)
 	}
 	chip(0xef, 0xaa, 0x99);
 	check(snand_init() < 0, "EF AA with an unknown third byte is not detected");
+
+	/* every chip of the table is detected by its own ID and gets its own entry;
+	   only the three old entries below share an ID with an earlier one */
+	{
+		const int n = sizeof(spi_nand_flash_tables) / sizeof(spi_nand_flash_tables[0]);
+		int bad = 0, shadowed = 0;
+		for (int i = 0; i < n; i++) {
+			const struct SPI_NAND_FLASH_INFO_T *e = &spi_nand_flash_tables[i];
+			chip(e->mfr_id, e->dev_id, e->dev_id_2);
+			long size = snand_init();
+			const char *got = (_SPI_NAND_GET_DEVICE_INFO_PTR)->ptr_name;
+			if (size != (long)e->device_size || !got || strcmp(got, e->ptr_name)) {
+				int first = -1;
+				for (int j = 0; j < i && first < 0; j++)
+					if (spi_nand_compare(e, &spi_nand_flash_tables[j]) == SPI_NAND_FLASH_RTN_NO_ERROR)
+						first = j;
+				if (first >= 0 && (!strcmp(e->ptr_name, "ZENTEL A5U12A21ASC") || !strcmp(e->ptr_name, "ZENTEL A5U1GA21BWS") ||
+						   !strcmp(e->ptr_name, "MIRA PSU1GS20BN"))) {
+					shadowed++;
+					continue;
+				}
+				printf("     %s: detected as %s, size %ld\n", e->ptr_name, got ? got : "nothing", size);
+				bad++;
+			}
+		}
+		printf("     %d SPI NAND chips in the table\n", n);
+		check(!bad && shadowed == 3, "every SPI NAND chip of the table is detected by its ID");
+	}
 
 	chip(0xef, 0xaa, 0x21);
 	snand_init();
