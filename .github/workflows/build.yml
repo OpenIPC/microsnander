@@ -207,7 +207,10 @@ jobs:
           signer_of() {
             for bt in $(ls -d "$ANDROID_HOME"/build-tools/* | sort -rV); do
               if out=$("$bt/apksigner" verify --print-certs "$1" 2>&1); then
-                echo "$out" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p'; return 0
+                # "Signer #1 certificate ..." or "Signer (minSdkVersion=N...) certificate ..."
+                d=$(echo "$out" | sed -n 's/^Signer[^:]* certificate SHA-256 digest: //p' | head -1)
+                [ -n "$d" ] || { echo "$bt/apksigner printed no signer:" >&2; echo "$out" >&2; }
+                echo "$d"; return 0
               fi
               echo "$bt/apksigner: $out" | head -3 >&2
             done
@@ -271,7 +274,10 @@ jobs:
             signer_of() {
               for bt in $(ls -d "$ANDROID_HOME"/build-tools/* | sort -rV); do
                 if out=$("$bt/apksigner" verify --print-certs "$1" 2>&1); then
-                  echo "$out" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p'; return 0
+                  # "Signer #1 certificate ..." or "Signer (minSdkVersion=N...) certificate ..."
+                  d=$(echo "$out" | sed -n 's/^Signer[^:]* certificate SHA-256 digest: //p' | head -1)
+                  [ -n "$d" ] || { echo "$bt/apksigner printed no signer:" >&2; echo "$out" >&2; }
+                  echo "$d"; return 0
                 fi
                 echo "$bt/apksigner: $out" | head -3 >&2
               done
