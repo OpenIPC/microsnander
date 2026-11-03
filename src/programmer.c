@@ -18,8 +18,8 @@
 static int ch341a_cs(bool low) { return enable_pins(low); }
 
 static const struct programmer programmers[] = {
-	{ "ch341a", "CH341A", 0x1a86, { 0x5512 }, ch341a_spi_init, ch341a_spi_shutdown, ch341a_spi_send_command, ch341a_cs },
-	{ "ch347",  "CH347",  0x1a86, { 0x55db, 0x55de }, ch347_spi_init, ch347_spi_shutdown, ch347_spi_send_command, ch347_cs },
+	{ "ch341a", "CH341A", 0x1a86, { 0x5512 }, ch341a_spi_init, ch341a_spi_shutdown, ch341a_spi_send_command, ch341a_cs, false },
+	{ "ch347",  "CH347",  0x1a86, { 0x55db, 0x55de }, ch347_spi_init, ch347_spi_shutdown, ch347_spi_send_command, ch347_cs, true },
 };
 #define NPROG (sizeof(programmers) / sizeof(programmers[0]))
 
@@ -42,15 +42,16 @@ int programmer_select(const char *name)
 
 const char *programmer_names(void) { return "ch341a, ch347, auto"; }
 
-/* Which supported programmers are plugged in: a bit per entry of programmers[] */
-static unsigned int programmers_present(void)
+/* How many of each supported programmer are plugged in (count[i] for programmers[i]) */
+static void programmers_present(unsigned int count[NPROG])
 {
 	libusb_device **list;
-	unsigned int found = 0;
 	ssize_t n;
 
+	memset(count, 0, NPROG * sizeof(count[0]));
+
 	if (libusb_init(NULL) < 0)
-		return 0;
+		return;
 	n = libusb_get_device_list(NULL, &list);
 	for (ssize_t d = 0; d < n; d++) {
 		struct libusb_device_descriptor desc;
@@ -60,33 +61,48 @@ static unsigned int programmers_present(void)
 		for (unsigned i = 0; i < NPROG; i++)
 			for (unsigned p = 0; p < sizeof(programmers[i].pid) / sizeof(programmers[i].pid[0]); p++)
 				if (programmers[i].pid[p] && desc.idVendor == programmers[i].vid && desc.idProduct == programmers[i].pid[p])
-					found |= 1u << i;
+					count[i]++;
 	}
 	if (n >= 0)
 		libusb_free_device_list(list, 1);
 	libusb_exit(NULL);
-	return found;
 }
 
-int programmer_init(void)
+int programmer_init(bool need_clock)
 {
+	unsigned int count[NPROG], kinds = 0;
+
+	programmers_present(count);
+	for (unsigned i = 0; i < NPROG; i++)
+		kinds += count[i] != 0;
 	programmer = chosen;
 	if (!programmer) {
-		unsigned int found = programmers_present();
-
-		if (!found)
+		if (!kinds)
 			return -1;
-		if (found & (found - 1)) {
+		if (kinds > 1) {
 			printf("Several programmers are connected:");
 			for (unsigned i = 0; i < NPROG; i++)
-				if (found & (1u << i))
+				if (count[i])
 					printf(" %s", programmers[i].name);
 			printf("; choose one with -P.\n\n");
 			return -2;
 		}
 		for (unsigned i = 0; i < NPROG; i++)
-			if (found & (1u << i))
+			if (count[i])
 				programmer = &programmers[i];
+	}
+	/* the drivers open the first device with a known USB ID: with two of the
+	   same kind it is not known which one, so do not guess */
+	if (count[programmer - programmers] > 1) {
+		printf("%u %s programmers are connected; connect only one.\n\n", count[programmer - programmers], programmer->name);
+		programmer = NULL;
+		return -2;
+	}
+	/* before the device is opened: it may be in use by another run */
+	if (need_clock && !programmer->clock) {
+		printf("-S sets the SPI clock of the CH347 only; the %s has a fixed one.\n\n", programmer->name);
+		programmer = NULL;
+		return -2;
 	}
 	if (programmer->init() < 0) {
 		programmer = NULL;

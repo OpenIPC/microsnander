@@ -87,7 +87,7 @@ void usage(int code)
 
 int main(int argc, char* argv[])
 {
-	int c, vr = 0, ret = 0, rc = 1;
+	int c, vr = 0, ret = 0, rc = 1, speed_set = 0;
 	char *str, *fname = NULL, op = 0;
 	unsigned char *buf;
 	int long long len = 0, addr = 0, flen = 0, wlen = 0;
@@ -160,6 +160,7 @@ int main(int argc, char* argv[])
 				}
 				break;
 			case 'S':
+				speed_set = 1;
 				if (ch347_set_speed(optarg) < 0) {
 					printf("Unknown SPI speed %s; use one of: %s.\n\n", optarg, ch347_speed_list());
 					exit(1);
@@ -213,7 +214,7 @@ int main(int argc, char* argv[])
 		return 1;
 	}
 
-	ret = programmer_init();
+	ret = programmer_init(speed_set);
 	if (ret < 0) {
 		if (ret == -1)
 			printf("Programmer device not found!\n\n");

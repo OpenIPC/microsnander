@@ -19,13 +19,16 @@ struct programmer {
 	int (*shutdown)(void);
 	int (*send)(unsigned int writecnt, unsigned int readcnt, const unsigned char *writearr, unsigned char *readarr);
 	int (*cs)(bool low);
+	bool clock;			/* the SPI clock can be set (-S) */
 };
 
 extern const struct programmer *programmer;	/* the one in use */
 
 int programmer_select(const char *name);	/* -P; -1: unknown name */
 const char *programmer_names(void);
-int programmer_init(void);			/* -1: none found or init failed; -2: several found, no -P */
+/* need_clock: -S was given. -1: none found or init failed; -2: refused
+   (several found and no -P, or no settable clock), the message printed */
+int programmer_init(bool need_clock);
 int programmer_shutdown(void);
 
 #endif /* __PROGRAMMER_H__ */

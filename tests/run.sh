@@ -35,7 +35,10 @@ t 1 "conflict -k -I"                  $B -k -I -r x.bin
 t 1 "-P unknown programmer"           $B -P ft2232 -i
 t 0 "-P ch341a"                       $B -P ch341a -i
 t 1 "-S unknown speed"                $B -S 100M -i
-t 0 "-S 15M"                          $B -S 15M -i
+t 0 "-P ch347 -S 15M"                 $B -P ch347 -S 15M -i
+t 1 "-S with the CH341A is an error"  $B -P ch341a -S 15M -i
+t 1 "-S with auto (CH341A) is an error" $B -S 15M -i
+MS_PROGRAMMER=1 $B -P ch347 -i | grep -q '^programmer: ch347' && MS_PROGRAMMER=1 $B -i | grep -q '^programmer: ch341a' && echo "ok   -P chooses the programmer, auto by default" || { echo "FAIL programmer choice"; fail=1; }
 $B -h | grep -q '^ -P ' && $B -h | grep -q '^ -S ' && echo "ok   -h lists -P and -S" || { echo "FAIL -h without -P/-S"; fail=1; }
 $B -h | grep -q '^ -k ' && echo "ok   -h lists -k" || { echo "FAIL -h without -k"; fail=1; }
 t 0 "-i detected"                     $B -i

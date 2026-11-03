@@ -196,8 +196,9 @@ static int ch347_write(unsigned int len, const unsigned char *data)
 		memcpy(pkt + 3, data, n);
 		if (bulk(CH347_WRITE_EP, pkt, n + 3, NULL) || bulk(CH347_READ_EP, resp, sizeof(resp), &got))
 			return -1;
-		if (got != sizeof(resp)) {
-			printf("CH347: bad answer to a write (%d bytes)\n", got);
+		/* the answer: SPI_OUT, length 1, status 0 */
+		if (got != sizeof(resp) || resp[0] != CH347_CMD_SPI_OUT || resp[3] != 0) {
+			printf("CH347: write refused (answer %d bytes: %02x %02x %02x %02x)\n", got, resp[0], resp[1], resp[2], resp[3]);
 			return -1;
 		}
 		data += n;
@@ -220,12 +221,12 @@ static int ch347_read(unsigned int len, unsigned char *data)
 
 		if (bulk(CH347_READ_EP, pkt, sizeof(pkt), &got))
 			return -1;
-		if (got < 3) {
-			printf("CH347: bad answer to a read\n");
+		if (got < 3 || pkt[0] != CH347_CMD_SPI_IN) {
+			printf("CH347: bad answer to a read (%d bytes, command %02x)\n", got, got ? pkt[0] : 0);
 			return -1;
 		}
 		n = pkt[1] | (pkt[2] << 8);
-		if (n > (unsigned int)got - 3 || n > len - done) {
+		if (n == 0 || n != (unsigned int)got - 3 || n > len - done) {
 			printf("CH347: read answer of %u bytes does not fit (%d received, %u left)\n", n, got - 3, len - done);
 			return -1;
 		}

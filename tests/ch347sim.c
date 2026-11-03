@@ -15,6 +15,7 @@ static int nresp;
 static unsigned int pending_in;			/* SPI_IN bytes still to send */
 static unsigned int max_out, max_in, nout;
 static int cs_while_write_ok = 1;
+static int bad = 0;	/* 1: write status 1, 2: read answer with another command, 3: empty read answer, 4: length header too big */
 
 static unsigned char pattern(unsigned int i) { return (unsigned char)(i * 29 + (i >> 9)); }
 
@@ -45,7 +46,7 @@ int libusb_bulk_transfer(libusb_device_handle *h, unsigned char ep, unsigned cha
 		case CH347_CMD_SPI_OUT:
 			if (!cs_low) cs_while_write_ok = 0;
 			memcpy(mosi + nmosi, d + 3, n); nmosi += n; clocked += n;
-			resp[0] = d[0]; resp[1] = 1; resp[2] = 0; resp[3] = 0; nresp = 4;
+			resp[0] = d[0]; resp[1] = 1; resp[2] = 0; resp[3] = bad == 1; nresp = 4;
 			break;
 		case CH347_CMD_SPI_IN:
 			pending_in = d[3] | (d[4] << 8) | (d[5] << 16) | ((unsigned int)d[6] << 24);
@@ -63,7 +64,8 @@ int libusb_bulk_transfer(libusb_device_handle *h, unsigned char ep, unsigned cha
 	}
 	if (pending_in) {			/* SPI_IN data: up to 507 bytes a packet */
 		unsigned int n = pending_in < CH347_MAX_DATA ? pending_in : CH347_MAX_DATA;
-		d[0] = CH347_CMD_SPI_IN; d[1] = n & 0xff; d[2] = n >> 8;
+		if (bad == 3) n = 0;
+		d[0] = bad == 2 ? CH347_CMD_SPI_OUT : CH347_CMD_SPI_IN; d[1] = (n + (bad == 4)) & 0xff; d[2] = (n + (bad == 4)) >> 8;
 		for (unsigned int i = 0; i < n; i++) d[3 + i] = pattern(clocked++);
 		pending_in -= n;
 		if (n + 3 > max_in) max_in = n + 3;
@@ -95,6 +97,15 @@ int main(void)
 	check(same && max_in <= CH347_PACKET_SIZE, "  read data in order, packets of at most 510 bytes");
 	check(cs_while_write_ok, "  CS stays low while the data goes out");
 	check(ch347_cs(false) == 0 && !cs_low, "CS high");
+	bad = 1;
+	check(ch347_spi_send_command(4, 0, w, NULL) < 0, "a write answered with a nonzero status fails");
+	bad = 2;
+	check(ch347_spi_send_command(0, 16, NULL, r) < 0, "a read answered with another command fails");
+	pending_in = 0; bad = 3;
+	check(ch347_spi_send_command(0, 16, NULL, r) < 0, "an empty read answer fails instead of looping");
+	pending_in = 0; bad = 4;
+	check(ch347_spi_send_command(0, 16, NULL, r) < 0, "a read answer shorter than its length header fails");
+	pending_in = 0; bad = 0;
 	check(ch347_spi_shutdown() == 0 && attached_iface == 2, "shutdown attaches the kernel driver back");
 
 	sim_pid = 0x55de; claimed_iface = -1;
