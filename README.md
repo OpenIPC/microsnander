@@ -43,6 +43,7 @@ sudo ./microsnander -w firmware.bin -v
 
 - [Quick start](#quick-start)
 - [Requirements](#requirements)
+- [Programmers compared](#programmers-compared)
 - [Releases and permanent links](#releases-and-permanent-links)
 - [Usage](#usage)
 - [Examples](#examples)
@@ -94,6 +95,24 @@ sudo ./microsnander -w firmware.bin -v
   sudo usermod -aG plugdev "$USER"
   sudo udevadm control --reload-rules && sudo udevadm trigger
   ```
+
+## Programmers compared
+
+Measured with microsnander 1.14.1 on Linux, with the same chip in each programmer (Winbond
+W25Q128, 16 MB): the time of the whole command, from the start to `Status: OK`. Before a
+write, the EZP programmers read the range to check that it is erased.
+
+|                                    | CH341A      | CH347T / CH347F                        | EZP2019 / EZP2019+ / EZP2023            |
+|------------------------------------|-------------|----------------------------------------|-----------------------------------------|
+| USB ID                             | `1a86:5512` | `1a86:55db`, `1a86:55de`               | `1fc8:310b`, `310c`, `310d`             |
+| SPI clock                          | fixed       | 1.875–60 MHz (`-S`), 30 MHz by default | set by its firmware                     |
+| SPI NOR                            | yes         | yes                                    | up to 16 MB                             |
+| SPI NAND                           | yes         | yes                                    | no                                      |
+| Erase a part of the chip           | yes         | yes                                    | no, the whole chip only                 |
+| Unprotect (`-u`), status registers | yes         | yes                                    | no                                      |
+| Chip erase, 16 MB                  | 48 s        | 33 s                                   | 37 s                                    |
+| Read 16 MB                         | 136 s       | 7.2 s (5.2 s at 60 MHz)                | 136 s                                   |
+| Write 16 MB                        | 256 s       | 152 s                                  | 275 s (of them 136 s: the erased check) |
 
 ## Releases and permanent links
 
