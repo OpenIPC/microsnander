@@ -15,7 +15,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
-#include <libusb-1.0/libusb.h>
 #include "usb.h"
 #include "ch347_spi.h"
 

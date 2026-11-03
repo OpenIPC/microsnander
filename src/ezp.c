@@ -28,7 +28,6 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
-#include <libusb-1.0/libusb.h>
 #include "usb.h"
 #include "ezp.h"
 #include "flashcmd_api.h"

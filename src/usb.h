@@ -11,7 +11,11 @@
 #define __MS_USB_H__
 
 #include <stdint.h>
-#include <libusb-1.0/libusb.h>
+#ifdef MS_LIBUSB
+#include <libusb-1.0/libusb.h>		/* make LIBUSB=1 */
+#else
+#include "usbfs.h"			/* the usbfs, without libusb */
+#endif
 
 /* Android: the opened device (-1: none, look for the device as on Linux) */
 extern int ms_usb_fd;

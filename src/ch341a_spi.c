@@ -24,7 +24,6 @@
 #include <string.h>
 #include <stdio.h>
 #include "ch341a_spi.h"
-#include <libusb-1.0/libusb.h>
 #include "usb.h"
 #include <stdbool.h>
 

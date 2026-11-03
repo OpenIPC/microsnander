@@ -1,6 +1,6 @@
 #
-# build.yml — CI for microsnander: a native build against the system libusb
-# (any compiler warning fails the job), its
+# build.yml — CI for microsnander: a native build on the usbfs code, and one
+# against the system libusb (make LIBUSB=1); any compiler warning fails the job; its
 # tests (tests/run.sh), plus the
 # static musl builds the release ships (ci/build-musl.sh): x86_64 and 32-bit
 # ARM for cameras and boards, each started and checked for the version that
@@ -57,6 +57,16 @@ jobs:
           fi
           ./src/microsnander -h | head -3
 
+      - name: Build with libusb (make LIBUSB=1)
+        run: |
+          make -C src clean
+          make -C src LIBUSB=1 2>&1 | tee build-libusb.log
+          if grep -q 'warning:' build-libusb.log; then
+            echo "::error::compiler warnings, see the build log"
+            exit 1
+          fi
+          make -C src clean
+
       # main.c against a test double of the programmer: exit codes, option
       # conflicts, unprotect, verify after write; spi_nand_flash.c against an
       # SPI NAND simulator: detection by ID, write and read, -k, busy chip;
@@ -103,7 +113,7 @@ jobs:
 
   # The one release, "latest": rebuilt from every push to main after all
   # builds pass, from the static binaries built and checked above.
-  # The Android app (android/): NDK build of src/ with libusb, lint without
+  # The Android app (android/): NDK build of src/ (the usbfs code), lint without
   # warnings, a debug APK (the fixed debug key of the repository). The
   # release APK is the android-release job, on main only.
   android:
@@ -321,7 +331,7 @@ jobs:
           [ "$prev" = "Microsnander ${VER}" ] || echo "new=true" >> "$GITHUB_OUTPUT"
 
           cat > notes.md <<NOTES
-          Microsnander ${VER} (${GITHUB_SHA::7}): static Linux binaries (musl, libusb built in), no dependencies.
+          Microsnander ${VER} (${GITHUB_SHA::7}): static Linux binaries (musl, no libusb), no dependencies.
 
           - \`microsnander-linux-x86_64\` — PCs and servers
           - \`microsnander-linux-arm\` — 32-bit ARM (ARMv5TE and later, soft-float): cameras, Raspberry Pi and other boards
