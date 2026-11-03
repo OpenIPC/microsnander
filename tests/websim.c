@@ -5,6 +5,7 @@
 #include <sys/wait.h>
 #include "../src/ops.c"
 #include "../src/web.c"
+#include "../src/voltage.c"
 
 #define SIM_SIZE (1 << 20)
 static unsigned char mem[SIM_SIZE];
@@ -22,10 +23,11 @@ static int f_write(unsigned char *b, unsigned long to, unsigned long len) { for 
 static int f_erase(unsigned long offs, unsigned long len) { memset(mem + offs, 0xff, len); return 0; }
 static int f_unprotect(void) { unprotects++; return 0; }
 static int swap_chip, inits;		/* swap_chip: another chip from the second open on */
+static const char *sim_chip;		/* in place of W25Q80 */
 long flash_cmd_init(struct flash_cmd *c)
 {
 	c->flash_read = f_read; c->flash_write = f_write; c->flash_erase = f_erase; c->flash_unprotect = f_unprotect;
-	flash_chip_name = swap_chip && inits++ ? "W25Q16" : "W25Q80";
+	flash_chip_name = sim_chip ? sim_chip : swap_chip && inits++ ? "W25Q16" : "W25Q80";
 	return SIM_SIZE;
 }
 int snor_read_status(unsigned char sr[3]) { sr[0] = 0x1c; sr[1] = 0x02; sr[2] = 0x60; return 0; }
@@ -113,6 +115,18 @@ int main(void)
 	check(strstr(body_of(), "\"programmer\":\"CH347\"") && strstr(body_of(), "\"chip\":\"W25Q80\"") &&
 	      strstr(body_of(), "\"size\":1048576") && strstr(body_of(), "\"sr\":[28,2,96]") && strstr(body_of(), "\"ok\":true"),
 	      "  the state has the programmer, the chip, its size and the status registers");
+	check(strstr(body_of(), "\"voltage\":\"3.3\"") && strstr(body_of(), "\"warning\":\"\""),
+	      "  a 3.3 V chip on the CH347: no warning");
+
+	sim_chip = "W25Q128FW";
+	request("POST", "/api/detect", NULL, NULL, 0);
+	wait_idle();
+	request("GET", "/api/state", NULL, NULL, 0);
+	check(strstr(body_of(), "\"voltage\":\"1.8\"") && strstr(body_of(), "\"warning\":\"W25Q128FW is a 1.8 V chip"),
+	      "  a 1.8 V chip: the voltage and the warning in the state");
+	sim_chip = NULL;
+	request("POST", "/api/detect", NULL, NULL, 0);
+	wait_idle();
 
 	check(request("POST", "/api/read", NULL, NULL, 0) == 202, "Read starts");
 	wait_idle();

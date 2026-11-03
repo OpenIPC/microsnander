@@ -24,8 +24,13 @@ final class Native {
         final int sr;
         /** for a read: the dump name, flash-YYYYMMDDHHMM-CHIP.bin */
         final String name;
+        /** the chip's supply: "3.3", "1.8", "1.65-3.6"; "" without a chip */
+        final String voltage;
+        /** a 1.8 V chip, the 5 V lines of the CH341A board; "" */
+        final String warning;
 
-        Result(boolean ok, String message, String programmer, String chip, long size, int sr, String name) {
+        Result(boolean ok, String message, String programmer, String chip, long size, int sr, String name,
+               String voltage, String warning) {
             this.ok = ok;
             this.message = message;
             this.programmer = programmer;
@@ -33,6 +38,8 @@ final class Native {
             this.size = size;
             this.sr = sr;
             this.name = name;
+            this.voltage = voltage;
+            this.warning = warning;
         }
     }
 

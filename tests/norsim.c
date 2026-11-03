@@ -27,6 +27,7 @@ static int fast_clock(clockid_t id, struct timespec *t)
 #define clock_gettime fast_clock
 #include "../src/spi_nor_flash.c"
 #undef clock_gettime
+#include "../src/voltage.c"
 
 unsigned int bsize;
 const char *flash_chip_name;
@@ -227,6 +228,38 @@ int main(void)
 	}
 	printf("     %d SPI NOR chips in the table\n", n);
 	check(!bad && shadowed == 2, "every SPI NOR chip of the table is detected by its ID");
+
+	/* the supply voltage by the chip name */
+	{
+		static const struct { const char *name; int v; } v[] = {
+			{ "W25Q128FW", MS_VOLTAGE_18 }, { "W25Q128BV", MS_VOLTAGE_33 }, { "W25Q64JWIM", MS_VOLTAGE_18 },
+			{ "W25Q64JVIM", MS_VOLTAGE_33 }, { "W25Q80BW", MS_VOLTAGE_18 }, { "W25Q80BL", MS_VOLTAGE_33 },
+			{ "N25Q128A11", MS_VOLTAGE_18 }, { "N25Q128A13", MS_VOLTAGE_33 }, { "MT25QU256AB", MS_VOLTAGE_18 },
+			{ "MT25QL512AB", MS_VOLTAGE_33 }, { "GD25LQ64E", MS_VOLTAGE_18 }, { "GD25WQ32E", MS_VOLTAGE_WIDE },
+			{ "GD25Q64CSIG", MS_VOLTAGE_33 }, { "MX25U12835F", MS_VOLTAGE_18 }, { "MX25L12805D", MS_VOLTAGE_33 },
+			{ "BY25Q64AL", MS_VOLTAGE_18 }, { "BY25Q64AS", MS_VOLTAGE_33 }, { "XM25QU256C", MS_VOLTAGE_18 },
+			{ "XM25QW64C", MS_VOLTAGE_WIDE }, { "XM25QH128C", MS_VOLTAGE_33 }, { "IS25WP128F", MS_VOLTAGE_18 },
+			{ "IS25LP256D", MS_VOLTAGE_33 }, { "FM25W128", MS_VOLTAGE_WIDE }, { "ZB25LQ128", MS_VOLTAGE_18 },
+		};
+		int wrong = 0, n18 = 0, nwide = 0;
+		char w[320];
+
+		for (unsigned i = 0; i < sizeof(v) / sizeof(v[0]); i++)
+			if (!find(v[i].name) || ms_voltage(v[i].name) != v[i].v) {
+				printf("     %s: %s\n", v[i].name, find(v[i].name) ? ms_voltage_name(ms_voltage(v[i].name)) : "not in the table");
+				wrong++;
+			}
+		for (int i = 0; i < n; i++) {
+			n18 += ms_voltage(chips_data[i].name) == MS_VOLTAGE_18;
+			nwide += ms_voltage(chips_data[i].name) == MS_VOLTAGE_WIDE;
+		}
+		printf("     %d SPI NOR chips of 1.8 V, %d of 1.65-3.6 V\n", n18, nwide);
+		check(!wrong, "the supply voltage of SPI NOR chips by their names");
+		check(ms_voltage_warning("CH341A", "W25Q128FW", w, sizeof(w)) && strstr(w, "W25Q128FW is a 1.8 V chip") &&
+		      strstr(w, "5 V"), "  a 1.8 V chip on the CH341A: both warnings");
+		check(!ms_voltage_warning("CH347", "W25Q128BV", w, sizeof(w)) && !w[0], "  a 3.3 V chip on the CH347: none");
+		check(ms_voltage_warning("EZP", "MX25U6435F", w, sizeof(w)) && !strstr(w, "5 V"), "  a 1.8 V chip on the EZP: no 5 V line");
+	}
 
 	write_read_erase("W25Q32BV", ORDINARY);
 	write_read_erase("PCT25VF016B", SST25);

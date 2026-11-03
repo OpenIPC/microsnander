@@ -19,6 +19,8 @@ struct ms_chip {
 	long long size;
 	int sr_valid;			/* status registers read (SPI NOR, SPI bridge) */
 	unsigned char sr[3];
+	int voltage;			/* MS_VOLTAGE_*, from the chip name */
+	char warning[320];		/* a 1.8 V chip, the 5 V lines of the CH341A; "" */
 };
 
 /* progress of an operation: phase "read", "erase", "write" or "verify";

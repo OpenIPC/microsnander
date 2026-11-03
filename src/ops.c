@@ -15,6 +15,7 @@
 #include "ops.h"
 #include "flashcmd_api.h"
 #include "programmer.h"
+#include "voltage.h"
 
 #define OPS_PART	(64 * 1024)		/* read, write and verify in parts: the progress */
 
@@ -62,6 +63,8 @@ static int chip_open(struct ms_chip *c, char *msg, size_t n)
 	}
 	snprintf(c->chip, sizeof(c->chip), "%s", flash_chip_name ? flash_chip_name : "");
 	c->size = flen;
+	c->voltage = ms_voltage(c->chip);
+	ms_voltage_warning(c->programmer, c->chip, c->warning, sizeof(c->warning));
 	return 0;
 }
 

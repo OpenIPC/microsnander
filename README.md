@@ -50,6 +50,7 @@ sudo ./microsnander -w firmware.bin -v
 - [Web mode](#web-mode)
 - [Android app](#android-app)
 - [Supported chips](#supported-chips)
+- [Chip voltage](#chip-voltage)
 - [Chips with uncertain data](#chips-with-uncertain-data)
 - [Build](#build)
 - [Credits](#credits)
@@ -316,6 +317,24 @@ GM25Q, ISSI, Micron, Boya, Puya and others) and 135 SPI NAND chips (Etron, GigaD
 Micron, Toshiba/Kioxia, Winbond, Macronix and others).
 A chip that is not on the list is reported as not detected; its ID from the
 output helps to add it.
+
+## Chip voltage
+
+The programmers work at 3.3 V. The programmer does not measure the voltage, so microsnander
+takes it from the chip name: 56 SPI NOR chips of the list are 1.8 V parts (GigaDevice GD25L,
+Macronix MX25U, Winbond W25Q..W, Micron N25Q..A11 and MT25QU, XMC XM25QU and XM25LU, Zbit
+ZB25LQ, Boya BY25Q..L, ISSI IS25WP), and so are 20 SPI NAND chips (GigaDevice GD5F..R, Winbond
+W25N..W, Macronix MX35UF, Micron MT29F..ABB, ESMT F50D, Dosilicon DS35M). Connect them through
+a 1.8 V adapter: at 3.3 V the reads are not reliable and the chip can be damaged.
+GigaDevice GD25W, XMC XM25QW and Fudan FM25W take 1.65-3.6 V and work as they are.
+
+After a 1.8 V chip is found, the console prints a warning, the web page lights the Chip lamp
+red and shows the warning, and so does the Android app; `/api/state` has the `voltage` (`3.3`,
+`1.8`, `1.65-3.6`) and the `warning`. A chip that is not on these lists is taken for 3.3 V.
+
+There are no 5 V SPI flash chips. The black CH341A board, though, puts 5 V on the chip lines
+unless it is modified for 3.3 V, and the program cannot see that: with the CH341A, microsnander
+reminds about it every time it finds a chip.
 
 ## Chips with uncertain data
 

@@ -43,6 +43,7 @@
 #include "flashcmd_api.h"
 #include "programmer.h"
 #include "ops.h"
+#include "voltage.h"
 
 #define WEB_PART	(64 * 1024)		/* read, write and verify in parts: the progress */
 #define WEB_HEADERS	8192
@@ -59,6 +60,8 @@ static struct {
 	char message[256];
 	char programmer[32], chip[64];
 	long long size;
+	int voltage;
+	char warning[320];
 	int sr_valid;
 	unsigned char sr[3];
 	char file[160];
@@ -104,6 +107,8 @@ static void keep_chip(const struct ms_chip *c, int registers_op)
 	if (c->chip[0]) {
 		snprintf(st.chip, sizeof(st.chip), "%s", c->chip);
 		st.size = c->size;
+		st.voltage = c->voltage;
+		snprintf(st.warning, sizeof(st.warning), "%s", c->warning);
 	}
 	if (registers_op || c->sr_valid) {
 		st.sr_valid = c->sr_valid;
@@ -299,21 +304,24 @@ static void json_str(char *out, size_t n, const char *s)
 
 static void reply_state(int fd)
 {
-	char body[1024], msg[512], prg[64], chip[128], file[256], sr[32] = "null";
+	char body[2048], msg[512], prg[64], chip[128], file[256], warn[640], sr[32] = "null";
 
 	pthread_mutex_lock(&st.lock);
 	json_str(msg, sizeof(msg), st.message);
 	json_str(prg, sizeof(prg), st.programmer);
 	json_str(chip, sizeof(chip), st.chip);
 	json_str(file, sizeof(file), st.file);
+	json_str(warn, sizeof(warn), st.chip[0] ? st.warning : "");
 	if (st.sr_valid)
 		snprintf(sr, sizeof(sr), "[%u,%u,%u]", st.sr[0], st.sr[1], st.sr[2]);
 	int n = snprintf(body, sizeof(body),
 			 "{\"busy\":%d,\"op\":\"%s\",\"ok\":%s,\"phase\":\"%s\",\"done\":%llu,\"total\":%llu,"
-			 "\"message\":\"%s\",\"programmer\":\"%s\",\"chip\":\"%s\",\"size\":%lld,\"sr\":%s,\"file\":\"%s\","
+			 "\"message\":\"%s\",\"programmer\":\"%s\",\"chip\":\"%s\",\"size\":%lld,\"voltage\":\"%s\","
+			 "\"warning\":\"%s\",\"sr\":%s,\"file\":\"%s\","
 			 "\"version\":\"%s\"}",
 			 st.busy, op_names[st.op], st.ok < 0 ? "null" : st.ok ? "true" : "false", st.phase,
-			 st.done, st.total, msg, prg, chip, st.size, sr, file, ms_version);
+			 st.done, st.total, msg, prg, chip, st.size, st.chip[0] ? ms_voltage_name(st.voltage) : "",
+			 warn, sr, file, ms_version);
 	pthread_mutex_unlock(&st.lock);
 	reply(fd, "200 OK", "application/json", NULL, body, n);
 }

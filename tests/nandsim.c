@@ -12,6 +12,7 @@
 #include "../src/nandcmd_api.h"
 /* the driver is built into this file, so the checks can walk its chip table */
 #include "../src/spi_nand_flash.c"
+#include "../src/voltage.c"
 const char *flash_chip_name;
 
 int snand_read(unsigned char *buf, unsigned long from, unsigned long len);
@@ -188,6 +189,29 @@ int main(void)
 		}
 		printf("     %d SPI NAND chips in the table\n", n);
 		check(!bad && shadowed == 3, "every SPI NAND chip of the table is detected by its ID");
+
+		/* the 1.8 V chips of the table, by their names */
+		static const char *const v18[] = {
+			"GIGADEVICE GD5F1GQ5RE", "GIGADEVICE GD5F1GQ4RE", "GIGADEVICE GD5F2GQ5RE", "GIGADEVICE GD5F1GM7RE",
+			"GIGADEVICE GD5F2GM7RE", "WINBOND W25N01KW", "WINBOND W25N01GW", "WINBOND W25N04KW",
+			"MXIC MX35UF1G14AC", "MXIC MX35UF2G14AC", "MXIC MX35UF1GE4AD", "MXIC MX35UF2GE4AD", "MXIC MX35UF4GE4AD",
+			"MICRON MT29F2G01ABB", "MICRON MT29F4G01ABB", "ESMT F50D1G41LB(2M)", "DS DS35M1GA", "DS DS35M2GA",
+			"DS DS35M2GB", "DS DS35M2GBS",
+		};
+		int wrong = 0, n18 = 0;
+		for (int i = 0; i < n; i++) {
+			const char *name = spi_nand_flash_tables[i].ptr_name;
+			int want = 0;
+			for (unsigned j = 0; j < sizeof(v18) / sizeof(v18[0]); j++)
+				want |= !strcmp(name, v18[j]);
+			n18 += want;
+			if ((ms_voltage(name) == MS_VOLTAGE_18) != want) {
+				printf("     %s: %s V\n", name, ms_voltage_name(ms_voltage(name)));
+				wrong++;
+			}
+		}
+		check(!wrong && n18 == (int)(sizeof(v18) / sizeof(v18[0])),
+		      "the 1.8 V SPI NAND chips are told by their names, the others are 3.3 V");
 	}
 
 	chip(0xef, 0xaa, 0x21);

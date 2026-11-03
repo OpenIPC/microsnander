@@ -16,8 +16,19 @@
 #include <stdio.h>
 #include "flashcmd_api.h"
 #include "programmer.h"
+#include "voltage.h"
 
 const char *flash_chip_name;
+
+/* the chip's voltage and the board's lines, after the chip is found */
+static long warn(long flen)
+{
+	char w[320];
+
+	if (flen > 0 && ms_voltage_warning(programmer ? programmer->name : NULL, flash_chip_name, w, sizeof(w)))
+		printf("Warning: %s\n", w);
+	return flen;
+}
 
 long flash_cmd_init(struct flash_cmd *cmd)
 {
@@ -26,7 +37,7 @@ long flash_cmd_init(struct flash_cmd *cmd)
 	if (programmer && programmer->flash_init) {
 		if ((flen = programmer->flash_init(cmd)) <= 0)
 			printf("\nFlash not found!!!!\n\n");
-		return flen;
+		return warn(flen);
 	}
 
 	if ((flen = snand_init()) > 0) {
@@ -41,7 +52,7 @@ long flash_cmd_init(struct flash_cmd *cmd)
 	} else
 		printf("\nFlash not found!!!!\n\n");
 
-	return flen;
+	return warn(flen);
 }
 
 void support_flash_list(void)
