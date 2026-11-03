@@ -4,6 +4,14 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.18.1 — 2026-11-03
+
+- Erase and Write ask nothing and open no file picker without a chip (#42). The Android
+  app runs Detect first and names the chip found in its question; the web page keeps
+  Erase and Write off until a chip is known and runs Detect again before the question.
+- `-h` text without missing spaces. The READMEs say what `-W` refuses (the operations,
+  `-v`, `-S`, `-d`, `-I`, `-k`) and that `-K` and `-o` go with `-W` only.
+
 ## 1.18.0 — 2026-11-03
 
 - No libusb: microsnander talks to the programmers through the Linux usbfs itself

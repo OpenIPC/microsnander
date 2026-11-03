@@ -116,6 +116,16 @@ JNIEXPORT jobject JNICALL FN(erase)(JNIEnv *env, jclass cls, jint fd, jint vid, 
 	return result(env, ret == 0, msg, &c, NULL);
 }
 
+/* the chip the next operation must find (the one the user confirmed) */
+JNIEXPORT void JNICALL FN(expect)(JNIEnv *env, jclass cls, jstring jchip, jlong size)
+{
+	const char *chip = (*env)->GetStringUTFChars(env, jchip, NULL);
+	(void)cls;
+
+	ms_expect(chip, (long long)size);
+	(*env)->ReleaseStringUTFChars(env, jchip, chip);
+}
+
 /* the file at path from address 0, then verified; read in parts, not kept in memory */
 JNIEXPORT jobject JNICALL FN(write)(JNIEnv *env, jclass cls, jint fd, jint vid, jint pid, jstring jpath, jobject progress)
 {
@@ -131,8 +141,10 @@ JNIEXPORT jobject JNICALL FN(write)(JNIEnv *env, jclass cls, jint fd, jint vid, 
 	memset(&c, 0, sizeof(c));
 	if (f)
 		ret = ms_write_file(&c, f, on_progress, &cb, msg, sizeof(msg));
-	else
+	else {
+		ms_expect(NULL, 0);		/* no write: the next operation is not bound to the chip */
 		snprintf(msg, sizeof(msg), "Cannot read the file.");
+	}
 	if (f)
 		fclose(f);
 	(*env)->ReleaseStringUTFChars(env, jpath, path);

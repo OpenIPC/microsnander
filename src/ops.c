@@ -39,8 +39,41 @@ static void progress(ms_progress cb, void *ctx, const char *phase, unsigned long
 		cb(ctx, phase, done, total);
 }
 
-static int chip_open(struct ms_chip *c, char *msg, size_t n)
+/* "16 MB", "512 KB" or "300 bytes" */
+static const char *size_text(char *buf, size_t n, long long size)
 {
+	if (size >= 1 << 20 && !(size & ((1 << 20) - 1)))
+		snprintf(buf, n, "%lld MB", size >> 20);
+	else if (size >= 1024 && !(size & 1023))
+		snprintf(buf, n, "%lld KB", size >> 10);
+	else
+		snprintf(buf, n, "%lld bytes", size);
+	return buf;
+}
+
+/* the chip the user confirmed for the next operation: Erase and Write go
+   only to it; "" takes any */
+static char expect_chip[64];
+static long long expect_size;
+
+void ms_expect(const char *chip, long long size)
+{
+	snprintf(expect_chip, sizeof(expect_chip), "%s", chip ? chip : "");
+	expect_size = size;
+}
+
+/* confirmed: an Erase or a Write, which goes only to the chip of ms_expect();
+   any other operation drops that expectation */
+static int chip_open(struct ms_chip *c, char *msg, size_t n, int confirmed)
+{
+	char want[sizeof(expect_chip)];
+	long long want_size = expect_size;
+
+	memcpy(want, expect_chip, sizeof(want));	/* for this operation only */
+	expect_chip[0] = 0;
+	if (!confirmed)
+		want[0] = 0;
+
 	int ret = programmer_init(false);
 
 	memset(c, 0, sizeof(*c));
@@ -65,6 +98,14 @@ static int chip_open(struct ms_chip *c, char *msg, size_t n)
 	c->size = flen;
 	c->voltage = ms_voltage(c->chip);
 	ms_voltage_warning(c->programmer, c->chip, c->warning, sizeof(c->warning));
+	if (want[0] && (strcmp(c->chip, want) || c->size != want_size)) {
+		char now[24], was[24];
+
+		say(msg, n, "The chip is %s (%s) now, not the %s (%s) confirmed: nothing done.",
+		    c->chip, size_text(now, sizeof(now), c->size), want, size_text(was, sizeof(was), want_size));
+		programmer_shutdown();
+		return -1;
+	}
 	return 0;
 }
 
@@ -103,7 +144,7 @@ void ms_dump_name(char *name, size_t n, const char *chip, int range, unsigned lo
 
 int ms_detect(struct ms_chip *c, char *msg, size_t n)
 {
-	if (chip_open(c, msg, n))
+	if (chip_open(c, msg, n, 0))
 		return -1;
 	read_registers(c);
 	say(msg, n, "Found %s with %s, %lld MB.", c->programmer, c->chip, flen >> 20);
@@ -118,7 +159,7 @@ int ms_read(struct ms_chip *c, FILE *out, unsigned long long a, unsigned long lo
 	unsigned long long l;
 	int ret = -1;
 
-	if (chip_open(c, msg, n))
+	if (chip_open(c, msg, n, 0))
 		return -1;
 	l = len ? len : (a < (unsigned long long)flen ? (unsigned long long)flen - a : 0);
 	if (a >= (unsigned long long)flen || l > (unsigned long long)flen - a) {
@@ -157,7 +198,7 @@ int ms_erase(struct ms_chip *c, ms_progress cb, void *ctx, char *msg, size_t n)
 {
 	int ret = -1;
 
-	if (chip_open(c, msg, n))
+	if (chip_open(c, msg, n, 1))
 		return -1;
 	progress(cb, ctx, "erase", 0, 0);
 	if (prog.flash_erase(0, flen))
@@ -185,16 +226,18 @@ int ms_write_file(struct ms_chip *c, FILE *f, ms_progress cb, void *ctx, char *m
 	int ret = -1;
 
 	if (fseek(f, 0, SEEK_END) || (end = ftell(f)) < 0) {
+		ms_expect(NULL, 0);		/* this write ends before the chip is opened */
 		say(msg, n, "Cannot read the file.");
 		return -1;
 	}
 	l = end;
 	if (!l) {				/* before the programmer is touched */
+		ms_expect(NULL, 0);
 		memset(c, 0, sizeof(*c));
 		say(msg, n, "The file is empty.");
 		return -1;
 	}
-	if (chip_open(c, msg, n))
+	if (chip_open(c, msg, n, 1))
 		return -1;
 	if (l > (unsigned long long)flen) {
 		say(msg, n, "The file (0x%llx bytes) is larger than the chip (0x%llx).", l, flen);
@@ -252,7 +295,7 @@ int ms_registers(struct ms_chip *c, char *msg, size_t n)
 {
 	int ret;
 
-	if (chip_open(c, msg, n))
+	if (chip_open(c, msg, n, 0))
 		return -1;
 	ret = read_registers(c);
 	if (ret)
@@ -267,7 +310,7 @@ int ms_unprotect(struct ms_chip *c, char *msg, size_t n)
 {
 	int ret = -1;
 
-	if (chip_open(c, msg, n))
+	if (chip_open(c, msg, n, 0))
 		return -1;
 	if (!prog.flash_unprotect)
 		say(msg, n, "Clearing the protection is for SPI NOR through the CH341A or the CH347 only.");

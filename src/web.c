@@ -56,6 +56,7 @@ static struct {
 	pthread_mutex_t lock;
 	int busy, op, ok;			/* ok: 1 done, 0 failed, -1 nothing yet */
 	int uploading;				/* a file to write is coming: one at a time */
+	unsigned int seq;			/* the number of the last operation started */
 	unsigned long long done, total;
 	char phase[16];				/* "", "write", "verify" */
 	char message[256];
@@ -105,6 +106,13 @@ static void keep_chip(const struct ms_chip *c, int registers_op)
 	if (c->programmer[0] && strcmp(c->programmer, st.programmer)) {
 		/* another programmer: what the last one found is not in it */
 		snprintf(st.programmer, sizeof(st.programmer), "%s", c->programmer);
+		st.chip[0] = 0;
+		st.size = 0;
+		st.warning[0] = 0;
+		st.sr_valid = 0;
+	}
+	if (c->programmer[0] && !c->chip[0]) {
+		/* the programmer answered, no chip in it: the last one is not there */
 		st.chip[0] = 0;
 		st.size = 0;
 		st.warning[0] = 0;
@@ -202,6 +210,10 @@ static int op_read(struct ms_chip *c, char *msg, size_t n)
 	return 0;
 }
 
+/* the chip the page confirmed an Erase or a Write for ("": any) */
+static char want_chip[64];
+static long long want_size;
+
 static void *worker(void *arg)
 {
 	int op = (int)(long)arg, ret = -1;
@@ -211,8 +223,10 @@ static void *worker(void *arg)
 	switch (op) {
 	case OP_DETECT:    ret = ms_detect(&c, msg, sizeof(msg)); break;
 	case OP_READ:      ret = op_read(&c, msg, sizeof(msg)); break;
-	case OP_ERASE:     ret = ms_erase(&c, on_progress, NULL, msg, sizeof(msg)); break;
-	case OP_WRITE:     ret = ms_write_file(&c, upload, on_progress, NULL, msg, sizeof(msg)); break;
+	case OP_ERASE:     ms_expect(want_chip, want_size);
+			   ret = ms_erase(&c, on_progress, NULL, msg, sizeof(msg)); break;
+	case OP_WRITE:     ms_expect(want_chip, want_size);
+			   ret = ms_write_file(&c, upload, on_progress, NULL, msg, sizeof(msg)); break;
 	case OP_REGISTERS: ret = ms_registers(&c, msg, sizeof(msg)); break;
 	case OP_UNPROTECT: ret = ms_unprotect(&c, msg, sizeof(msg)); break;
 	}
@@ -228,9 +242,10 @@ static void *worker(void *arg)
 	return NULL;
 }
 
-/* start an operation (with the file to write, which it closes); 0, or -1
-   when one is running */
-static int start(int op, FILE *body)
+/* start an operation (with the file to write, which it closes; for the
+   chip confirmed, "" for any); 0 and its number in *seq, or -1 when one is
+   running (then nothing is started and body is still the caller's) */
+static int start(int op, FILE *body, const char *chip, long long size, unsigned int *seq)
 {
 	pthread_t t;
 
@@ -239,6 +254,9 @@ static int start(int op, FILE *body)
 		pthread_mutex_unlock(&st.lock);
 		return -1;
 	}
+	snprintf(want_chip, sizeof(want_chip), "%s", chip ? chip : "");
+	want_size = size;
+	*seq = ++st.seq;
 	upload = body;
 	if (body)
 		st.uploading = 0;		/* the upload is the operation's now */
@@ -327,10 +345,10 @@ static void reply_state(int fd)
 			 "{\"busy\":%d,\"op\":\"%s\",\"ok\":%s,\"phase\":\"%s\",\"done\":%llu,\"total\":%llu,"
 			 "\"message\":\"%s\",\"programmer\":\"%s\",\"chip\":\"%s\",\"size\":%lld,\"voltage\":\"%s\","
 			 "\"warning\":\"%s\",\"sr\":%s,\"file\":\"%s\","
-			 "\"version\":\"%s\"}",
+			 "\"seq\":%u,\"version\":\"%s\"}",
 			 st.busy, op_names[st.op], st.ok < 0 ? "null" : st.ok ? "true" : "false", st.phase,
 			 st.done, st.total, msg, prg, chip, st.size, st.chip[0] ? ms_voltage_name(st.voltage) : "",
-			 warn, sr, file, ms_version);
+			 warn, sr, file, st.seq, ms_version);
 	pthread_mutex_unlock(&st.lock);
 	reply(fd, "200 OK", "application/json", NULL, body, n);
 }
@@ -602,7 +620,25 @@ static void handle(int fd)
 			return;
 		}
 	}
-	if (start(op, body)) {
+	/* Erase and Write name the chip the user confirmed: "X-MicroSNANDer-Chip:
+	   W25Q128BV;16777216"; another chip in the socket by then is refused */
+	char want[64] = "";
+	long long want_sz = 0;
+	const char *h = find_header(head, "X-MicroSNANDer-Chip:");
+
+	if (h && (op == OP_ERASE || op == OP_WRITE)) {
+		size_t k = 0;
+
+		for (h += 2 + strlen("X-MicroSNANDer-Chip:"); *h == ' '; h++)
+			;
+		while (*h && *h != ';' && *h != '\r' && k < sizeof(want) - 1)
+			want[k++] = *h++;
+		want[k] = 0;
+		want_sz = *h == ';' ? strtoll(h + 1, NULL, 10) : 0;
+	}
+	unsigned int seq;
+
+	if (start(op, body, want, want_sz, &seq)) {
 		if (body) {
 			fclose(body);
 			upload_done();
@@ -610,7 +646,10 @@ static void handle(int fd)
 		reply_text(fd, "409 Conflict", "An operation is running.\n");
 		return;
 	}
-	reply_text(fd, "202 Accepted", "Started.\n");
+	char started[32];
+
+	snprintf(started, sizeof(started), "Started %u.\n", seq);	/* the number in /api/state "seq" */
+	reply_text(fd, "202 Accepted", started);
 }
 
 #define WEB_MAX_CONN	16

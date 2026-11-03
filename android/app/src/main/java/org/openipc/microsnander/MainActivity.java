@@ -23,6 +23,7 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.provider.MediaStore;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
@@ -115,11 +116,13 @@ public class MainActivity extends Activity {
         };
         buttons[0].setOnClickListener(v -> run(R.string.detecting, true, (fd, vid, pid, p) -> Native.detect(fd, vid, pid)));
         buttons[1].setOnClickListener(v -> read());
-        buttons[2].setOnClickListener(v -> new AlertDialog.Builder(this)
-                .setMessage(R.string.erase_confirm)
-                .setPositiveButton(R.string.erase, (d, w) -> run(R.string.erasing, false, Native::erase))
-                .setNegativeButton(android.R.string.cancel, null).show());
-        buttons[3].setOnClickListener(v -> pickWrite());
+        // Erase and Write detect first: no question and no file picker without a chip
+        // the next step goes to the screen there is when Detect ends (a, not this)
+        buttons[2].setOnClickListener(v -> detectThen((a, r) -> new AlertDialog.Builder(a)
+                .setMessage(a.getString(R.string.erase_confirm, r.chip, sizeOf(r.size)))
+                .setPositiveButton(R.string.erase, (d, w) -> a.erase(r))
+                .setNegativeButton(android.R.string.cancel, null).show()));
+        buttons[3].setOnClickListener(v -> detectThen((a, r) -> a.pickWrite()));
         buttons[4].setOnClickListener(v -> run(R.string.reading_registers, true, (fd, vid, pid, p) -> Native.registers(fd, vid, pid)));
         buttons[5].setOnClickListener(v -> run(R.string.unprotecting, true, (fd, vid, pid, p) -> Native.unprotect(fd, vid, pid)));
         saveAs.setOnClickListener(v -> {
@@ -150,6 +153,30 @@ public class MainActivity extends Activity {
         else
             showIdle(getString(R.string.press_detect));
         showRegisters(lastSr);
+    }
+
+    /** only a screen in front takes the step after Detect (a dialog, the file picker) */
+    private static boolean resumed;
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        resumed = true;
+        if (!busy && pendingNext != null) {	// Detect ended while no screen was in front
+            Found f = pendingNext;
+            Native.Result r = pendingFor;
+            boolean fresh = SystemClock.elapsedRealtime() - pendingAt < PENDING_MS;
+            pendingNext = null;
+            pendingFor = null;
+            if (fresh)
+                f.found(this, r);
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        resumed = false;
+        super.onPause();
     }
 
     @Override
@@ -256,10 +283,37 @@ public class MainActivity extends Activity {
     }
 
     private void run(int phase, boolean registersOp, Op op) {
-        runThen(phase, registersOp, op, null);
+        runThen(phase, registersOp, op, null, null);
     }
 
-    private void runThen(int phase, boolean registersOp, Op op, After after) {
+    /** what comes after a Detect that found a chip, on the screen there is then */
+    interface Found { void found(MainActivity a, Native.Result r); }
+
+    /** a Found whose Detect ended with no screen: the next screen runs it */
+    private static Found pendingNext;
+    private static Native.Result pendingFor;
+    private static long pendingAt;		// when that Detect ended (elapsedRealtime)
+    /** a screen recreated within this keeps the step (a rotation); later it is dropped */
+    private static final long PENDING_MS = 10000;
+
+    /** the whole chip, only if it is still the one r found */
+    private void erase(Native.Result r) {
+        run(R.string.erasing, false, (fd, vid, pid, p) -> {
+            Native.expect(r.chip, r.size);
+            return Native.erase(fd, vid, pid, p);
+        });
+    }
+
+    /** Detect, then next on the screen thread when a chip was found */
+    private void detectThen(Found next) {
+        runThen(R.string.detecting, true, (fd, vid, pid, p) -> Native.detect(fd, vid, pid), null, next);
+    }
+
+    static String sizeOf(long size) {
+        return size >= 1 << 20 ? (size >> 20) + " MB" : (size >> 10) + " KB";
+    }
+
+    private void runThen(int phase, boolean registersOp, Op op, After after, Found next) {
         withDevice(phase, () -> {
             UsbManager u = usb;
             UsbDevice d = findProgrammer();
@@ -273,9 +327,17 @@ public class MainActivity extends Activity {
                     if (r != null && (registersOp || r.sr >= 0))
                         lastSr = r.sr;		// Read, Erase and Write leave the last registers shown
                     MainActivity a = current.get();
+                    boolean found = next != null && r != null && r.ok && !r.chip.isEmpty();
                     if (a != null) {
                         a.showResult(r, saved);
                         a.showRegisters(lastSr);
+                        if (found && resumed)
+                            next.found(a, r);
+                    }
+                    if (found && (a == null || !resumed)) {
+                        pendingNext = next;
+                        pendingFor = r;
+                        pendingAt = SystemClock.elapsedRealtime();
                     }
                 });
             });
@@ -316,7 +378,7 @@ public class MainActivity extends Activity {
             }
             String where = toDownloads(app, dump);
             return where != null ? app.getString(R.string.dump_is, where) : app.getString(R.string.dump_kept);
-        });
+        }, null);
     }
 
     @Override
@@ -504,14 +566,19 @@ public class MainActivity extends Activity {
     }
 
     private void confirmWrite(Uri u) {
+        Native.Result r = lastResult;
+        if (r == null || !r.ok || r.chip.isEmpty()) {	// the app was restarted behind the picker
+            showFailed(getString(R.string.write_again));
+            return;
+        }
         new AlertDialog.Builder(this)
-                .setMessage(R.string.write_confirm)
-                .setPositiveButton(R.string.write, (d, w) -> write(u))
+                .setMessage(getString(R.string.write_confirm, r.chip, sizeOf(r.size)))
+                .setPositiveButton(R.string.write, (d, w) -> write(u, r))
                 .setNegativeButton(android.R.string.cancel, null).show();
     }
 
     /** the file is staged and written in the worker, the screen busy all along */
-    private void write(Uri u) {
+    private void write(Uri u, Native.Result chip) {
         Context app = getApplicationContext();
         File tmp = new File(getCacheDir(), "write.tmp");
         run(R.string.writing, false, (fd, vid, pid, p) -> {
@@ -523,6 +590,7 @@ public class MainActivity extends Activity {
                 tmp.delete();
                 return new Native.Result(false, app.getString(R.string.cannot_open), "", "", 0, -1, "", "", "");
             }
+            Native.expect(chip.chip, chip.size);	// only into the chip confirmed
             Native.Result r = Native.write(fd, vid, pid, tmp.getPath(), p);
             //noinspection ResultOfMethodCallIgnored
             tmp.delete();
