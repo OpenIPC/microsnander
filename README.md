@@ -15,7 +15,7 @@ with the cheap CH341A USB programmer. It reads, writes, erases and verifies the
 flash of cameras, routers and other boards, removes the write protection of SPI
 NOR chips, and knows 127 SPI NOR and 81 SPI NAND chips.
 
-It is a stripped-down and extended version of
+It is a stripped-down, extended, deeply modified and optimized version of
 [SNANDer](https://github.com/McMCCRU/SNANDer) 1.7.4 by McMCC: Linux only, without
 the EEPROM part in the release build, with the `-u` (unprotect) command and the
 flash chips found on OpenIPC hardware added. The release binaries are static and

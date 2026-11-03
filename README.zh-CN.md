@@ -14,7 +14,7 @@ MicroSNANDer 是一个命令行编程器，配合廉价的 CH341A USB 编程器�
 SPI NAND 闪存芯片。它可以读取、写入、擦除和校验摄像机、路由器及其他开发板的闪存，
 解除 SPI NOR 芯片的写保护，支持 127 款 SPI NOR 和 81 款 SPI NAND 芯片。
 
-它是 McMCC 的 [SNANDer](https://github.com/McMCCRU/SNANDer) 1.7.4 的精简增强版：
+它是 McMCC 的 [SNANDer](https://github.com/McMCCRU/SNANDer) 1.7.4 经过精简、增强、深度修改和优化的版本：
 仅支持 Linux，发布版本不含 EEPROM 部分，增加了 `-u`（解除保护）命令以及 OpenIPC
 硬件上常见的闪存芯片。发布的二进制文件为静态链接、无任何依赖，同一个文件既可以在
 PC 上运行，也可以直接在 USB 口插着编程器的 ARM 摄像机上运行。

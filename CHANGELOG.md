@@ -4,6 +4,10 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.9.1 — 2026-11-03
+
+- The banner shows the program name and version only.
+
 ## 1.9.0 — 2026-11-03
 
 From PR #1 by @atom-bomb, ported from upstream SNANDer (#5):

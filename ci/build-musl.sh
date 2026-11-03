@@ -137,6 +137,6 @@ ver=$(sed -n 's/^#define[[:space:]]*_VER[[:space:]]*"\([^"]*\)".*/\1/p' "$ROOT/s
 banner=$($RUN "$BIN" -h | grep -m1 ' v\.') || { echo "$BIN -h failed" >&2; exit 1; }
 echo "$banner"
 case "$banner" in
-    *" v.$ver "*) ;;
+    *" v.$ver") ;;
     *) echo "the binary does not print v.$ver" >&2; exit 1 ;;
 esac
