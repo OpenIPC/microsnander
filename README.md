@@ -11,7 +11,7 @@
 [![Platform](https://img.shields.io/badge/platform-Linux-brightgreen)](#requirements)
 
 MicroSNANDer is a command-line programmer for SPI NOR and SPI NAND flash chips
-with the cheap CH341A USB programmer. It reads, writes, erases and verifies the
+with the cheap CH341A and CH347 USB programmers. It reads, writes, erases and verifies the
 flash of cameras, routers and other boards, removes the write protection of SPI
 NOR chips, and knows 291 SPI NOR and 135 SPI NAND chips.
 
@@ -31,7 +31,7 @@ Changes: [CHANGELOG.md](CHANGELOG.md).
 curl -fLo microsnander https://github.com/OpenIPC/microsnander/releases/latest/download/microsnander-linux-x86_64
 chmod +x microsnander
 
-# 2. Plug in the CH341A with the chip, detect it
+# 2. Plug in the programmer with the chip, detect it
 sudo ./microsnander -i
 
 # 3. Back up the whole chip, then write a new image and verify it
@@ -55,18 +55,30 @@ sudo ./microsnander -w firmware.bin -v
 
 ## Requirements
 
-- A CH341A programmer (USB ID `1a86:5512`) in SPI mode (the jumper on the
-  programmer board), with a socket or a clip for the chip. The data lines of the
-  common black CH341A board are at 5 V: use a 3.3 V modified board or a level
-  adapter for 3.3 V chips, and a 1.8 V adapter for 1.8 V chips.
+- A USB programmer with a socket or a clip for the chip:
+  - CH341A (USB ID `1a86:5512`) in SPI mode (the jumper on the programmer board).
+    The data lines of the common black CH341A board are at 5 V: use a 3.3 V modified
+    board or a level adapter for 3.3 V chips, and a 1.8 V adapter for 1.8 V chips.
+  - CH347T (`1a86:55db`) in mode 1 (UART + SPI + I2C, set by its mode switch or
+    jumpers) or CH347F (`1a86:55de`). Much faster than the CH341A (a 16 MB chip reads in about 7 s); the SPI
+    clock is 30 MHz, `-S` changes it.
+
+  With one programmer connected microsnander uses it; with several, choose one with
+  `-P ch341a` or `-P ch347`. A kernel driver that has taken the programmer (for
+  example `spi-ch341`) is detached for the run and attached back after it.
 - Linux on x86_64 or 32-bit ARM (ARMv5TE and later). The release binaries are
   static (musl, libusb built in), nothing to install.
-- Access to the USB device: run as root, or allow it to a group with a udev rule:
+- Access to the USB device: run as root, or allow it to a group with a udev rule
+  (then replug the programmer):
 
   ```sh
-  echo 'SUBSYSTEM=="usb", ATTR{idVendor}=="1a86", ATTR{idProduct}=="5512", MODE="0660", GROUP="plugdev"' |
-    sudo tee /etc/udev/rules.d/60-ch341a.rules
-  sudo udevadm control --reload-rules
+  sudo tee /etc/udev/rules.d/60-microsnander.rules <<'EOF'
+  SUBSYSTEM=="usb", ATTR{idVendor}=="1a86", ATTR{idProduct}=="5512", MODE="0660", GROUP="plugdev"
+  SUBSYSTEM=="usb", ATTR{idVendor}=="1a86", ATTR{idProduct}=="55db", MODE="0660", GROUP="plugdev"
+  SUBSYSTEM=="usb", ATTR{idVendor}=="1a86", ATTR{idProduct}=="55de", MODE="0660", GROUP="plugdev"
+  EOF
+  sudo usermod -aG plugdev "$USER"
+  sudo udevadm control --reload-rules && sudo udevadm trigger
   ```
 
 ## Releases and permanent links
@@ -101,6 +113,8 @@ microsnander [options]
  -r <filename>  read chip and save data to filename
  -u             unprotect chip
  -v             verify after write on chip
+ -P <name>      programmer: ch341a, ch347, auto (default: the one connected)
+ -S <speed>     SPI clock of the CH347: 60M, 30M (default), 15M, 7.5M, 3.75M, 1.875M
 ```
 
 One operation per run: `-i`, `-e`, `-r`, `-w` or `-u`. Without `-a` and `-l` the

@@ -6,7 +6,8 @@
 # detection by ID, write and read, skipping BAD pages with -k, pages of
 # 0xFF, a chip that stays busy. Then ch341a_spi.c against a fake libusb
 # (tests/ch341sim.c): long streams in parts inside the USB timeout. Then the
-# SPI NOR probe (tests/norsim.c): every chip of the table by its JEDEC ID.
+# SPI NOR probe (tests/norsim.c): every chip of the table by its JEDEC ID;
+# ch347_spi.c against a fake libusb (tests/ch347sim.c): the CH347 packets.
 #
 #   tests/run.sh            (CC=<compiler> to choose the compiler)
 #
@@ -18,6 +19,7 @@ ${CC:-cc} -std=gnu99 -Wall -Werror -I"$T/../src" -o "$W/ms" "$T/../src/main.c" "
 ${CC:-cc} -std=gnu99 -Wall -Werror -O1 -DSPI_NAND_OIP_TIMEOUT_MS=50 -o "$W/nandsim" "$T/nandsim.c" "$T/../src/timer.c" || exit 1
 ${CC:-cc} -std=gnu99 -Wall -Werror -O1 -I"$T/../src" ${LIBUSB_CFLAGS:-} -o "$W/ch341sim" "$T/ch341sim.c" || exit 1
 ${CC:-cc} -std=gnu99 -Wall -Werror -O1 -o "$W/norsim" "$T/norsim.c" "$T/../src/timer.c" || exit 1
+${CC:-cc} -std=gnu99 -Wall -Werror -O1 -I"$T/../src" ${LIBUSB_CFLAGS:-} -o "$W/ch347sim" "$T/ch347sim.c" || exit 1
 cd "$W"; B=./ms; fail=0
 # t <expected exit code> <description> [VAR=value ...] <command>
 t() { exp=$1; d=$2; shift 2; out=$(env "$@" 2>&1); got=$?
@@ -30,6 +32,14 @@ t 1 "conflict -u -i"                  $B -u -i
 t 1 "conflict -i -u"                  $B -i -u
 t 1 "conflict -u -r"                  $B -u -r x.bin
 t 1 "conflict -k -I"                  $B -k -I -r x.bin
+t 1 "-P unknown programmer"           $B -P ft2232 -i
+t 0 "-P ch341a"                       $B -P ch341a -i
+t 1 "-S unknown speed"                $B -S 100M -i
+t 0 "-P ch347 -S 15M"                 $B -P ch347 -S 15M -i
+t 1 "-S with the CH341A is an error"  $B -P ch341a -S 15M -i
+t 1 "-S with auto (CH341A) is an error" $B -S 15M -i
+MS_PROGRAMMER=1 $B -P ch347 -i | grep -q '^programmer: ch347' && MS_PROGRAMMER=1 $B -i | grep -q '^programmer: ch341a' && echo "ok   -P chooses the programmer, auto by default" || { echo "FAIL programmer choice"; fail=1; }
+$B -h | grep -q '^ -P ' && $B -h | grep -q '^ -S ' && echo "ok   -h lists -P and -S" || { echo "FAIL -h without -P/-S"; fail=1; }
 $B -h | grep -q '^ -k ' && echo "ok   -h lists -k" || { echo "FAIL -h without -k"; fail=1; }
 t 0 "-i detected"                     $B -i
 t 1 "-i chip not found"               MS_CHIP=none $B -i
@@ -67,5 +77,7 @@ grep -a '^ok\|^FAIL' nandsim.log
 grep -a '^ok\|^FAIL' ch341sim.log
 ./norsim > norsim.log 2>&1 || fail=1
 grep -a '^ok\|^FAIL' norsim.log
+./ch347sim > ch347sim.log 2>&1 || fail=1
+grep -a '^ok\|^FAIL' ch347sim.log
 [ "$fail" = 0 ] && echo "all tests passed"
 exit $fail

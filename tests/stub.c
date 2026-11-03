@@ -12,8 +12,20 @@ static int r(unsigned char *b, unsigned long f, unsigned long l) { if (!strcmp(e
 static int w(unsigned char *b, unsigned long t, unsigned long l) { if (!strcmp(env("MS_FAIL"),"write")) return -1; if (!strcmp(env("MS_FAIL"),"partial")) { memcpy(chip + t, b, l / 2); return l / 2; } memcpy(chip + t, b, l); if (*env("MS_CORRUPT")) chip[t + atol(env("MS_CORRUPT"))] ^= 0x5a; return l; }
 static int e(unsigned long o, unsigned long l) { if (!strcmp(env("MS_FAIL"),"erase")) return -2; memset(chip + o, 0xff, l); return 0; }
 static int u(void) { return strcmp(env("MS_FAIL"),"unprotect") ? 0 : -3; }
-int ch341a_spi_init(void) { FILE *f = fopen("chip.img", "rb"); if (f) { if (fread(chip, 1, sizeof(chip), f) != sizeof(chip)) memset(chip, 0, sizeof(chip)); fclose(f); } return 0; }
-int ch341a_spi_shutdown(void) { FILE *f = fopen("chip.img", "wb"); if (!f || fwrite(chip, 1, sizeof(chip), f) != sizeof(chip)) return -1; fclose(f); return 0; }
+#include <strings.h>
+#include "programmer.h"
+static const struct programmer stubprogs[] = { { .key = "ch341a", .name = "CH341A" }, { .key = "ch347", .name = "CH347", .clock = true } };
+static const struct programmer *chosen = &stubprogs[0];	/* auto: the stub has a CH341A */
+const struct programmer *programmer;
+int programmer_select(const char *n) {
+	if (!strcasecmp(n, "auto")) { chosen = &stubprogs[0]; return 0; }
+	for (int i = 0; i < 2; i++) if (!strcasecmp(n, stubprogs[i].key)) { chosen = &stubprogs[i]; return 0; }
+	return -1; }
+const char *programmer_names(void) { return "ch341a, ch347, auto"; }
+int ch347_set_speed(const char *s) { return strcasecmp(s, "60M") && strcasecmp(s, "30M") && strcasecmp(s, "15M") && strcasecmp(s, "7.5M") && strcasecmp(s, "3.75M") && strcasecmp(s, "1.875M") ? -1 : 0; }
+const char *ch347_speed_list(void) { return "60M, 30M, 15M, 7.5M, 3.75M, 1.875M"; }
+int programmer_init(bool need_clock) { if (need_clock && !chosen->clock) { printf("-S: fixed clock\n"); return -2; } programmer = chosen; if (*env("MS_PROGRAMMER")) printf("programmer: %s\n", programmer->key); FILE *f = fopen("chip.img", "rb"); if (f) { if (fread(chip, 1, sizeof(chip), f) != sizeof(chip)) memset(chip, 0, sizeof(chip)); fclose(f); } return 0; }
+int programmer_shutdown(void) { FILE *f = fopen("chip.img", "wb"); if (!f || fwrite(chip, 1, sizeof(chip), f) != sizeof(chip)) return -1; fclose(f); return 0; }
 void support_flash_list(void) {}
 long flash_cmd_init(struct flash_cmd *c) {
 	if (!strcmp(env("MS_CHIP"), "none")) return -1;

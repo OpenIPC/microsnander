@@ -10,7 +10,7 @@
 [![Code size](https://img.shields.io/github/languages/code-size/OpenIPC/microsnander)](https://github.com/OpenIPC/microsnander)
 [![Platform](https://img.shields.io/badge/platform-Linux-brightgreen)](#系统要求)
 
-MicroSNANDer 是一个命令行编程器，配合廉价的 CH341A USB 编程器使用，用于 SPI NOR 和
+MicroSNANDer 是一个命令行编程器，配合廉价的 CH341A 和 CH347 USB 编程器使用，用于 SPI NOR 和
 SPI NAND 闪存芯片。它可以读取、写入、擦除和校验摄像机、路由器及其他开发板的闪存，
 解除 SPI NOR 芯片的写保护，支持 291 款 SPI NOR 和 135 款 SPI NAND 芯片。
 
@@ -28,7 +28,7 @@ PC 上运行，也可以直接在 USB 口插着编程器的 ARM 摄像机上运�
 curl -fLo microsnander https://github.com/OpenIPC/microsnander/releases/latest/download/microsnander-linux-x86_64
 chmod +x microsnander
 
-# 2. 插上带芯片的 CH341A，识别芯片
+# 2. 插上带芯片的编程器，识别芯片
 sudo ./microsnander -i
 
 # 3. 备份整片芯片，然后写入新镜像并校验
@@ -52,17 +52,27 @@ sudo ./microsnander -w firmware.bin -v
 
 ## 系统要求
 
-- CH341A 编程器（USB ID `1a86:5512`），处于 SPI 模式（编程器板上的跳线），并配有芯片
-  座或夹子。常见的黑色 CH341A 板数据线电平为 5 V：3.3 V 芯片请使用改装为 3.3 V 的板
-  或电平转换器，1.8 V 芯片请使用 1.8 V 转接板。
+- 配有芯片座或夹子的 USB 编程器：
+  - CH341A（USB ID `1a86:5512`），处于 SPI 模式（编程器板上的跳线）。常见的黑色 CH341A
+    板数据线电平为 5 V：3.3 V 芯片请使用改装为 3.3 V 的板或电平转换器，1.8 V 芯片请使用
+    1.8 V 转接板。
+  - CH347T（`1a86:55db`），处于模式 1（UART + SPI + I2C，由模式开关或跳线设置），或
+    CH347F（`1a86:55de`）。速度远快于 CH341A（16 MB 芯片约 7 秒读完）；SPI 时钟为 30 MHz，可用 `-S` 修改。
+
+  只连接一个编程器时 microsnander 直接使用它；连接多个时请用 `-P ch341a` 或 `-P ch347`
+  选择。占用编程器的内核驱动（例如 `spi-ch341`）会在运行期间分离，结束后重新绑定。
 - x86_64 或 32 位 ARM（ARMv5TE 及以上）上的 Linux。发布的二进制文件为静态链接（musl，
   内置 libusb），无需安装任何东西。
-- USB 设备访问权限：以 root 运行，或用 udev 规则授权给某个用户组：
+- USB 设备访问权限：以 root 运行，或用 udev 规则授权给某个用户组（之后重新插拔编程器）：
 
   ```sh
-  echo 'SUBSYSTEM=="usb", ATTR{idVendor}=="1a86", ATTR{idProduct}=="5512", MODE="0660", GROUP="plugdev"' |
-    sudo tee /etc/udev/rules.d/60-ch341a.rules
-  sudo udevadm control --reload-rules
+  sudo tee /etc/udev/rules.d/60-microsnander.rules <<'EOF'
+  SUBSYSTEM=="usb", ATTR{idVendor}=="1a86", ATTR{idProduct}=="5512", MODE="0660", GROUP="plugdev"
+  SUBSYSTEM=="usb", ATTR{idVendor}=="1a86", ATTR{idProduct}=="55db", MODE="0660", GROUP="plugdev"
+  SUBSYSTEM=="usb", ATTR{idVendor}=="1a86", ATTR{idProduct}=="55de", MODE="0660", GROUP="plugdev"
+  EOF
+  sudo usermod -aG plugdev "$USER"
+  sudo udevadm control --reload-rules && sudo udevadm trigger
   ```
 
 ## 发布与固定链接
@@ -97,6 +107,8 @@ microsnander [options]
  -r <filename>  read chip and save data to filename
  -u             unprotect chip
  -v             verify after write on chip
+ -P <name>      programmer: ch341a, ch347, auto (default: the one connected)
+ -S <speed>     SPI clock of the CH347: 60M, 30M (default), 15M, 7.5M, 3.75M, 1.875M
 ```
 
 每次运行只执行一个操作：`-i`、`-e`、`-r`、`-w` 或 `-u`。不指定 `-a` 和 `-l` 时，
