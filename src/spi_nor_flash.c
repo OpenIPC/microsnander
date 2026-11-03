@@ -64,6 +64,9 @@
 #define OPCODE_CLSR			0x30
 #define OPCODE_RCR			0x35	/* Read Configuration Register */
 
+#define OPCODE_AAI			0xAD	/* SST25: auto address increment word program */
+#define OPCODE_ULBPR			0x98	/* SST26: global block protection unlock */
+
 #define OPCODE_BRRD			0x16
 #define OPCODE_BRWR			0x17
 
@@ -107,10 +110,29 @@ struct chip_info {
 struct chip_info *spi_chip_info;
 
 static int snor_wait_ready(int sleep_ms);
+static int snor_wait_busy(void);
 static int snor_read_sr(u8 opcode, u8 *val);
 static int snor_write_sr(u8 opcode, u8 *val);
 
 extern unsigned int bsize;
+
+/* SST25VF-type chips (maker 0xbf, device 0x25xx) without a 256-byte page
+   program: 0x02 programs one byte, longer data goes with AAI word program.
+   SST25VF064C has a page program and is not one of them. */
+static int snor_is_sst25_aai(void)
+{
+	u32 dev = spi_chip_info->jedec_id >> 16;
+
+	return spi_chip_info->id == 0xbf && (dev >> 8) == 0x25 && dev != 0x254b;
+}
+
+/* SST26-type chips (maker 0xbf, device 0x26xx): every block is locked at
+   power-up until ULBPR, and the blocks at the ends are 8 KB and 32 KB, so
+   they are erased in 4 KB sectors. */
+static int snor_is_sst26(void)
+{
+	return spi_chip_info->id == 0xbf && (spi_chip_info->jedec_id >> 24) == 0x26;
+}
 
 /*
  * Set write enable latch with Write Enable command.
@@ -138,17 +160,40 @@ int snor_unprotect(void)
 {
 	u8 sr = 0;
 
+	if (snor_is_sst26()) {
+		/* the block protection register, not the status register */
+		int err = 0;
+
+		if (snor_wait_ready(1))
+			return -1;
+		snor_write_enable();
+		err |= SPI_CONTROLLER_Chip_Select_Low();
+		err |= SPI_CONTROLLER_Write_One_Byte(OPCODE_ULBPR);
+		err |= SPI_CONTROLLER_Chip_Select_High();
+		if (err || snor_wait_busy()) {	/* the unlock done before the next WREN */
+			printf("%s: ULBPR failed\n", __func__);
+			return -1;
+		}
+		return 0;
+	}
+
 	if (snor_read_sr(OPCODE_RDSR, &sr) < 0) {
 		printf("%s: read_sr fail: %x\n", __func__, sr);
 		return -1;
 	}
 
-	if ((sr & (SR_BP0 | SR_BP1 | SR_BP2)) != 0) {
+	if ((sr & (SR_BP0 | SR_BP1 | SR_BP2)) != 0 || (snor_is_sst25_aai() && (sr & 0xbc))) {
 		sr = 0;
 		snor_wait_ready(1);
 		snor_write_enable();
 		snor_write_sr(OPCODE_WRSR, &sr);
+		if (snor_wait_busy())	/* the status register write takes time */
+			return -1;
 	}
+
+	/* SST25-type chips have one status register (BP3 and BPL in it) */
+	if (snor_is_sst25_aai())
+		return 0;
 
 	if (snor_read_sr(OPCODE_RDSR2, &sr) < 0) {
 		printf("%s: read_sr2 fail: %x\n", __func__, sr);
@@ -160,6 +205,8 @@ int snor_unprotect(void)
 		snor_wait_ready(1);
 		snor_write_enable();
 		snor_write_sr(OPCODE_WRSR2, &sr);
+		if (snor_wait_busy())	/* the status register write takes time */
+			return -1;
 	}
 
 	if (snor_read_sr(OPCODE_RDSR3, &sr) < 0) {
@@ -172,6 +219,8 @@ int snor_unprotect(void)
 		snor_wait_ready(1);
 		snor_write_enable();
 		snor_write_sr(OPCODE_WRSR3, &sr);
+		if (snor_wait_busy())	/* the status register write takes time */
+			return -1;
 	}
 
 	return 0;
@@ -301,7 +350,7 @@ static int snor_erase_sector(unsigned long offset)
 
 	SPI_CONTROLLER_Chip_Select_Low();
 
-	SPI_CONTROLLER_Write_One_Byte(OPCODE_SE);
+	SPI_CONTROLLER_Write_One_Byte(snor_is_sst26() ? OPCODE_P4E : OPCODE_SE);
 	if (spi_chip_info->addr4b)
 		SPI_CONTROLLER_Write_One_Byte((offset >> 24) & 0xff);
 	SPI_CONTROLLER_Write_One_Byte((offset >> 16) & 0xff);
@@ -325,9 +374,13 @@ static int full_erase_chip(void)
 	if (snor_wait_ready(3))
 		return -1;
 
-	/* Send write enable, then erase commands. */
+	/* Unprotect first: clearing the protection ends with the write enable
+	   latch cleared, so the write enable goes right before the erase. */
+	if (snor_unprotect() < 0) {
+		timer_end();
+		return -1;
+	}
 	snor_write_enable();
-	snor_unprotect();
 
 	SPI_CONTROLLER_Chip_Select_Low();
 	SPI_CONTROLLER_Write_One_Byte(OPCODE_BE1);
@@ -639,7 +692,14 @@ static struct chip_info chips_data [] = {
 	{ "ZD25Q32B",		0xba, 0x32160000, 64 * 1024, 64,  0 },
 	{ "ZD25Q64B",		0xba, 0x32170000, 64 * 1024, 128, 0 },
 	{ "ZD25Q128B",		0xba, 0x32180000, 64 * 1024, 256, 0 },
+	{ "PCT25VF020B",		0xbf, 0x258c0000, 64 * 1024, 4,   0 },
+	{ "PCT25VF040B",		0xbf, 0x258d0000, 64 * 1024, 8,   0 },
+	{ "PCT25VF080B",		0xbf, 0x258e0000, 64 * 1024, 16,  0 },
+	{ "PCT25VF016B",		0xbf, 0x25410000, 64 * 1024, 32,  0 },
+	{ "PCT25VF032B",		0xbf, 0x254a0000, 64 * 1024, 64,  0 },
 	{ "PCT25VF064C",		0xbf, 0x254b0000, 64 * 1024, 128, 0 },
+	{ "PCT26VF016",		0xbf, 0x26010000, 4 * 1024, 512,  0 },
+	{ "PCT26VF032",		0xbf, 0x26020000, 4 * 1024, 1024, 0 },
 	{ "ZD25Q16C",		0xba, 0x60150000, 64 * 1024, 32,  0 },
 	{ "ZD25Q32C",		0xba, 0x60160000, 64 * 1024, 64,  0 },
 	{ "ZD25Q64C",		0xba, 0x60170000, 64 * 1024, 128, 0 },
@@ -776,7 +836,10 @@ int snor_erase(unsigned long offs, unsigned long len)
 
 	timer_start();
 
-	snor_unprotect();
+	if (snor_unprotect() < 0) {
+		timer_end();
+		return -1;
+	}
 
 	/* now erase those sectors */
 	while (len > 0) {
@@ -883,6 +946,110 @@ int snor_read(unsigned char *buf, unsigned long from, unsigned long len)
 	return len;
 }
 
+/* Wait for the end of a byte or word program: the busy bit only (in AAI
+   mode bit 6 of the status register is set, so snor_wait_ready() cannot be used). */
+static int snor_wait_busy(void)
+{
+	u8 sr = 0;
+	int count;
+
+	for (count = 0; count < 1000; count++) {
+		if (snor_read_sr(OPCODE_RDSR, &sr) < 0)
+			return -1;
+		if (!(sr & SR_WIP))
+			return 0;
+	}
+	return -1;
+}
+
+static int snor_send_addr(unsigned long addr)
+{
+	int err = 0;
+
+	err |= SPI_CONTROLLER_Write_One_Byte((addr >> 16) & 0xff);
+	err |= SPI_CONTROLLER_Write_One_Byte((addr >> 8) & 0xff);
+	err |= SPI_CONTROLLER_Write_One_Byte(addr & 0xff);
+	return err;
+}
+
+static int snor_program_byte(unsigned long addr, u8 data)
+{
+	int err = 0;
+
+	snor_write_enable();
+	err |= SPI_CONTROLLER_Chip_Select_Low();
+	err |= SPI_CONTROLLER_Write_One_Byte(OPCODE_PP);
+	err |= snor_send_addr(addr);
+	err |= SPI_CONTROLLER_Write_One_Byte(data);
+	err |= SPI_CONTROLLER_Chip_Select_High();
+	if (err)
+		return -1;
+	return snor_wait_busy();
+}
+
+/* SST25VF-type write: a byte program for an odd first or last byte, AAI word
+   program (two bytes per command) for the rest, write disable at the end. */
+static int snor_write_aai(unsigned char *buf, unsigned long to, unsigned long len)
+{
+	unsigned long plen = len;
+	int aai = 0;
+
+	if (snor_unprotect() < 0)
+		goto fail;
+
+	if ((to & 1) && len) {
+		if (snor_program_byte(to, *buf))
+			goto fail;
+		to++; buf++; len--;
+	}
+	while (len >= 2) {
+		int err = 0;
+
+		if (!aai)
+			snor_write_enable();
+		err |= SPI_CONTROLLER_Chip_Select_Low();
+		err |= SPI_CONTROLLER_Write_One_Byte(OPCODE_AAI);
+		if (!aai)
+			err |= snor_send_addr(to);
+		err |= SPI_CONTROLLER_Write_One_Byte(buf[0]);
+		err |= SPI_CONTROLLER_Write_One_Byte(buf[1]);
+		err |= SPI_CONTROLLER_Chip_Select_High();
+		aai = 1;
+		/* the word counts only when its command went out and the chip is ready
+		   again (BUSY, bit 0: bit 6 only says AAI mode is on) */
+		if (err || snor_wait_busy())
+			goto fail;
+		to += 2; buf += 2; len -= 2;
+		if( timer_progress() ) {
+			printf("\bWritten %ld%% [%lu] of [%lu] bytes      ", 100 * (plen - len) / plen, plen - len, plen);
+			printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
+			fflush(stdout);
+		}
+	}
+	if (aai) {
+		snor_write_disable();	/* ends AAI mode */
+		aai = 0;
+		if (snor_wait_busy())
+			goto fail;
+	}
+	if (len) {
+		if (snor_program_byte(to, *buf))
+			goto fail;
+		len--;
+	}
+	snor_write_disable();
+	printf("Written 100%% [%lu] of [%lu] bytes      \n", plen - len, plen);
+	timer_end();
+	return plen;
+
+fail:
+	if (aai)
+		snor_write_disable();
+	printf("\nWrite failed at 0x%06lx\n", to);
+	timer_end();
+	return plen - len;
+}
+
 int snor_write(unsigned char *buf, unsigned long to, unsigned long len)
 {
 	u32 page_offset, page_size;
@@ -904,6 +1071,8 @@ int snor_write(unsigned char *buf, unsigned long to, unsigned long len)
 		return -1;
 	}
 
+	if (snor_is_sst25_aai())
+		return snor_write_aai(buf, to, len);
 
 	/* what page do we start with? */
 	page_offset = to % FLASH_PAGESIZE;
@@ -918,8 +1087,9 @@ int snor_write(unsigned char *buf, unsigned long to, unsigned long len)
 		/* write the next page to flash */
 
 		snor_wait_ready(3);
-		snor_write_enable();
-		snor_unprotect();
+		if (snor_unprotect() < 0)
+			break;		/* retlen has what was written */
+		snor_write_enable();	/* after the unprotect, which clears the latch */
 
 		SPI_CONTROLLER_Chip_Select_Low();
 		/* Set up the opcode in the write buffer. */
