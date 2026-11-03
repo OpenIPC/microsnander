@@ -127,6 +127,7 @@ have no version, so these links always give the newest build:
 |---------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------|
 | [`microsnander-linux-x86_64`](https://github.com/OpenIPC/microsnander/releases/latest/download/microsnander-linux-x86_64) | PCs and servers                                                                              |
 | [`microsnander-linux-arm`](https://github.com/OpenIPC/microsnander/releases/latest/download/microsnander-linux-arm)       | 32-bit ARM: cameras, Raspberry Pi and other boards (soft-float, runs with or without an FPU) |
+| [`microsnander-android.apk`](https://github.com/OpenIPC/microsnander/releases/latest/download/microsnander-android.apk)   | Android 5.0 and later: phones and TV boxes with a USB host port, no root                     |
 
 Release page: `https://github.com/OpenIPC/microsnander/releases/latest`
 
@@ -301,8 +302,8 @@ with the remote).
 - **Registers** and **Clear protection** as in the web mode (SPI NOR through the CH341A or the
   CH347).
 - The app runs the same C code as microsnander (`src/`), built with the NDK, with libusb on the
-  device the Android USB manager opened. CI builds a debug APK (artifact
-  `microsnander-android-debug`).
+  device the Android USB manager opened. The signed APK is in the release:
+  `microsnander-android.apk` in [latest](https://github.com/OpenIPC/microsnander/releases/latest).
 
 Build: `cd android && gradle assembleDebug` with the Android SDK and NDK r27c.
 

@@ -116,6 +116,7 @@ sudo ./microsnander -w firmware.bin -v
 |---------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------|
 | [`microsnander-linux-x86_64`](https://github.com/OpenIPC/microsnander/releases/latest/download/microsnander-linux-x86_64) | PC 和服务器                                                            |
 | [`microsnander-linux-arm`](https://github.com/OpenIPC/microsnander/releases/latest/download/microsnander-linux-arm)       | 32 位 ARM：摄像机、树莓派及其他开发板（soft-float，有无 FPU 均可运行） |
+| [`microsnander-android.apk`](https://github.com/OpenIPC/microsnander/releases/latest/download/microsnander-android.apk)   | Android 5.0 及以上：带 USB 主机端口的手机和电视盒子，无需 root         |
 
 发布页面：`https://github.com/OpenIPC/microsnander/releases/latest`
 
@@ -276,7 +277,7 @@ root；在电视盒子上会出现在主屏幕，可用遥控器操作）。
 - **Write** 通过文件选择器选取文件，从地址 0 写入已擦除的芯片，然后校验。**Erase** 擦除整片芯片。
 - **Registers** 和 **Clear protection** 与 Web 模式相同（通过 CH341A 或 CH347 操作 SPI NOR）。
 - 应用使用与 microsnander 相同的 C 代码（`src/`），由 NDK 编译，libusb 使用 Android USB 管理器
-  打开的设备。CI 会构建调试版 APK（构件 `microsnander-android-debug`）。
+  打开的设备。签名的 APK 在发布版中：[latest](https://github.com/OpenIPC/microsnander/releases/latest) 里的 `microsnander-android.apk`。
 
 构建：在安装了 Android SDK 和 NDK r27c 的环境中运行 `cd android && gradle assembleDebug`。
 

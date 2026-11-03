@@ -116,7 +116,9 @@ jobs:
   # The one release, "latest": rebuilt from every push to main after all
   # builds pass, from the static binaries built and checked above.
   # The Android app (android/): NDK build of src/ with libusb, lint without
-  # warnings, a debug-signed APK as an artifact. Not in the release yet.
+  # warnings, a debug APK (the fixed debug key of the repository) and the
+  # release APK signed with the release key from the repository secrets
+  # (absent in forks: no release APK). The release job ships that one.
   android:
     name: Android app (APK)
     runs-on: ubuntu-latest
@@ -139,21 +141,46 @@ jobs:
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;27.2.12479018" > /dev/null
 
       - name: Build and lint
+        env:
+          KEYSTORE_BASE64: ${{ secrets.MICROSNANDER_KEYSTORE_BASE64 }}
+          MICROSNANDER_KEYSTORE_PASSWORD: ${{ secrets.MICROSNANDER_KEYSTORE_PASSWORD }}
+          MICROSNANDER_KEY_ALIAS: ${{ secrets.MICROSNANDER_KEY_ALIAS }}
+          MICROSNANDER_KEY_PASSWORD: ${{ secrets.MICROSNANDER_KEY_PASSWORD }}
         run: |
           cd android
-          gradle --no-daemon assembleDebug lintDebug
+          tasks="assembleDebug lintDebug"
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            mkdir -p "$RUNNER_TEMP/keys"
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/keys/microsnander-release.jks"
+            export MICROSNANDER_KEYSTORE_FILE="$RUNNER_TEMP/keys/microsnander-release.jks"
+            tasks="$tasks assembleRelease"
+          fi
+          gradle --no-daemon $tasks
+          rm -rf "$RUNNER_TEMP/keys"
           cp app/build/outputs/apk/debug/app-debug.apk microsnander-android-debug.apk
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            cp app/build/outputs/apk/release/app-release.apk microsnander-android.apk
+            BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+            "$BT/apksigner" verify microsnander-android.apk
+          fi
 
-      - name: Upload APK
+      - name: Upload the debug APK
         uses: actions/upload-artifact@v5
         with:
           name: microsnander-android-debug
           path: android/microsnander-android-debug.apk
           if-no-files-found: error
 
+      - name: Upload the release APK
+        if: hashFiles('android/microsnander-android.apk') != ''
+        uses: actions/upload-artifact@v5
+        with:
+          name: microsnander-android
+          path: android/microsnander-android.apk
+
   release:
     name: Publish "latest"
-    needs: [native, static]
+    needs: [native, static, android]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
@@ -169,15 +196,27 @@ jobs:
           merge-multiple: true
           path: dist
 
+      - name: Download the Android app
+        uses: actions/download-artifact@v5
+        with:
+          name: microsnander-android
+          path: dist
+
       - name: Check the files
         run: |
           ver=$(sed -n 's/^#define[[:space:]]*_VER[[:space:]]*"\([^"]*\)".*/\1/p' src/main.c)
           [ -n "$ver" ] || { echo "::error::no _VER in src/main.c"; exit 1; }
           ls -l dist
-          [ "$(ls dist | wc -l)" = 2 ] || { echo "::error::expected 2 binaries"; exit 1; }
+          [ "$(ls dist | wc -l)" = 3 ] || { echo "::error::expected 2 binaries and the APK"; exit 1; }
+          # an unsigned APK cannot be installed: the release key has to be there
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          "$BT/apksigner" verify dist/microsnander-android.apk ||
+            { echo "::error::microsnander-android.apk is not signed"; exit 1; }
+          "$BT/aapt" dump badging dist/microsnander-android.apk | grep -q "versionName='$ver'" ||
+            { echo "::error::the APK is not version $ver"; exit 1; }
           file dist/microsnander-linux-arm | grep -q 'ARM.*statically linked' ||
             { echo "::error::microsnander-linux-arm is not a static ARM binary"; exit 1; }
-          chmod 755 dist/*
+          chmod 755 dist/microsnander-linux-*
           ./dist/microsnander-linux-x86_64 -h | grep -q " v\.$ver\$" ||
             { echo "::error::the binary does not print v.$ver"; exit 1; }
           echo "VER=$ver" >> "$GITHUB_ENV"
@@ -213,10 +252,11 @@ jobs:
           [ "$prev" = "Microsnander ${VER}" ] || echo "new=true" >> "$GITHUB_OUTPUT"
 
           cat > notes.md <<NOTES
-          Microsnander ${VER} (${GITHUB_SHA::7}): static Linux binaries (musl, libusb built in), no dependencies.
+          Microsnander ${VER} (${GITHUB_SHA::7}): static Linux binaries (musl, libusb built in), no dependencies, and the Android app.
 
           - \`microsnander-linux-x86_64\` — PCs and servers
           - \`microsnander-linux-arm\` — 32-bit ARM (ARMv5TE and later, soft-float): cameras, Raspberry Pi and other boards
+          - \`microsnander-android.apk\` — Android 5.0 and later, phones and TV boxes (USB host, no root)
 
           Changes: [CHANGELOG.md](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/main/CHANGELOG.md); usage: [README](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}#readme).
           NOTES
@@ -242,9 +282,9 @@ jobs:
           if [ -z "$TG_TOKEN" ] || [ -z "$TG_CHANNEL" ]; then
             echo "::warning::Telegram secrets are not available, binaries not posted"; exit 0
           fi
-          caption=$(printf 'Microsnander %s for Linux\nCommit: %s\nTime: %s\n\n%s' "$VER" "${GITHUB_SHA::7}" \
+          caption=$(printf 'Microsnander %s for Linux and Android\nCommit: %s\nTime: %s\n\n%s' "$VER" "${GITHUB_SHA::7}" \
             "$(date -u '+%Y-%m-%d %H:%M:%S UTC')" "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/latest")
-          files=(dist/microsnander-linux-*)
+          files=(dist/microsnander-*)
           media='[]' form=()
           for i in "${!files[@]}"; do
             item=$(jq -cn --arg m "attach://f$i" '{type: "document", media: $m}')
