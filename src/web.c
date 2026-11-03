@@ -42,6 +42,7 @@
 #include "web.h"
 #include "flashcmd_api.h"
 #include "programmer.h"
+#include "ops.h"
 
 #define WEB_PART	(64 * 1024)		/* read, write and verify in parts: the progress */
 #define WEB_HEADERS	8192
@@ -93,233 +94,103 @@ static void set_progress(const char *phase, unsigned long long done, unsigned lo
 
 /* ---- the operations, in the worker thread ---- */
 
-static struct flash_cmd prog;
-static long long flen;
-
-static int chip_open(void)
+/* the chip found by an operation, into the state */
+static void keep_chip(const struct ms_chip *c)
 {
-	int ret = programmer_init(false);
-
-	if (ret == -2) {
-		set_msg("Several programmers, or two of one kind, are connected: connect one.");
-		return -1;
-	}
-	if (ret < 0) {
-		set_msg("No programmer found.");
-		return -1;
-	}
-	memset(&prog, 0, sizeof(prog));
-	flash_chip_name = NULL;
-	flen = flash_cmd_init(&prog);
 	pthread_mutex_lock(&st.lock);
-	snprintf(st.programmer, sizeof(st.programmer), "%s", programmer->name);
-	snprintf(st.chip, sizeof(st.chip), "%s", flen > 0 && flash_chip_name ? flash_chip_name : "");
-	st.size = flen > 0 ? flen : 0;
+	snprintf(st.programmer, sizeof(st.programmer), "%s", c->programmer);
+	snprintf(st.chip, sizeof(st.chip), "%s", c->chip);
+	st.size = c->size;
+	st.sr_valid = c->sr_valid;
+	memcpy(st.sr, c->sr, 3);
 	pthread_mutex_unlock(&st.lock);
-	if (flen <= 0) {
-		set_msg("No chip found.");
-		programmer_shutdown();
-		return -1;
-	}
-	return 0;
 }
 
-static void chip_close(void)
+static void on_progress(void *ctx, const char *phase, unsigned long long done, unsigned long long total)
 {
-	programmer_shutdown();
+	(void)ctx;
+	set_progress(phase, done, total);
 }
 
-/* the status registers: SPI NOR through an SPI bridge only */
-static int registers(void)
+/* the dump file: a second read in the same minute does not replace the
+   first, it gets -2, -3, ...; a link is never followed */
+static FILE *dump_create(const char *chip, unsigned long long a, unsigned long long l, char *name, size_t n,
+			 char *path, size_t pn)
 {
-	unsigned char sr[3];
-	int ok = prog.flash_unprotect && programmer->send && !snor_read_status(sr);
-
-	pthread_mutex_lock(&st.lock);
-	st.sr_valid = ok;
-	if (ok)
-		memcpy(st.sr, sr, 3);
-	pthread_mutex_unlock(&st.lock);
-	return ok ? 0 : -1;
-}
-
-/* flash-YYYYMMDDHHMM-CHIP[-0xADDR-0xLEN].bin */
-static void dump_name(char *name, size_t n, const char *chip, int range, unsigned long long a, unsigned long long l)
-{
-	char stamp[16], up[64];
-	time_t now = time(NULL);
-	struct tm tm;
-	size_t i;
-
-	localtime_r(&now, &tm);
-	strftime(stamp, sizeof(stamp), "%Y%m%d%H%M", &tm);
-	for (i = 0; chip[i] && i < sizeof(up) - 1; i++) {
-		char c = chip[i];
-
-		up[i] = (c >= 'a' && c <= 'z') ? c - 32 : (c == '/' || c == ' ' ? '_' : c);
-	}
-	up[i] = 0;
-	if (range)
-		snprintf(name, n, "flash-%s-%s-0x%llx-0x%llx.bin", stamp, up, a, l);
-	else
-		snprintf(name, n, "flash-%s-%s.bin", stamp, up);
-}
-
-static int op_read(void)
-{
-	static unsigned char part[WEB_PART];
-	unsigned long long a = web_addr, l = web_len ? web_len : (unsigned long long)flen - web_addr;
-	char base[128], name[140], path[1024];
+	char base[128];
+	int fd = -1;
 	FILE *f;
 
-	if (web_addr >= (unsigned long long)flen || l > (unsigned long long)flen - web_addr) {
-		set_msg("The range 0x%llx + 0x%llx is past the chip end (0x%llx).", web_addr, l, flen);
-		return -1;
-	}
-	/* a second read in the same minute does not replace the first: -2, -3, ... */
-	dump_name(base, sizeof(base), st.chip, web_len || web_addr, a, l);
+	ms_dump_name(base, sizeof(base), chip, web_len || web_addr, a, l);
 	base[strlen(base) - 4] = 0;		/* without .bin */
-	int fd = -1;
 	for (int k = 1; k < 100 && fd < 0; k++) {
 		if (k == 1)
-			snprintf(name, sizeof(name), "%s.bin", base);
+			snprintf(name, n, "%s.bin", base);
 		else
-			snprintf(name, sizeof(name), "%s-%d.bin", base, k);
-		snprintf(path, sizeof(path), "%s/%s", web_dir, name);
+			snprintf(name, n, "%s-%d.bin", base, k);
+		snprintf(path, pn, "%s/%s", web_dir, name);
 		fd = open(path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0644);
 		if (fd < 0 && errno != EEXIST)
 			break;
 	}
-	if (fd < 0 || !(f = fdopen(fd, "wb"))) {
-		if (fd >= 0)
-			close(fd);
-		set_msg("Cannot create %s: %s", path, strerror(errno));
+	if (fd < 0)
+		return NULL;
+	if (!(f = fdopen(fd, "wb")))
+		close(fd);
+	return f;
+}
+
+static int op_read(struct ms_chip *c, char *msg, size_t n)
+{
+	char name[140], path[1024];
+	unsigned long long l;
+	FILE *f;
+
+	if (ms_detect(c, msg, n))		/* the chip name for the file */
+		return -1;
+	keep_chip(c);
+	l = web_len ? web_len : (web_addr < (unsigned long long)c->size ? c->size - web_addr : 0);
+	if (web_addr >= (unsigned long long)c->size || l > (unsigned long long)c->size - web_addr) {
+		snprintf(msg, n, "The range 0x%llx + 0x%llx is past the chip end (0x%llx).", web_addr, l, c->size);
 		return -1;
 	}
-	for (unsigned long long done = 0; done < l; ) {
-		unsigned long n = l - done < WEB_PART ? l - done : WEB_PART;
-
-		set_progress("read", done, l);
-		if (prog.flash_read(part, a + done, n) != (int)n || fwrite(part, 1, n, f) != n) {
-			fclose(f);
-			unlink(path);
-			set_msg("Read failed at 0x%llx.", a + done);
-			return -1;
-		}
-		done += n;
+	if (!(f = dump_create(c->chip, web_addr, l, name, sizeof(name), path, sizeof(path)))) {
+		snprintf(msg, n, "Cannot create %.180s: %s", path, strerror(errno));
+		return -1;
 	}
-	set_progress("read", l, l);
+	if (ms_read(c, f, web_addr, l, on_progress, NULL, msg, n)) {
+		fclose(f);
+		unlink(path);
+		return -1;
+	}
 	if (fclose(f)) {
 		unlink(path);
-		set_msg("Cannot write %s.", path);
+		snprintf(msg, n, "Cannot write %.200s.", path);
 		return -1;
 	}
 	pthread_mutex_lock(&st.lock);
 	snprintf(st.file, sizeof(st.file), "%s", name);
 	pthread_mutex_unlock(&st.lock);
-	set_msg("Read 0x%llx bytes into %s.", l, name);
-	return 0;
-}
-
-static int op_erase(void)
-{
-	set_progress("erase", 0, 0);
-	if (prog.flash_erase(0, flen)) {
-		set_msg("Erase failed.");
-		return -1;
-	}
-	set_msg("The whole chip is erased.");
-	return 0;
-}
-
-/* from address 0 (a loader or a full image), then read back and compared */
-static int op_write(void)
-{
-	static unsigned char part[WEB_PART];
-	unsigned long l = upload_len;
-
-	if (!l || l > (unsigned long long)flen) {
-		set_msg(l ? "The file (0x%lx bytes) is larger than the chip (0x%llx)." : "The file is empty.", l, flen);
-		return -1;
-	}
-	for (unsigned long done = 0; done < l; ) {
-		unsigned long n = l - done < WEB_PART ? l - done : WEB_PART;
-
-		set_progress("write", done, l);
-		if (prog.flash_write(upload + done, done, n) != (int)n) {
-			set_msg("Write failed at 0x%lx.", done);
-			return -1;
-		}
-		done += n;
-	}
-	for (unsigned long done = 0; done < l; ) {
-		unsigned long n = l - done < WEB_PART ? l - done : WEB_PART;
-
-		set_progress("verify", done, l);
-		if (prog.flash_read(part, done, n) != (int)n) {
-			set_msg("Read back failed at 0x%lx.", done);
-			return -1;
-		}
-		for (unsigned long i = 0; i < n; i++)
-			if (part[i] != upload[done + i]) {
-				set_msg("Verify failed: 0x%02x at 0x%lx, the file has 0x%02x.", part[i], done + i, upload[done + i]);
-				return -1;
-			}
-		done += n;
-	}
-	set_progress("verify", l, l);
-	set_msg("Wrote and verified 0x%lx bytes from address 0.", l);
-	return 0;
-}
-
-static int op_unprotect(void)
-{
-	if (!prog.flash_unprotect) {
-		set_msg("Clearing the protection is for SPI NOR through the CH341A or the CH347 only.");
-		return -1;
-	}
-	if (prog.flash_unprotect()) {
-		set_msg("Clearing the protection failed.");
-		return -1;
-	}
-	registers();
-	set_msg("The protection is cleared.");
+	snprintf(msg, n, "Read 0x%llx bytes into %s.", l, name);
 	return 0;
 }
 
 static void *worker(void *arg)
 {
 	int op = (int)(long)arg, ret = -1;
+	struct ms_chip c;
+	char msg[256] = "";
 
-	if (!chip_open()) {
-		switch (op) {
-		case OP_DETECT:
-			registers();
-			set_msg("Found %s with %s, %lld MB.", st.programmer, st.chip, flen >> 20);
-			ret = 0;
-			break;
-		case OP_READ:
-			ret = op_read();
-			break;
-		case OP_ERASE:
-			ret = op_erase();
-			break;
-		case OP_WRITE:
-			ret = op_write();
-			break;
-		case OP_REGISTERS:
-			ret = registers();
-			if (ret)
-				set_msg("The status registers are readable for SPI NOR through the CH341A or the CH347 only.");
-			else
-				set_msg("Status registers read.");
-			break;
-		case OP_UNPROTECT:
-			ret = op_unprotect();
-			break;
-		}
-		chip_close();
+	switch (op) {
+	case OP_DETECT:    ret = ms_detect(&c, msg, sizeof(msg)); break;
+	case OP_READ:      ret = op_read(&c, msg, sizeof(msg)); break;
+	case OP_ERASE:     ret = ms_erase(&c, on_progress, NULL, msg, sizeof(msg)); break;
+	case OP_WRITE:     ret = ms_write(&c, upload, upload_len, on_progress, NULL, msg, sizeof(msg)); break;
+	case OP_REGISTERS: ret = ms_registers(&c, msg, sizeof(msg)); break;
+	case OP_UNPROTECT: ret = ms_unprotect(&c, msg, sizeof(msg)); break;
 	}
+	keep_chip(&c);
+	set_msg("%s", msg);
 	free(upload);
 	upload = NULL;
 	pthread_mutex_lock(&st.lock);

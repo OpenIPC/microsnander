@@ -20,7 +20,7 @@ CFLAGS ?= -Os
 ALL_CFLAGS = $(CFLAGS) -std=gnu99 -Wall -D_FILE_OFFSET_BITS=64 $(LIBUSB_CFLAGS)
 LDLIBS = $(LIBUSB_LIBS) -pthread
 
-OBJS = flashcmd_api.o spi_controller.o spi_nand_flash.o spi_nor_flash.o programmer.o ch341a_spi.o ch347_spi.o ezp.o web.o timer.o main.o
+OBJS = flashcmd_api.o spi_controller.o spi_nand_flash.o spi_nor_flash.o programmer.o ch341a_spi.o ch347_spi.o ezp.o usb.o ops.o web.o timer.o main.o
 
 ifeq ($(EEPROM_SUPPORT),y)
     ALL_CFLAGS += -DEEPROM_SUPPORT

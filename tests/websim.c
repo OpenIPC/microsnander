@@ -3,6 +3,7 @@
    their thread, and the dumps land in a temporary directory. */
 #include <stdlib.h>
 #include <sys/wait.h>
+#include "../src/ops.c"
 #include "../src/web.c"
 
 #define SIM_SIZE (1 << 20)

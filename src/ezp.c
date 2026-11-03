@@ -29,6 +29,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <libusb-1.0/libusb.h>
+#include "usb.h"
 #include "ezp.h"
 #include "flashcmd_api.h"
 #include "snorcmd_api.h"
@@ -385,12 +386,12 @@ int ezp_init(void)
 
 	if (ezp)
 		return -1;
-	if (libusb_init(NULL) < 0) {
+	if (ms_usb_init() < 0) {
 		printf("Could not initialize libusb!\n");
 		return -1;
 	}
 	for (which = 0; which < sizeof(ezp_pids) / sizeof(ezp_pids[0]) && !ezp; which++)
-		ezp = libusb_open_device_with_vid_pid(NULL, EZP_VID, ezp_pids[which]);
+		ezp = ms_usb_open(EZP_VID, ezp_pids[which]);
 	if (!ezp) {
 		printf("Couldn't open an EZP programmer (%04x:%04x, %04x, %04x).\n", EZP_VID, ezp_pids[0], ezp_pids[1], ezp_pids[2]);
 		libusb_exit(NULL);

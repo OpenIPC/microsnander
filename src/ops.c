@@ -1,0 +1,257 @@
+/*
+ * ops.c — the operations of the web mode and the Android app, on the one
+ * programmer that is connected (chosen as without -W). Each opens the
+ * programmer and the chip, works, and closes them again.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ */
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#include "ops.h"
+#include "flashcmd_api.h"
+#include "programmer.h"
+
+#define OPS_PART	(64 * 1024)		/* read, write and verify in parts: the progress */
+
+static struct flash_cmd prog;
+static long long flen;
+
+static void say(char *msg, size_t n, const char *fmt, ...)
+{
+	va_list ap;
+
+	if (!msg || !n)
+		return;
+	va_start(ap, fmt);
+	vsnprintf(msg, n, fmt, ap);
+	va_end(ap);
+}
+
+static void progress(ms_progress cb, void *ctx, const char *phase, unsigned long long done, unsigned long long total)
+{
+	if (cb)
+		cb(ctx, phase, done, total);
+}
+
+static int chip_open(struct ms_chip *c, char *msg, size_t n)
+{
+	int ret = programmer_init(false);
+
+	memset(c, 0, sizeof(*c));
+	if (ret == -2) {
+		say(msg, n, "Several programmers, or two of one kind, are connected: connect one.");
+		return -1;
+	}
+	if (ret < 0) {
+		say(msg, n, "No programmer found.");
+		return -1;
+	}
+	memset(&prog, 0, sizeof(prog));
+	flash_chip_name = NULL;
+	flen = flash_cmd_init(&prog);
+	snprintf(c->programmer, sizeof(c->programmer), "%s", programmer->name);
+	if (flen <= 0) {
+		say(msg, n, "No chip found.");
+		programmer_shutdown();
+		return -1;
+	}
+	snprintf(c->chip, sizeof(c->chip), "%s", flash_chip_name ? flash_chip_name : "");
+	c->size = flen;
+	return 0;
+}
+
+static void chip_close(void)
+{
+	programmer_shutdown();
+}
+
+/* the status registers: SPI NOR through an SPI bridge only */
+static int read_registers(struct ms_chip *c)
+{
+	c->sr_valid = prog.flash_unprotect && programmer->send && !snor_read_status(c->sr);
+	return c->sr_valid ? 0 : -1;
+}
+
+void ms_dump_name(char *name, size_t n, const char *chip, int range, unsigned long long a, unsigned long long l)
+{
+	char stamp[16], up[64];
+	time_t now = time(NULL);
+	struct tm tm;
+	size_t i;
+
+	localtime_r(&now, &tm);
+	strftime(stamp, sizeof(stamp), "%Y%m%d%H%M", &tm);
+	for (i = 0; chip[i] && i < sizeof(up) - 1; i++) {
+		char ch = chip[i];
+
+		up[i] = (ch >= 'a' && ch <= 'z') ? ch - 32 : (ch == '/' || ch == ' ' ? '_' : ch);
+	}
+	up[i] = 0;
+	if (range)
+		snprintf(name, n, "flash-%s-%s-0x%llx-0x%llx.bin", stamp, up, a, l);
+	else
+		snprintf(name, n, "flash-%s-%s.bin", stamp, up);
+}
+
+int ms_detect(struct ms_chip *c, char *msg, size_t n)
+{
+	if (chip_open(c, msg, n))
+		return -1;
+	read_registers(c);
+	say(msg, n, "Found %s with %s, %lld MB.", c->programmer, c->chip, flen >> 20);
+	chip_close();
+	return 0;
+}
+
+int ms_read(struct ms_chip *c, FILE *out, unsigned long long a, unsigned long long len,
+	    ms_progress cb, void *ctx, char *msg, size_t n)
+{
+	unsigned char *part;
+	unsigned long long l;
+	int ret = -1;
+
+	if (chip_open(c, msg, n))
+		return -1;
+	l = len ? len : (a < (unsigned long long)flen ? (unsigned long long)flen - a : 0);
+	if (a >= (unsigned long long)flen || l > (unsigned long long)flen - a) {
+		say(msg, n, "The range 0x%llx + 0x%llx is past the chip end (0x%llx).", a, l, flen);
+		goto out;
+	}
+	if (!(part = malloc(OPS_PART))) {
+		say(msg, n, "Out of memory.");
+		goto out;
+	}
+	for (unsigned long long done = 0; done < l; ) {
+		unsigned long k = l - done < OPS_PART ? l - done : OPS_PART;
+
+		progress(cb, ctx, "read", done, l);
+		if (prog.flash_read(part, a + done, k) != (int)k) {
+			say(msg, n, "Read failed at 0x%llx.", a + done);
+			goto free;
+		}
+		if (fwrite(part, 1, k, out) != k) {
+			say(msg, n, "Cannot write the dump file.");
+			goto free;
+		}
+		done += k;
+	}
+	progress(cb, ctx, "read", l, l);
+	say(msg, n, "Read 0x%llx bytes.", l);
+	ret = 0;
+free:
+	free(part);
+out:
+	chip_close();
+	return ret;
+}
+
+int ms_erase(struct ms_chip *c, ms_progress cb, void *ctx, char *msg, size_t n)
+{
+	int ret = -1;
+
+	if (chip_open(c, msg, n))
+		return -1;
+	progress(cb, ctx, "erase", 0, 0);
+	if (prog.flash_erase(0, flen))
+		say(msg, n, "Erase failed.");
+	else {
+		say(msg, n, "The whole chip is erased.");
+		ret = 0;
+	}
+	chip_close();
+	return ret;
+}
+
+int ms_write(struct ms_chip *c, const unsigned char *data, unsigned long l,
+	     ms_progress cb, void *ctx, char *msg, size_t n)
+{
+	unsigned char *part = NULL, *chunk = NULL;
+	int ret = -1;
+
+	if (chip_open(c, msg, n))
+		return -1;
+	if (!l || l > (unsigned long long)flen) {
+		if (l)
+			say(msg, n, "The file (0x%lx bytes) is larger than the chip (0x%llx).", l, flen);
+		else
+			say(msg, n, "The file is empty.");
+		goto out;
+	}
+	if (!(part = malloc(OPS_PART)) || !(chunk = malloc(OPS_PART))) {
+		say(msg, n, "Out of memory.");
+		goto out;
+	}
+	for (unsigned long done = 0; done < l; ) {
+		unsigned long k = l - done < OPS_PART ? l - done : OPS_PART;
+
+		progress(cb, ctx, "write", done, l);
+		memcpy(chunk, data + done, k);		/* the drivers take a writable buffer */
+		if (prog.flash_write(chunk, done, k) != (int)k) {
+			say(msg, n, "Write failed at 0x%lx.", done);
+			goto out;
+		}
+		done += k;
+	}
+	for (unsigned long done = 0; done < l; ) {
+		unsigned long k = l - done < OPS_PART ? l - done : OPS_PART;
+
+		progress(cb, ctx, "verify", done, l);
+		if (prog.flash_read(part, done, k) != (int)k) {
+			say(msg, n, "Read back failed at 0x%lx.", done);
+			goto out;
+		}
+		for (unsigned long i = 0; i < k; i++)
+			if (part[i] != data[done + i]) {
+				say(msg, n, "Verify failed: 0x%02x at 0x%lx, the file has 0x%02x.", part[i], done + i, data[done + i]);
+				goto out;
+			}
+		done += k;
+	}
+	progress(cb, ctx, "verify", l, l);
+	say(msg, n, "Wrote and verified 0x%lx bytes from address 0.", l);
+	ret = 0;
+out:
+	free(part);
+	free(chunk);
+	chip_close();
+	return ret;
+}
+
+int ms_registers(struct ms_chip *c, char *msg, size_t n)
+{
+	int ret;
+
+	if (chip_open(c, msg, n))
+		return -1;
+	ret = read_registers(c);
+	if (ret)
+		say(msg, n, "The status registers are readable for SPI NOR through the CH341A or the CH347 only.");
+	else
+		say(msg, n, "Status registers read.");
+	chip_close();
+	return ret;
+}
+
+int ms_unprotect(struct ms_chip *c, char *msg, size_t n)
+{
+	int ret = -1;
+
+	if (chip_open(c, msg, n))
+		return -1;
+	if (!prog.flash_unprotect)
+		say(msg, n, "Clearing the protection is for SPI NOR through the CH341A or the CH347 only.");
+	else if (prog.flash_unprotect())
+		say(msg, n, "Clearing the protection failed.");
+	else {
+		read_registers(c);
+		say(msg, n, "The protection is cleared.");
+		ret = 0;
+	}
+	chip_close();
+	return ret;
+}

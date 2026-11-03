@@ -15,6 +15,7 @@
 #include "ch341a_spi.h"
 #include "ch347_spi.h"
 #include "ezp.h"
+#include "usb.h"
 
 
 static const struct programmer programmers[] = {
@@ -50,6 +51,14 @@ static void programmers_present(unsigned int count[NPROG])
 	ssize_t n;
 
 	memset(count, 0, NPROG * sizeof(count[0]));
+
+	if (ms_usb_fd >= 0) {			/* Android: the one device the app opened */
+		for (unsigned i = 0; i < NPROG; i++)
+			for (unsigned p = 0; p < sizeof(programmers[i].pid) / sizeof(programmers[i].pid[0]); p++)
+				if (programmers[i].pid[p] && ms_usb_vid == programmers[i].vid && ms_usb_pid == programmers[i].pid[p])
+					count[i]++;
+		return;
+	}
 
 	if (libusb_init(NULL) < 0)
 		return;

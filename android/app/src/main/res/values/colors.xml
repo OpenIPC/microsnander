@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- the colours of the web mode page -->
+<resources>
+    <color name="bg">#1a1512</color>
+    <color name="panel">#2c2119</color>
+    <color name="panel2">#3d2d22</color>
+    <color name="brass">#c9a24d</color>
+    <color name="brass2">#8c6a2a</color>
+    <color name="amber">#ffb347</color>
+    <color name="ink">#e8d9b8</color>
+    <color name="ink_dark">#2a1c10</color>
+    <color name="dim">#8a7455</color>
+    <color name="red">#c8452c</color>
+</resources>

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.MicroSNANDer" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/bg</item>
+        <item name="android:colorPrimary">@color/panel</item>
+        <item name="android:colorPrimaryDark">@color/bg</item>
+        <item name="android:colorAccent">@color/amber</item>
+        <item name="android:textColor">@color/ink</item>
+    </style>
+    <style name="Brass" parent="android:Widget.Material.Button">
+        <item name="android:background">@drawable/brass_button</item>
+        <item name="android:textColor">@color/ink_dark</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:letterSpacing">0.15</item>
+        <item name="android:fontFamily">serif</item>
+        <item name="android:minHeight">56dp</item>
+        <item name="android:layout_margin">6dp</item>
+        <item name="android:focusable">true</item>
+    </style>
+    <style name="Plate">
+        <item name="android:background">@drawable/plate</item>
+        <item name="android:textColor">@color/ink_dark</item>
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:letterSpacing">0.2</item>
+        <item name="android:paddingLeft">10dp</item>
+        <item name="android:paddingRight">10dp</item>
+        <item name="android:paddingTop">3dp</item>
+        <item name="android:paddingBottom">3dp</item>
+    </style>
+</resources>
