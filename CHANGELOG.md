@@ -4,6 +4,12 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.16.4 — 2026-11-03
+
+- Release: the signer check also reads the `V2 Signer: certificate SHA-256 digest` line
+  of `apksigner` from build-tools 37, the one on the CI runner. Its output in the 1.16.3
+  run showed the project's certificate, under that name; 1.16.3 was not published.
+
 ## 1.16.3 — 2026-11-03
 
 - Release: the signer check takes the digest from any `Signer ... certificate SHA-256
