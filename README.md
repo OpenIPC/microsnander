@@ -155,7 +155,11 @@ microsnander [options]
                 (the first; -a for another) and put its data back
  -v             verify after write on chip
  -P <name>      programmer: ch341a, ch347, ezp, auto (default: the one connected)
- -S <speed>     SPI clock of the CH347: 60M, 30M (default), 15M, 7.5M, 3.75M, 1.875M
+ -S <speed>     SPI clock of the CH347: 60M, 30M (default), 15M, 7.5M, 3.75M, 1.875M;
+                with -m sigmastar the I2C clock: 20K, 100K (default), 400K, 750K
+ -m sigmastar   the flash of a SigmaStar board through the ISP of its SoC: the SoC's UART
+                (TX to SDA, RX to SCL, GND) on the I2C of the CH341A or the CH347
+ -q             list the addresses that answer on the I2C of the programmer
  -W [addr:]port web mode: a page with Detect, Read, Erase, Write, Registers
  -K <password>  web mode: ask for this password (any user name)
  -o <dir>       web mode: where Read saves the dumps (default: the current one)
