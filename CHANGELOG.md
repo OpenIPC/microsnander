@@ -13,10 +13,12 @@ from every push to `main`; this file is the change history.
   instead of a wrong byte count.
 - SPI NAND: a page whose data is all `0xFF` is not programmed: it would change
   nothing on the chip, and an erased page stays erased (its ECC bytes too).
-  Writing images with empty areas is faster.
+  Writing images with empty areas is faster. With `-k` such a page is still read
+  first, so a BAD page under it is skipped as on a read.
 - SPI NAND: waiting for the chip to finish a page read, program or block erase
   stops after 3 s with an error; a chip that stays busy (or is not connected) hung
-  the program before.
+  the program before. A write that stops reports the bytes actually written (the
+  count was always the full length), and a stopped erase does not print 100%.
 - Tests: `tests/ch341sim.c` runs `ch341a_spi.c` against a fake libusb that plays a
   CH341A at its real stream speed; nandsim checks the `0xFF` pages and a chip that
   stays busy.

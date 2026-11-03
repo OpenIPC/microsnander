@@ -3129,7 +3129,10 @@ static SPI_NAND_FLASH_RTN_T spi_nand_erase_internal( u32 addr, u32 len )
 				fflush(stdout);
 			}
 		}
-		printf("Erase 100%% [%u] of [%u] bytes      \n", erase_len, len);
+		if( rtn_status == SPI_NAND_FLASH_RTN_TIMEOUT )
+			printf("Erase stopped at [%u] of [%u] bytes      \n", erase_len, len);
+		else
+			printf("Erase 100%% [%u] of [%u] bytes      \n", erase_len, len);
 	}
 	else
 	{
@@ -3257,8 +3260,15 @@ static SPI_NAND_FLASH_RTN_T spi_nand_write_page( u32 page_number, u32 data_offse
 		/* Programming can only clear bits, so data and OOB of all 0xFF change
 		   nothing on the chip: skip the page read and program. On an erased
 		   page this also leaves the page erased, ECC bytes included. */
-		if( all_ff(ptr_data, data_len) && (oob_len == 0 || all_ff(ptr_oob, oob_len)) )
+		if( all_ff(ptr_data, data_len) && (oob_len == 0 || all_ff(ptr_oob, oob_len)) ) {
+			/* with -k a BAD page must still be found, as a -k read skips it */
+			if( Skip_BAD_page ) {
+				rtn_status = spi_nand_read_page(page_number, speed_mode);
+				if( rtn_status == SPI_NAND_FLASH_RTN_TIMEOUT || rtn_status == SPI_NAND_FLASH_RTN_DETECTED_BAD_BLOCK )
+					return rtn_status;
+			}
 			return SPI_NAND_FLASH_RTN_NO_ERROR;
+		}
 
 		/* write to write_addr index in the page */
 		write_addr = 0;
@@ -4287,9 +4297,8 @@ SPI_NAND_FLASH_RTN_T SPI_NAND_Flash_Write_Nbyte( u32 dst_addr, u32 len, u32 *ptr
 {
 	SPI_NAND_FLASH_RTN_T rtn_status = SPI_NAND_FLASH_RTN_NO_ERROR;
 
+	/* *ptr_rtn_len is what spi_nand_write_internal() wrote */
 	rtn_status = spi_nand_write_internal(dst_addr, len, ptr_rtn_len, ptr_buf, speed_node);
-
-	*ptr_rtn_len = len ;
 
 	return (rtn_status);
 }

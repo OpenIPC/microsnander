@@ -31,6 +31,7 @@ static unsigned int ncmd, nread;
 static long ecc_bad[MAXBAD], prog_fail[MAXBAD];
 static unsigned int nprog;		/* program executes (0x10) */
 static int stuck_busy;			/* the status register always shows OIP */
+static int busy_after = -1;		/* stay busy from this program execute on */
 
 static int in(const long *set, long v) { for (int i = 0; i < MAXBAD; i++) if (set[i] == v) return 1; return 0; }
 static unsigned long row(void) { return ((cmd[1] << 16) | (cmd[2] << 8) | cmd[3]) % PAGES; }
@@ -92,6 +93,7 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Chip_Select_High(void)
 		feat[0xc0] = (feat[0xc0] & ~0x30) | (in(ecc_bad, row()) ? 0x20 : 0);
 		break;
 	case 0x10:				/* program execute */
+		if (busy_after >= 0 && (int)nprog >= busy_after) stuck_busy = 1;
 		nprog++;
 		feat[0xc0] &= ~0x08;
 		if (in(prog_fail, row())) { feat[0xc0] |= 0x08; break; }
@@ -248,6 +250,17 @@ int main(void)
 	check(snand_write(buf, 80L * PAGE + 100, 500) == 500 && nprog == 0, "a partial write of 0xFF bytes programs nothing");
 	check(snand_read(got, 70L * PAGE, 4 * PAGE) == 4 * PAGE && got[2 * PAGE + 7] == 0x12, "  the pages read back");
 
+	/* with -k a 0xFF page over an ECC-failed page is skipped like any other */
+	chip(0xef, 0xaa, 0x21);
+	snand_init();
+	Skip_BAD_page = 1;
+	ecc_bad[0] = 91;
+	fill(buf, 3, 10);
+	memset(buf + PAGE, 0xff, PAGE);
+	check(snand_write(buf, 90L * PAGE, 3 * PAGE) == 3 * PAGE && !memcmp(page(93), buf + 2 * PAGE, PAGE),
+	      "-k write: a 0xFF page over an ECC-failed page goes to the next page");
+	check(snand_read(got, 90L * PAGE, 3 * PAGE) == 3 * PAGE && !memcmp(got, buf, 3 * PAGE), "  and reads back in place");
+
 	/* a chip that stays busy (OIP) makes the operation fail instead of hanging */
 	chip(0xef, 0xaa, 0x21);
 	snand_init();
@@ -255,6 +268,19 @@ int main(void)
 	check(snand_read(got, 0, PAGE) < 0, "read fails when the chip stays busy");
 	fill(buf, 1, 9);
 	check(snand_write(buf, 0, PAGE) < 0, "write fails when the chip stays busy");
+	{
+		u32 written = 12345;
+		stuck_busy = 0;
+		memset(page(0), 0xff, 2 * (PAGE + OOB));
+		/* the first page goes through, then the chip hangs on the second */
+		nprog = 0;
+		busy_after = 1;
+		fill(buf, 2, 11);
+		check(SPI_NAND_Flash_Write_Nbyte(0, 2 * PAGE, &written, buf, SPI_NAND_FLASH_WRITE_SPEED_MODE_SINGLE) == SPI_NAND_FLASH_RTN_TIMEOUT &&
+		      written == PAGE, "  a write that times out reports only the bytes written");
+		busy_after = -1;
+		stuck_busy = 1;
+	}
 	check(snand_erase(0, 128 * 1024) != 0, "erase fails when the chip stays busy");
 	stuck_busy = 0;
 	check(snand_read(got, 0, PAGE) == PAGE, "  works again when the chip is ready");
