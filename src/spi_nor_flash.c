@@ -80,6 +80,10 @@
 #define SR_EPE				0x20	/* Erase/Program error */
 #define SR_SRWD				0x80	/* SR write protect */
 
+/* what unprotect clears and checks in SR1: BP0-2 and SRP0. Bit 5 is TB or
+   BP3 on some chips but an erase/program error flag on others, and TB
+   alone protects nothing: it is written 0 with the rest, never checked */
+#define SR1_PROTECT			(SR_BP0 | SR_BP1 | SR_BP2 | SR_SRWD)
 #define SR2_SRP1			1
 #define SR2_QE				2
 #define SR2_R				4
@@ -173,10 +177,18 @@ static int snor_unprotect_write(u8 opcode, u8 *val)
  * Set all sectors (global) unprotected if they are protected.
  * Returns negative if error occurred.
  */
-int snor_unprotect(void)
+char snor_unprotect_why[200];
+
+/* all: the -u of the user, every protection bit with SRP0 and SRP1; else
+   (before an erase or a program) only what protects the data: BP, CMP,
+   WPS; a register lock (SRP) does not stop those */
+static int unprotect(int all)
 {
 	u8 sr = 0;
+	const u8 sr1_mask = all ? SR1_PROTECT : (SR_BP0 | SR_BP1 | SR_BP2);
+	const u8 sr2_mask = all ? (SR2_SRP1 | SR2_CMP) : SR2_CMP;
 
+	snor_unprotect_why[0] = 0;
 	if (snor_is_sst26()) {
 		/* the block protection register, not the status register */
 		int err = 0;
@@ -199,10 +211,23 @@ int snor_unprotect(void)
 		return -1;
 	}
 
-	if ((sr & (SR_BP0 | SR_BP1 | SR_BP2)) != 0 || (snor_is_sst25_aai() && (sr & 0xbc))) {
-		sr = 0;
-		if (snor_unprotect_write(OPCODE_WRSR, &sr))
+	/* BP0-2 and SRP0 (TB with them, it means nothing alone). Bit 6 is kept:
+	   SEC on Winbond-type chips (nothing without BP), QE on Macronix-type ones */
+	if (snor_is_sst25_aai() ? (sr & 0xbc) : (sr & sr1_mask)) {
+		u8 was = sr;
+
+		sr = snor_is_sst25_aai() ? 0 : sr & 0x40;
+		if (snor_unprotect_write(OPCODE_WRSR, &sr) || snor_read_sr(OPCODE_RDSR, &sr) < 0)
 			return -1;
+		if (sr & (snor_is_sst25_aai() ? 0xbc : sr1_mask)) {
+			snprintf(snor_unprotect_why, sizeof(snor_unprotect_why),
+				 "status register 1 stays 0x%02x (was 0x%02x): %s", sr, was,
+				 sr & SR_SRWD ? "SRP0 is set, so the WP# pin of the chip is probably low and locks the register "
+						"(in a socket it should be pulled up; on a board, the WP line)" :
+						"the chip does not take the write");
+			printf("Unprotect: %s.\n", snor_unprotect_why);
+			return -2;
+		}
 	}
 
 	/* SST25-type chips have one status register (BP3 and BPL in it) */
@@ -219,10 +244,20 @@ int snor_unprotect(void)
 
 	/* only the protection bits: QE (quad enable) protects nothing, and a
 	   chip set up for quad reads, or one with QE fixed at 1, needs it kept */
-	if (sr != 0xff && (sr & (SR2_SRP1 | SR2_CMP))) {
-		sr &= ~(SR2_SRP1 | SR2_CMP);
-		if (snor_unprotect_write(OPCODE_WRSR2, &sr))
+	if (sr != 0xff && (sr & sr2_mask)) {
+		u8 was = sr;
+
+		sr &= ~sr2_mask;
+		if (snor_unprotect_write(OPCODE_WRSR2, &sr) || snor_read_sr(OPCODE_RDSR2, &sr) < 0)
 			return -1;
+		if (sr & sr2_mask) {
+			snprintf(snor_unprotect_why, sizeof(snor_unprotect_why),
+				 "status register 2 stays 0x%02x (was 0x%02x): %s", sr, was,
+				 sr & SR2_SRP1 ? "SRP1 locks the registers until the chip is powered off and on" :
+						 "the chip does not take the write");
+			printf("Unprotect: %s.\n", snor_unprotect_why);
+			return -2;
+		}
 	}
 
 	if (snor_read_sr(OPCODE_RDSR3, &sr) < 0) {
@@ -232,12 +267,20 @@ int snor_unprotect(void)
 
 	if (sr != 0xff && (sr & SR3_WPS)) {
 		sr ^= SR3_WPS;
-		if (snor_unprotect_write(OPCODE_WRSR3, &sr))
+		if (snor_unprotect_write(OPCODE_WRSR3, &sr) || snor_read_sr(OPCODE_RDSR3, &sr) < 0)
 			return -1;
+		if (sr & SR3_WPS) {
+			snprintf(snor_unprotect_why, sizeof(snor_unprotect_why),
+				 "status register 3 stays 0x%02x: the chip does not take the write", sr);
+			printf("Unprotect: %s.\n", snor_unprotect_why);
+			return -2;
+		}
 	}
 
 	return 0;
 }
+
+int snor_unprotect(void) { return unprotect(1); }
 
 /*
  * Read the status register until the write in progress bit is clear: the
@@ -404,7 +447,7 @@ static int full_erase_chip(void)
 
 	/* Unprotect first: clearing the protection ends with the write enable
 	   latch cleared, so the write enable goes right before the erase. */
-	if (snor_unprotect() < 0) {
+	if (unprotect(0) < 0) {
 		timer_end();
 		return -1;
 	}
@@ -894,7 +937,7 @@ int snor_erase(unsigned long offs, unsigned long len)
 
 	timer_start();
 
-	if (snor_unprotect() < 0) {
+	if (unprotect(0) < 0) {
 		timer_end();
 		return -1;
 	}
@@ -1054,7 +1097,7 @@ static int snor_write_aai(unsigned char *buf, unsigned long to, unsigned long le
 	unsigned long plen = len;
 	int aai = 0;
 
-	if (snor_unprotect() < 0)
+	if (unprotect(0) < 0)
 		goto fail;
 
 	if ((to & 1) && len) {
@@ -1136,7 +1179,7 @@ int snor_write(unsigned char *buf, unsigned long to, unsigned long len)
 
 	/* the protection is cleared once, before the first page: it stays
 	   cleared, and checking it again for every page is three status reads */
-	if (snor_unprotect() < 0) {
+	if (unprotect(0) < 0) {
 		timer_end();
 		return -1;
 	}

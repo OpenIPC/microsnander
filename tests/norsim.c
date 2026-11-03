@@ -46,6 +46,7 @@ static int spi_fail_at = -1;		/* the Nth AAI command fails on the wire */
 static int naai;
 static unsigned char sr2;		/* status register 2: CMP 0x40, QE 0x02, SRP1 0x01 */
 static int sr2_writes, sr2_reads;
+static int wp_low;			/* the WP# pin low: with SRP0 set, SR1 does not take a write */
 static int busy_cmds;			/* commands other than RDSR sent while busy */
 
 static unsigned long addr(void) { return ((unsigned long)cmd[1] << 16) | (cmd[2] << 8) | cmd[3]; }
@@ -94,7 +95,7 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Chip_Select_High(void)
 	switch (cmd[0]) {
 	case OPCODE_WREN: if (!busy) wel = 1; break;		/* ignored while the chip is busy */
 	case OPCODE_WRDI: wel = 0; aai = 0; break;
-	case OPCODE_WRSR: if (wel && ncmd > 1) { sr = (cmd[1] & 0xbc) | (kind == QE_SR1 ? 0x40 : 0); busy = 3; } wel = 0; break;
+	case OPCODE_WRSR: if (wel && ncmd > 1 && !(wp_low && (sr & 0x80))) { sr = (cmd[1] & 0xbc) | (kind == QE_SR1 ? 0x40 : 0); busy = 3; } wel = 0; break;
 	case OPCODE_WRSR2:
 		if (kind != NO_SR23 && wel && ncmd > 1) {
 			sr2 = (cmd[1] & 0x43) | (kind == QE_FIXED ? 0x02 : 0);	/* QE stays 1 on a QE-fixed part */
@@ -277,6 +278,32 @@ int main(void)
 		check(snor_unprotect() == 0 && sr2 == 0x02, "W25Q32BV: unprotect clears CMP and keeps QE");
 		memset(mem, 0, 65536);
 		check(snor_erase(0, 65536) == 0 && mem[0] == 0xff, "  and the chip erases");
+	}
+
+	/* SRP0 alone, no BP: unprotect clears it too (it used to be left, and
+	   "cleared" said); with WP# low the register stays, and that is told */
+	{
+		chip(find("W25Q32BV"), ORDINARY);
+		snor_init();
+		sr = 0x80; sr2 = 0x02;
+		check(snor_unprotect() == 0 && sr == 0 && sr2 == 0x02, "W25Q32BV: unprotect clears SRP0 alone too, keeps QE");
+		sr = 0x9c; wp_low = 1;
+		check(snor_unprotect() != 0 && sr == 0x9c, "  with SRP0 and WP# low the register stays: unprotect fails, not 'cleared'");
+		wp_low = 0;
+		sr = 0x20;
+		check(snor_unprotect() == 0, "  bit 5 alone (TB, or an error flag on some chips) does not fail the unprotect");
+	}
+
+	/* SRP0 with WP# low and no BP: the data is free, an erase is not
+	   stopped by the register lock (only -u wants SRP0 cleared) */
+	{
+		chip(find("W25Q32BV"), ORDINARY);
+		snor_init();
+		sr = 0x80; sr2 = 0x02; wp_low = 1;
+		memset(mem, 0, 65536);
+		check(snor_erase(0, 65536) == 0 && mem[0] == 0xff && sr == 0x80, "  SRP0 with WP# low, no BP: an erase still goes, SRP0 left");
+		check(snor_unprotect() == -2 && strstr(snor_unprotect_why, "WP#"), "  and -u says the register stays and why");
+		wp_low = 0; sr = 0;
 	}
 
 	/* unprotect of a chip without status registers 2 and 3 */

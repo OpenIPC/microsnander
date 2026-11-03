@@ -314,8 +314,14 @@ int ms_unprotect(struct ms_chip *c, char *msg, size_t n)
 		return -1;
 	if (!prog.flash_unprotect)
 		say(msg, n, "Clearing the protection is for SPI NOR through the CH341A or the CH347 only.");
-	else if (prog.flash_unprotect())
-		say(msg, n, "Clearing the protection failed.");
+	else if ((ret = prog.flash_unprotect())) {
+		read_registers(c);
+		if (ret == -2 && prog.flash_unprotect == snor_unprotect && snor_unprotect_why[0])
+			say(msg, n, "The protection stays: %s.", snor_unprotect_why);
+		else
+			say(msg, n, "Clearing the protection failed: the programmer or the chip did not answer.");
+		ret = -1;
+	}
 	else {
 		read_registers(c);
 		say(msg, n, "The protection is cleared.");
