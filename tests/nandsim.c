@@ -36,6 +36,12 @@ static unsigned int nprog;		/* program executes (0x10) */
 static int col_hi_read = -1, col_hi_load = -1;	/* high column byte of the last read from cache / program load */
 static int stuck_busy;			/* the status register always shows OIP */
 static int busy_after = -1;		/* stay busy from this program execute on */
+static long loaded = -1;		/* the page last read into the chip's cache */
+static long fail_cache = -1;		/* the USB transfer fails when this page is read from the cache */
+static int fail_feature = -1;		/* the USB transfer of a read of this feature register fails */
+static int fail_after_program;		/* status reads fail from the next program execute on */
+static int fail_set_feature;		/* CS high fails after a write of a feature register */
+static int fail_load;			/* the USB transfer of the page data of a program load fails */
 
 static int in(const long *set, long v) { for (int i = 0; i < MAXBAD; i++) if (set[i] == v) return 1; return 0; }
 static unsigned long row(void) { return ((cmd[1] << 16) | (cmd[2] << 8) | cmd[3]) % PAGES; }
@@ -47,6 +53,8 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Chip_Select_Low(void) { ncmd = nread = 0; re
 SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Write_NByte(u8 *d, u32 len, SPI_CONTROLLER_SPEED_T speed)
 {
 	(void)speed;
+	if (fail_load && len > 4 && (cmd[0] == 0x02 || cmd[0] == 0x32 || cmd[0] == 0x84 || cmd[0] == 0x34))
+		return SPI_CONTROLLER_RTN_WRITE_DATAPFIFO_ERROR;
 	for (u32 i = 0; i < len; i++) {
 		if (ncmd < 3 || (cmd[0] != 0x02 && cmd[0] != 0x32 && cmd[0] != 0x84 && cmd[0] != 0x34)) {
 			if (ncmd < sizeof(cmd)) cmd[ncmd] = d[i];
@@ -66,6 +74,12 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Write_One_Byte(u8 data) { return SPI_CONTROL
 SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Read_NByte(u8 *d, u32 len, SPI_CONTROLLER_SPEED_T speed)
 {
 	(void)speed;
+	/* a failed transfer brings nothing back: the buffer stays as it was */
+	if (fail_cache >= 0 && fail_cache == loaded &&
+	    (cmd[0] == 0x03 || cmd[0] == 0x0b || cmd[0] == 0x3b || cmd[0] == 0x6b))
+		return SPI_CONTROLLER_RTN_READ_DATAPFIFO_ERROR;
+	if (fail_feature >= 0 && cmd[0] == 0x0f && cmd[1] == fail_feature)
+		return SPI_CONTROLLER_RTN_READ_DATAPFIFO_ERROR;
 	for (u32 i = 0; i < len; i++, nread++) {
 		switch (cmd[0]) {
 		case 0x9f: {		/* without an address byte a dummy byte comes first, as on Winbond */
@@ -88,6 +102,10 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Read_NByte(u8 *d, u32 len, SPI_CONTROLLER_SP
 SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Chip_Select_High(void)
 {
 	unsigned char *p;
+	if (fail_set_feature && cmd[0] == 0x1f) {
+		ncmd = nread = 0;
+		return SPI_CONTROLLER_RTN_WRITE_DATAPFIFO_ERROR;
+	}
 	switch (cmd[0]) {
 	case 0x03: case 0x0b: case 0x3b: case 0x6b: col_hi_read = cmd[1]; break;
 	case 0x02: case 0x32: case 0x84: case 0x34: col_hi_load = cmd[1]; break;
@@ -96,10 +114,12 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Chip_Select_High(void)
 	case 0x04: feat[0xc0] &= ~0x02; break;
 	case 0x13:				/* page read: ECC result in status bits 5:4 */
 		memcpy(cache, mem + row() * (PAGE + OOB), sizeof(cache));
+		loaded = row();
 		feat[0xc0] = (feat[0xc0] & ~0x30) | (in(ecc_bad, row()) ? 0x20 : 0);
 		break;
 	case 0x10:				/* program execute */
 		if (busy_after >= 0 && (int)nprog >= busy_after) stuck_busy = 1;
+		if (fail_after_program) fail_feature = 0xc0;
 		nprog++;
 		feat[0xc0] &= ~0x08;
 		if (in(prog_fail, row())) { feat[0xc0] |= 0x08; break; }
@@ -400,6 +420,82 @@ int main(void)
 	check(!(feat[0xc0] & 0x02), "  the write enable latch is cleared after the timeouts");
 	stuck_busy = 0;
 	check(snand_read(got, 0, PAGE) == PAGE, "  works again when the chip is ready");
+
+	/* a USB transfer that fails fails the operation: what it brought is not the chip's */
+	chip(0xef, 0xaa, 0x21);
+	snand_init();
+	Skip_BAD_page = 0;
+	snand_erase(10L * 128 * 1024, 128 * 1024);
+	fill(buf, 3, 21);
+	check(snand_write(buf, 640L * PAGE, 3 * PAGE) == 3 * PAGE, "write 3 pages for the USB failures");
+	snand_read(got, 0, PAGE);
+	fail_cache = 642;
+	check(snand_read(got, 640L * PAGE, 3 * PAGE) < 0, "read fails when the USB transfer of a page fails");
+	fail_cache = -1;
+	check(snand_read(got, 640L * PAGE, 3 * PAGE) == 3 * PAGE && !memcmp(got, buf, 3 * PAGE),
+	      "  the failed page is not kept: the next read brings the data");
+	snand_read(got, 0, PAGE);
+	fail_feature = 0xc0;
+	check(snand_read(got, 640L * PAGE, PAGE) < 0, "read fails when the USB transfer of the status fails");
+	fail_feature = -1;
+	Skip_BAD_page = 1;
+	snand_read(got, 0, PAGE);
+	fail_cache = 641;
+	check(snand_read(got, 640L * PAGE, 3 * PAGE) < 0, "-k read fails on a USB failure, it is not a BAD page");
+	fail_cache = -1;
+	check(skipped_page(641) == 0, "  and the page is not recorded as skipped");
+	Skip_BAD_page = 0;
+	/* a write reads the page first: without its data the rest of the page would be lost */
+	fill(buf, 1, 22);
+	snand_read(got, 0, PAGE);
+	fail_cache = 660;
+	memset(page(660), 0xff, PAGE + OOB);
+	check(snand_write(buf, 660L * PAGE, PAGE) < 0, "write fails when the read before it fails on USB");
+	fail_cache = -1;
+	{
+		int blank = 1;
+		for (int i = 0; i < PAGE; i++) if (page(660)[i] != 0xff) blank = 0;
+		check(blank, "  and nothing is programmed");
+	}
+	fail_feature = 0xc0;
+	check(snand_write(buf, 661L * PAGE, PAGE) < 0, "write fails when the USB transfer of the status fails");
+	check(snand_erase(11L * 128 * 1024, 128 * 1024) != 0, "erase fails when the USB transfer of the status fails");
+	fail_feature = -1;
+
+	/* a page whose program result did not come back: what the chip has is read, not the buffer */
+	fill(buf, 1, 23);
+	memset(page(662), 0xff, PAGE + OOB);
+	fail_after_program = 1;
+	check(snand_write(buf, 662L * PAGE, PAGE) < 0, "write fails when the status after the program fails on USB");
+	fail_after_program = 0;
+	fail_feature = -1;
+	memset(page(662), 0x5a, PAGE + OOB);
+	check(snand_read(got, 662L * PAGE, PAGE) == PAGE && got[0] == 0x5a && got[PAGE - 1] == 0x5a,
+	      "  the next read brings the chip's data, not the buffer's");
+
+	/* page data that did not reach the chip is not programmed */
+	memset(page(663), 0xff, PAGE + OOB);
+	fill(buf, 1, 24);
+	nprog = 0;
+	fail_load = 1;
+	check(snand_write(buf, 663L * PAGE, PAGE) < 0, "write fails when the USB transfer of the page data fails");
+	fail_load = 0;
+	check(nprog == 0, "  and the chip is not told to program");
+	check(!(feat[0xc0] & 0x02), "  and the write enable latch is cleared");
+	memset(page(663), 0x5a, PAGE + OOB);
+	check(snand_read(got, 663L * PAGE, PAGE) == PAGE && got[0] == 0x5a, "  the next read brings the chip's data");
+
+	/* the ECC setup of the detection: a chip it could not set is not reported as ready */
+	fail_feature = 0xb0;
+	check(snand_init() <= 0, "detection fails when the USB transfer of the ECC setup fails");
+	fail_feature = 0x90;
+	chip(0xcd, 0x71, 0x71);
+	check(snand_init() <= 0, "  also through the ECC register (F35SQA001G)");
+	fail_feature = -1;
+	check(snand_init() > 0, "  works again when the transfers do");
+	fail_set_feature = 1;
+	check(snand_init() <= 0, "detection fails when CS high of the ECC write fails");
+	fail_set_feature = 0;
 
 	if (!fail) printf("all nandsim checks passed\n");
 	return fail;
