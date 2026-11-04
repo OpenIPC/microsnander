@@ -121,6 +121,7 @@ static void chip_close(void)
 static int read_registers(struct ms_chip *c)
 {
 	c->sr_valid = prog.flash_unprotect && programmer->send && !snor_read_status(c->sr);
+	c->sr_macronix = c->sr_valid && snor_sr1_macronix();
 	return c->sr_valid ? 0 : -1;
 }
 

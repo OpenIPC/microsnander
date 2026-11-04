@@ -146,6 +146,8 @@ static int snor_is_macronix(void)
 	return spi_chip_info->id == 0xc2;
 }
 
+int snor_sr1_macronix(void) { return snor_is_macronix(); }	/* see snorcmd_api.h */
+
 /*
  * Set write enable latch with Write Enable command.
  * Returns negative if error occurred.

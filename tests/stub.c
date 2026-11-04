@@ -44,3 +44,4 @@ long flash_cmd_init(struct flash_cmd *c) {
 /* MS_SR=1c0000: the status registers SR1 SR2 SR3 */
 int snor_read_status(unsigned char sr[3]) { unsigned long v = strtoul(*env("MS_SR") ? env("MS_SR") : "000200", NULL, 16); sr[0] = v >> 16; sr[1] = v >> 8; sr[2] = v; return 0; }
 int snor_block_locks(void) { return *env("MS_SST26") != 0; }
+int snor_sr1_macronix(void) { return 0; }
