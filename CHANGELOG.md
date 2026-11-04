@@ -9,6 +9,8 @@ from every push to `main`; this file is the change history.
 - Web mode and Android app: a Macronix SPI NOR shows its one status register with its own
   bit names (SRWD, QE, BP3, BP2, BP1, BP0, WEL, WIP). What the reads of status registers 2 and
   3 return on these chips is not shown as those registers any more.
+- `-i` prints one status register for Macronix chips, and `-t` reads their protection right:
+  BP3 counts, there is no TB and no CMP.
 
 ## 1.21.1 — 2026-11-04
 

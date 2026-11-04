@@ -957,6 +957,11 @@ struct chip_info *chip_prob(void)
 			if ((info->jedec_id == jedec) || ((info->jedec_id & 0xffff0000) == jedec_strip)) {
 				u8 sr,sr2,sr3=0;
 				snor_read_sr(OPCODE_RDSR, &sr);
+
+				if (info->id == 0xc2) {	/* Macronix: one status register */
+					printf("Detected SPI NOR Flash: %s, Flash Size: %ld MB, SR: [%02x]\n", info->name, (info->sector_size * info->n_sectors) >> 20, sr);
+					return info;
+				}
 				snor_read_sr(OPCODE_RDSR2, &sr2);
 				snor_read_sr(OPCODE_RDSR3, &sr3);
 

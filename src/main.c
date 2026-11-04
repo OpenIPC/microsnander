@@ -227,6 +227,7 @@ int main(int argc, char* argv[])
 
 		if (prog.kind == FLASH_NOR && programmer->send) {
 			t.sr_valid = !snor_read_status(t.sr);
+			t.sr_macronix = t.sr_valid && snor_sr1_macronix();
 			t.block_locks = snor_block_locks();
 		}
 		rc = selftest(&t);		/* 0 OK, 2 protected, 1 failed */
