@@ -18,8 +18,10 @@
 
 name: Build
 
+# Pushes to main only: a branch with a pull request would build twice.
 on:
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
