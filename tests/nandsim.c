@@ -36,6 +36,9 @@ static unsigned int nprog;		/* program executes (0x10) */
 static int col_hi_read = -1, col_hi_load = -1;	/* high column byte of the last read from cache / program load */
 static int stuck_busy;			/* the status register always shows OIP */
 static int busy_after = -1;		/* stay busy from this program execute on */
+static long loaded = -1;		/* the page last read into the chip's cache */
+static long fail_cache = -1;		/* the USB transfer fails when this page is read from the cache */
+static int fail_status;			/* the USB transfer of a status read fails */
 
 static int in(const long *set, long v) { for (int i = 0; i < MAXBAD; i++) if (set[i] == v) return 1; return 0; }
 static unsigned long row(void) { return ((cmd[1] << 16) | (cmd[2] << 8) | cmd[3]) % PAGES; }
@@ -66,6 +69,12 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Write_One_Byte(u8 data) { return SPI_CONTROL
 SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Read_NByte(u8 *d, u32 len, SPI_CONTROLLER_SPEED_T speed)
 {
 	(void)speed;
+	/* a failed transfer brings nothing back: the buffer stays as it was */
+	if (fail_cache >= 0 && fail_cache == loaded &&
+	    (cmd[0] == 0x03 || cmd[0] == 0x0b || cmd[0] == 0x3b || cmd[0] == 0x6b))
+		return SPI_CONTROLLER_RTN_READ_DATAPFIFO_ERROR;
+	if (fail_status && cmd[0] == 0x0f && cmd[1] == 0xc0)
+		return SPI_CONTROLLER_RTN_READ_DATAPFIFO_ERROR;
 	for (u32 i = 0; i < len; i++, nread++) {
 		switch (cmd[0]) {
 		case 0x9f: {		/* without an address byte a dummy byte comes first, as on Winbond */
@@ -96,6 +105,7 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Chip_Select_High(void)
 	case 0x04: feat[0xc0] &= ~0x02; break;
 	case 0x13:				/* page read: ECC result in status bits 5:4 */
 		memcpy(cache, mem + row() * (PAGE + OOB), sizeof(cache));
+		loaded = row();
 		feat[0xc0] = (feat[0xc0] & ~0x30) | (in(ecc_bad, row()) ? 0x20 : 0);
 		break;
 	case 0x10:				/* program execute */
@@ -400,6 +410,47 @@ int main(void)
 	check(!(feat[0xc0] & 0x02), "  the write enable latch is cleared after the timeouts");
 	stuck_busy = 0;
 	check(snand_read(got, 0, PAGE) == PAGE, "  works again when the chip is ready");
+
+	/* a USB transfer that fails fails the operation: what it brought is not the chip's */
+	chip(0xef, 0xaa, 0x21);
+	snand_init();
+	Skip_BAD_page = 0;
+	snand_erase(10L * 128 * 1024, 128 * 1024);
+	fill(buf, 3, 21);
+	check(snand_write(buf, 640L * PAGE, 3 * PAGE) == 3 * PAGE, "write 3 pages for the USB failures");
+	snand_read(got, 0, PAGE);
+	fail_cache = 642;
+	check(snand_read(got, 640L * PAGE, 3 * PAGE) < 0, "read fails when the USB transfer of a page fails");
+	fail_cache = -1;
+	check(snand_read(got, 640L * PAGE, 3 * PAGE) == 3 * PAGE && !memcmp(got, buf, 3 * PAGE),
+	      "  the failed page is not kept: the next read brings the data");
+	snand_read(got, 0, PAGE);
+	fail_status = 1;
+	check(snand_read(got, 640L * PAGE, PAGE) < 0, "read fails when the USB transfer of the status fails");
+	fail_status = 0;
+	Skip_BAD_page = 1;
+	snand_read(got, 0, PAGE);
+	fail_cache = 641;
+	check(snand_read(got, 640L * PAGE, 3 * PAGE) < 0, "-k read fails on a USB failure, it is not a BAD page");
+	fail_cache = -1;
+	check(skipped_page(641) == 0, "  and the page is not recorded as skipped");
+	Skip_BAD_page = 0;
+	/* a write reads the page first: without its data the rest of the page would be lost */
+	fill(buf, 1, 22);
+	snand_read(got, 0, PAGE);
+	fail_cache = 660;
+	memset(page(660), 0xff, PAGE + OOB);
+	check(snand_write(buf, 660L * PAGE, PAGE) < 0, "write fails when the read before it fails on USB");
+	fail_cache = -1;
+	{
+		int blank = 1;
+		for (int i = 0; i < PAGE; i++) if (page(660)[i] != 0xff) blank = 0;
+		check(blank, "  and nothing is programmed");
+	}
+	fail_status = 1;
+	check(snand_write(buf, 661L * PAGE, PAGE) < 0, "write fails when the USB transfer of the status fails");
+	check(snand_erase(11L * 128 * 1024, 128 * 1024) != 0, "erase fails when the USB transfer of the status fails");
+	fail_status = 0;
 
 	if (!fail) printf("all nandsim checks passed\n");
 	return fail;

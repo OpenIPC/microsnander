@@ -4,6 +4,13 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.20.2 — 2026-11-04
+
+- SPI NAND: a USB transfer that fails now fails the operation. The result of a read from the
+  cache and of a status read was not looked at: a read ended with `Status: OK` and wrong data,
+  and a write programmed a page over data it had not read. The read, write or erase stops with
+  a message, and the failed page is not kept.
+
 ## 1.20.1 — 2026-11-04
 
 - Faster SPI NAND reads: the ECC check of a page takes the status its ready poll has already

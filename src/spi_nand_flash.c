@@ -2743,10 +2743,12 @@ static SPI_NAND_FLASH_RTN_T spi_nand_protocol_get_feature( u8 addr, u8 *ptr_rtn_
 	_SPI_NAND_WRITE_ONE_BYTE( addr );
 
 	/* 4. Read 1 byte data */
-	_SPI_NAND_READ_NBYTE( ptr_rtn_data, _SPI_NAND_LEN_ONE_BYTE, SPI_CONTROLLER_SPEED_SINGLE);
+	if( _SPI_NAND_READ_NBYTE( ptr_rtn_data, _SPI_NAND_LEN_ONE_BYTE, SPI_CONTROLLER_SPEED_SINGLE) != SPI_CONTROLLER_RTN_NO_ERROR )
+		rtn_status = SPI_NAND_FLASH_RTN_IO_ERROR;
 
 	/* 5. Chip Select High */
-	_SPI_NAND_READ_CHIP_SELECT_HIGH();
+	if( _SPI_NAND_READ_CHIP_SELECT_HIGH() != SPI_CONTROLLER_RTN_NO_ERROR )
+		rtn_status = SPI_NAND_FLASH_RTN_IO_ERROR;
 
 	_SPI_NAND_DEBUG_PRINTF(SPI_NAND_FLASH_DEBUG_LEVEL_1, "spi_nand_protocol_get_feature %x: val = 0x%x\n", addr, *ptr_rtn_data);
 
@@ -3239,11 +3241,13 @@ static SPI_NAND_FLASH_RTN_T spi_nand_protocol_read_from_cache( u32 data_offset, 
 {
 	struct SPI_NAND_FLASH_INFO_T *ptr_dev_info_t;
 	SPI_NAND_FLASH_RTN_T rtn_status = SPI_NAND_FLASH_RTN_NO_ERROR;
+	SPI_CONTROLLER_RTN_T ret = SPI_CONTROLLER_RTN_NO_ERROR;
 
 	ptr_dev_info_t = _SPI_NAND_GET_DEVICE_INFO_PTR;
 
 	/* 1. Chip Select low */
-	_SPI_NAND_READ_CHIP_SELECT_LOW();
+	if( _SPI_NAND_READ_CHIP_SELECT_LOW() != SPI_CONTROLLER_RTN_NO_ERROR )
+		rtn_status = SPI_NAND_FLASH_RTN_IO_ERROR;
 #if 0
 	/* 2. Send opcode */
 	switch (read_mode)
@@ -3301,23 +3305,26 @@ static SPI_NAND_FLASH_RTN_T spi_nand_protocol_read_from_cache( u32 data_offset, 
 	switch (read_mode)
 	{
 		case SPI_NAND_FLASH_READ_SPEED_MODE_SINGLE:
-			_SPI_NAND_READ_NBYTE( ptr_rtn_buf, len, SPI_CONTROLLER_SPEED_SINGLE);
+			ret = _SPI_NAND_READ_NBYTE( ptr_rtn_buf, len, SPI_CONTROLLER_SPEED_SINGLE);
 			break;
 
 		case SPI_NAND_FLASH_READ_SPEED_MODE_DUAL:
-			_SPI_NAND_READ_NBYTE( ptr_rtn_buf, len, SPI_CONTROLLER_SPEED_DUAL);
+			ret = _SPI_NAND_READ_NBYTE( ptr_rtn_buf, len, SPI_CONTROLLER_SPEED_DUAL);
 			break;
 
 		case SPI_NAND_FLASH_READ_SPEED_MODE_QUAD:
-			_SPI_NAND_READ_NBYTE( ptr_rtn_buf, len, SPI_CONTROLLER_SPEED_QUAD);
+			ret = _SPI_NAND_READ_NBYTE( ptr_rtn_buf, len, SPI_CONTROLLER_SPEED_QUAD);
 			break;
 
 		default:
 			break;
 	}
+	if( ret != SPI_CONTROLLER_RTN_NO_ERROR )
+		rtn_status = SPI_NAND_FLASH_RTN_IO_ERROR;
 
 	/* 5. Chip Select High */
-	_SPI_NAND_READ_CHIP_SELECT_HIGH();
+	if( _SPI_NAND_READ_CHIP_SELECT_HIGH() != SPI_CONTROLLER_RTN_NO_ERROR )
+		rtn_status = SPI_NAND_FLASH_RTN_IO_ERROR;
 
 	_SPI_NAND_DEBUG_PRINTF(SPI_NAND_FLASH_DEBUG_LEVEL_1, "spi_nand_protocol_read_from_cache : data_offset = 0x%x, buf = 0x%x\n", data_offset, ptr_rtn_buf);	
 
@@ -3860,14 +3867,27 @@ static long long spi_nand_now_ms(void)
 	return (long long)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 }
 
+/* Failures that end the operation: the chip's state is not known, so they are
+   neither a BAD page for -k nor a result to go on from. */
+static int spi_nand_stopped( SPI_NAND_FLASH_RTN_T status )
+{
+	return status == SPI_NAND_FLASH_RTN_TIMEOUT || status == SPI_NAND_FLASH_RTN_IO_ERROR;
+}
+
 /* Poll the status register until OIP clears; the last status is in *ptr_status.
-   SPI_NAND_FLASH_RTN_TIMEOUT if the chip is still busy after the timeout. */
+   SPI_NAND_FLASH_RTN_TIMEOUT if the chip is still busy after the timeout,
+   SPI_NAND_FLASH_RTN_IO_ERROR if the status did not come back over USB. That is
+   also how a command that failed before it shows: the failure of a held transfer
+   comes with the next read (spi_controller.c). */
 static SPI_NAND_FLASH_RTN_T spi_nand_wait_ready( u8 *ptr_status, const char *what, u32 index )
 {
 	long long start = spi_nand_now_ms();
 
 	for (;;) {
-		spi_nand_protocol_get_status_reg_3( ptr_status );
+		if( spi_nand_protocol_get_status_reg_3( ptr_status ) != SPI_NAND_FLASH_RTN_NO_ERROR ) {
+			_SPI_NAND_PRINTF("\n%s 0x%x: the USB transfer failed\n", what, index);
+			return SPI_NAND_FLASH_RTN_IO_ERROR;
+		}
 		if( !(*ptr_status & _SPI_NAND_VAL_OIP) )
 			return SPI_NAND_FLASH_RTN_NO_ERROR;
 		if( spi_nand_now_ms() - start > SPI_NAND_OIP_TIMEOUT_MS ) {
@@ -3896,8 +3916,9 @@ static SPI_NAND_FLASH_RTN_T spi_nand_load_page_into_cache( u32 page_number)
 		spi_nand_protocol_page_read ( page_number );
 
 		/*  Checking status for load page/erase/program complete */
-		if( spi_nand_wait_ready( &status, "Page read", page_number ) != SPI_NAND_FLASH_RTN_NO_ERROR )
-			return SPI_NAND_FLASH_RTN_TIMEOUT;
+		rtn_status = spi_nand_wait_ready( &status, "Page read", page_number );
+		if( rtn_status != SPI_NAND_FLASH_RTN_NO_ERROR )
+			return rtn_status;
 
 		_SPI_NAND_DEBUG_PRINTF(SPI_NAND_FLASH_DEBUG_LEVEL_1, "spi_nand_load_page_into_cache : status = 0x%x\n", status);
 		if (ECC_fcheck && !ECC_ignore)
@@ -3985,9 +4006,10 @@ SPI_NAND_FLASH_RTN_T spi_nand_erase_block ( u32 block_index)
 	spi_nand_protocol_block_erase( block_index );
 
 	/* 2.4 Checking status for erase complete */
-	if( spi_nand_wait_ready( &status, "Block erase", block_index ) != SPI_NAND_FLASH_RTN_NO_ERROR ) {
+	rtn_status = spi_nand_wait_ready( &status, "Block erase", block_index );
+	if( rtn_status != SPI_NAND_FLASH_RTN_NO_ERROR ) {
 		spi_nand_protocol_write_disable();
-		return SPI_NAND_FLASH_RTN_TIMEOUT;
+		return rtn_status;
 	}
 
 	/* 2.5 Disable write_flash */
@@ -4061,7 +4083,7 @@ static SPI_NAND_FLASH_RTN_T spi_nand_erase_internal( u32 addr, u32 len )
 			_SPI_NAND_DEBUG_PRINTF(SPI_NAND_FLASH_DEBUG_LEVEL_1, "spi_nand_erase_internal: addr = 0x%x, len = 0x%x, block_idx = 0x%x\n", addr, len, block_index );
 
 			rtn_status = spi_nand_erase_block(block_index);
-			if( rtn_status == SPI_NAND_FLASH_RTN_TIMEOUT )
+			if( spi_nand_stopped(rtn_status) )
 				break;
 
 			/* 2.6 Check Erase Fail Bit: the erase goes on with the next blocks,
@@ -4082,7 +4104,7 @@ static SPI_NAND_FLASH_RTN_T spi_nand_erase_internal( u32 addr, u32 len )
 				fflush(stdout);
 			}
 		}
-		if( rtn_status == SPI_NAND_FLASH_RTN_TIMEOUT )
+		if( spi_nand_stopped(rtn_status) )
 			printf("Erase stopped at [%u] of [%u] bytes      \n", erase_len, len);
 		else if( failed )
 		{
@@ -4122,7 +4144,7 @@ static SPI_NAND_FLASH_RTN_T spi_nand_read_page (u32 page_number, SPI_NAND_FLASH_
 
 	/* 1. Load Page into cache of NAND Flash Chip */
 	rtn_status = spi_nand_load_page_into_cache(page_number);
-	if( rtn_status == SPI_NAND_FLASH_RTN_TIMEOUT )
+	if( spi_nand_stopped(rtn_status) )
 		return rtn_status;
 	if( rtn_status == SPI_NAND_FLASH_RTN_DETECTED_BAD_BLOCK )
 	{
@@ -4148,8 +4170,12 @@ static SPI_NAND_FLASH_RTN_T spi_nand_read_page (u32 page_number, SPI_NAND_FLASH_
 			_SPI_NAND_DEBUG_PRINTF(SPI_NAND_FLASH_DEBUG_LEVEL_1,"spi_nand_read_page: plane select = 0x%x\n",  _plane_select_bit);
 		}
 
+		if( spi_nand_protocol_read_from_cache(read_addr, ((ptr_dev_info_t->page_size)+(ptr_dev_info_t->oob_size)), &_current_cache_page[0], speed_mode, ptr_dev_info_t->dummy_mode ) != SPI_NAND_FLASH_RTN_NO_ERROR )
 		{
-			spi_nand_protocol_read_from_cache(read_addr, ((ptr_dev_info_t->page_size)+(ptr_dev_info_t->oob_size)), &_current_cache_page[0], speed_mode, ptr_dev_info_t->dummy_mode );
+			/* the buffers do not hold this page: the next read goes to the chip */
+			_current_page_num = 0xFFFFFFFF;
+			_SPI_NAND_PRINTF("\nPage read 0x%x: the USB transfer failed\n", page_number);
+			return SPI_NAND_FLASH_RTN_IO_ERROR;
 		}
 
 		_SPI_NAND_DEBUG_PRINTF(SPI_NAND_FLASH_DEBUG_LEVEL_2, "spi_nand_read_page: after read, _current_cache_page:\n");
@@ -4222,7 +4248,7 @@ static SPI_NAND_FLASH_RTN_T spi_nand_write_page( u32 page_number, u32 data_offse
 			/* with -k a BAD page must still be found, as a -k read skips it */
 			if( Skip_BAD_page ) {
 				rtn_status = spi_nand_read_page(page_number, speed_mode);
-				if( rtn_status == SPI_NAND_FLASH_RTN_TIMEOUT || rtn_status == SPI_NAND_FLASH_RTN_DETECTED_BAD_BLOCK )
+				if( spi_nand_stopped(rtn_status) || rtn_status == SPI_NAND_FLASH_RTN_DETECTED_BAD_BLOCK )
 					return rtn_status;
 			}
 			return SPI_NAND_FLASH_RTN_NO_ERROR;
@@ -4238,7 +4264,7 @@ static SPI_NAND_FLASH_RTN_T spi_nand_write_page( u32 page_number, u32 data_offse
 
 		/* Read Current page data to software cache buffer */
 		rtn_status = spi_nand_read_page(page_number, speed_mode);
-		if( rtn_status == SPI_NAND_FLASH_RTN_TIMEOUT )
+		if( spi_nand_stopped(rtn_status) )
 			return rtn_status;
 		if (Skip_BAD_page && (rtn_status == SPI_NAND_FLASH_RTN_DETECTED_BAD_BLOCK)) { /* skip BAD page, go to next page */
 			return SPI_NAND_FLASH_RTN_DETECTED_BAD_BLOCK;
@@ -4324,9 +4350,10 @@ static SPI_NAND_FLASH_RTN_T spi_nand_write_page( u32 page_number, u32 data_offse
 		spi_nand_protocol_program_execute ( page_number );
 
 		/* Checking status for program complete */
-		if( spi_nand_wait_ready( &status, "Page program", page_number ) != SPI_NAND_FLASH_RTN_NO_ERROR ) {
+		rtn_status = spi_nand_wait_ready( &status, "Page program", page_number );
+		if( rtn_status != SPI_NAND_FLASH_RTN_NO_ERROR ) {
 			spi_nand_protocol_write_disable();
-			return SPI_NAND_FLASH_RTN_TIMEOUT;
+			return rtn_status;
 		}
 
 		/*. Disable write_flash */
@@ -4508,7 +4535,7 @@ static SPI_NAND_FLASH_RTN_T spi_nand_read_internal ( u32 addr, u32 len, u8 *ptr_
 			rtn_status = SPI_NAND_FLASH_RTN_DETECTED_BAD_BLOCK;
 		else
 			rtn_status = spi_nand_read_page(page_number, speed_mode);
-		if( rtn_status == SPI_NAND_FLASH_RTN_TIMEOUT ) {
+		if( spi_nand_stopped(rtn_status) ) {
 			*status = rtn_status;
 			_SPI_NAND_SEMAPHORE_UNLOCK();
 			return (rtn_status);
