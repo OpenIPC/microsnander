@@ -2705,7 +2705,8 @@ static SPI_NAND_FLASH_RTN_T spi_nand_protocol_set_feature( u8 addr, u8 data )
 	_SPI_NAND_WRITE_ONE_BYTE( data );
 
 	/* 5. Chip Select High */
-	_SPI_NAND_READ_CHIP_SELECT_HIGH();
+	if( _SPI_NAND_READ_CHIP_SELECT_HIGH() != SPI_CONTROLLER_RTN_NO_ERROR )
+		rtn_status = SPI_NAND_FLASH_RTN_IO_ERROR;
 
 	_SPI_NAND_DEBUG_PRINTF(SPI_NAND_FLASH_DEBUG_LEVEL_1, "spi_nand_protocol_set_feature %x: val = 0x%x\n", addr, data);
 
@@ -4353,6 +4354,8 @@ static SPI_NAND_FLASH_RTN_T spi_nand_write_page( u32 page_number, u32 data_offse
 		rtn_status = spi_nand_wait_ready( &status, "Page program", page_number );
 		if( rtn_status != SPI_NAND_FLASH_RTN_NO_ERROR ) {
 			spi_nand_protocol_write_disable();
+			/* the buffers hold what was to be written, not what the chip has */
+			SPI_NAND_Flash_Clear_Read_Cache_Data();
 			return rtn_status;
 		}
 
@@ -5545,7 +5548,7 @@ void SPI_NAND_Flash_Clear_Read_Cache_Data( void )
 }
 
 /* Set or clear the on-die ECC bit of the feature register at addr. A failed USB
-   transfer is the result; the last read also brings the failure of the write. */
+   transfer is the result; the read after the write also brings a held one that failed. */
 static SPI_NAND_FLASH_RTN_T spi_nand_set_ondie_ecc( u8 addr )
 {
 	u8 feature;
@@ -5557,7 +5560,8 @@ static SPI_NAND_FLASH_RTN_T spi_nand_set_ondie_ecc( u8 addr )
 		feature |= 0x10;
 	else
 		feature &= ~(1 << 4);
-	spi_nand_protocol_set_feature(addr, feature);
+	if( spi_nand_protocol_set_feature(addr, feature) != SPI_NAND_FLASH_RTN_NO_ERROR )
+		return SPI_NAND_FLASH_RTN_IO_ERROR;
 
 	/* Value check*/
 	if( spi_nand_protocol_get_feature(addr, &feature) != SPI_NAND_FLASH_RTN_NO_ERROR )

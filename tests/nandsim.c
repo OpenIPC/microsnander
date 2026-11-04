@@ -39,6 +39,8 @@ static int busy_after = -1;		/* stay busy from this program execute on */
 static long loaded = -1;		/* the page last read into the chip's cache */
 static long fail_cache = -1;		/* the USB transfer fails when this page is read from the cache */
 static int fail_feature = -1;		/* the USB transfer of a read of this feature register fails */
+static int fail_after_program;		/* status reads fail from the next program execute on */
+static int fail_set_feature;		/* CS high fails after a write of a feature register */
 
 static int in(const long *set, long v) { for (int i = 0; i < MAXBAD; i++) if (set[i] == v) return 1; return 0; }
 static unsigned long row(void) { return ((cmd[1] << 16) | (cmd[2] << 8) | cmd[3]) % PAGES; }
@@ -97,6 +99,10 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Read_NByte(u8 *d, u32 len, SPI_CONTROLLER_SP
 SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Chip_Select_High(void)
 {
 	unsigned char *p;
+	if (fail_set_feature && cmd[0] == 0x1f) {
+		ncmd = nread = 0;
+		return SPI_CONTROLLER_RTN_WRITE_DATAPFIFO_ERROR;
+	}
 	switch (cmd[0]) {
 	case 0x03: case 0x0b: case 0x3b: case 0x6b: col_hi_read = cmd[1]; break;
 	case 0x02: case 0x32: case 0x84: case 0x34: col_hi_load = cmd[1]; break;
@@ -110,6 +116,7 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Chip_Select_High(void)
 		break;
 	case 0x10:				/* program execute */
 		if (busy_after >= 0 && (int)nprog >= busy_after) stuck_busy = 1;
+		if (fail_after_program) fail_feature = 0xc0;
 		nprog++;
 		feat[0xc0] &= ~0x08;
 		if (in(prog_fail, row())) { feat[0xc0] |= 0x08; break; }
@@ -452,6 +459,17 @@ int main(void)
 	check(snand_erase(11L * 128 * 1024, 128 * 1024) != 0, "erase fails when the USB transfer of the status fails");
 	fail_feature = -1;
 
+	/* a page whose program result did not come back: what the chip has is read, not the buffer */
+	fill(buf, 1, 23);
+	memset(page(662), 0xff, PAGE + OOB);
+	fail_after_program = 1;
+	check(snand_write(buf, 662L * PAGE, PAGE) < 0, "write fails when the status after the program fails on USB");
+	fail_after_program = 0;
+	fail_feature = -1;
+	memset(page(662), 0x5a, PAGE + OOB);
+	check(snand_read(got, 662L * PAGE, PAGE) == PAGE && got[0] == 0x5a && got[PAGE - 1] == 0x5a,
+	      "  the next read brings the chip's data, not the buffer's");
+
 	/* the ECC setup of the detection: a chip it could not set is not reported as ready */
 	fail_feature = 0xb0;
 	check(snand_init() <= 0, "detection fails when the USB transfer of the ECC setup fails");
@@ -460,6 +478,9 @@ int main(void)
 	check(snand_init() <= 0, "  also through the ECC register (F35SQA001G)");
 	fail_feature = -1;
 	check(snand_init() > 0, "  works again when the transfers do");
+	fail_set_feature = 1;
+	check(snand_init() <= 0, "detection fails when CS high of the ECC write fails");
+	fail_set_feature = 0;
 
 	if (!fail) printf("all nandsim checks passed\n");
 	return fail;
