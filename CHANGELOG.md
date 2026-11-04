@@ -11,6 +11,8 @@ from every push to `main`; this file is the change history.
   3 return on these chips is not shown as those registers any more.
 - `-i` prints one status register for Macronix chips, and `-t` reads their protection right:
   BP3 counts, there is no TB and no CMP.
+- SPI NOR: `-u`, erases and writes clear CMP and SRP1 with the two-byte WRSR too, for the chips
+  that do not know WRSR2. Those chips failed with the register staying as it was.
 
 ## 1.21.1 — 2026-11-04
 

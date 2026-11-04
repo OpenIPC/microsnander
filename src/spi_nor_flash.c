@@ -182,6 +182,27 @@ static int snor_unprotect_write(u8 opcode, u8 *val)
 	return ret;
 }
 
+/* The write of registers 1 and 2 with one command: the only way for the chips
+   that do not know WRSR2, as the older Winbond parts. */
+static int snor_write_sr12(u8 sr1, u8 sr2)
+{
+	u8 d[2] = { sr1, sr2 };
+	int ret;
+
+	if (snor_wait_ready(1))
+		return -1;
+	snor_write_enable();
+	SPI_CONTROLLER_Chip_Select_Low();
+	SPI_CONTROLLER_Write_One_Byte(OPCODE_WRSR);
+	ret = SPI_CONTROLLER_Write_NByte(d, 2, SPI_CONTROLLER_SPEED_SINGLE);
+	if (SPI_CONTROLLER_Chip_Select_High())
+		ret = -1;
+	if (snor_wait_busy())
+		ret = -1;
+	snor_write_disable();
+	return ret ? -1 : 0;
+}
+
 /*
  * Set all sectors (global) unprotected if they are protected.
  * Returns negative if error occurred.
@@ -262,6 +283,13 @@ static int unprotect(int all)
 		sr &= ~sr2_mask;
 		if (snor_unprotect_write(OPCODE_WRSR2, &sr) || snor_read_sr(OPCODE_RDSR2, &sr) < 0)
 			return -1;
+		if (sr & sr2_mask) {		/* no WRSR2 on this chip, perhaps */
+			u8 sr1 = 0;
+
+			if (snor_read_sr(OPCODE_RDSR, &sr1) < 0 || snor_write_sr12(sr1, sr & ~sr2_mask) ||
+			    snor_read_sr(OPCODE_RDSR2, &sr) < 0)
+				return -1;
+		}
 		if (sr & sr2_mask) {
 			snprintf(snor_unprotect_why, sizeof(snor_unprotect_why),
 				 "status register 2 stays 0x%02x (was 0x%02x): %s", sr, was,
@@ -293,27 +321,6 @@ static int unprotect(int all)
 }
 
 int snor_unprotect(void) { return unprotect(1); }
-
-/* The write of registers 1 and 2 with one command: the only way for the chips
-   that do not know WRSR2, as the older Winbond parts. */
-static int snor_write_sr12(u8 sr1, u8 sr2)
-{
-	u8 d[2] = { sr1, sr2 };
-	int ret;
-
-	if (snor_wait_ready(1))
-		return -1;
-	snor_write_enable();
-	SPI_CONTROLLER_Chip_Select_Low();
-	SPI_CONTROLLER_Write_One_Byte(OPCODE_WRSR);
-	ret = SPI_CONTROLLER_Write_NByte(d, 2, SPI_CONTROLLER_SPEED_SINGLE);
-	if (SPI_CONTROLLER_Chip_Select_High())
-		ret = -1;
-	if (snor_wait_busy())
-		ret = -1;
-	snor_write_disable();
-	return ret ? -1 : 0;
-}
 
 /* the write of a status register that clears QE, and the read back; 1: it stays */
 static int snor_clear_qe_bit(u8 wr, u8 rd, u8 *sr, u8 qe)
