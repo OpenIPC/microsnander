@@ -284,6 +284,91 @@ static int unprotect(int all)
 
 int snor_unprotect(void) { return unprotect(1); }
 
+/* The write of registers 1 and 2 with one command: the only way for the chips
+   that do not know WRSR2, as the older Winbond parts. */
+static int snor_write_sr12(u8 sr1, u8 sr2)
+{
+	u8 d[2] = { sr1, sr2 };
+	int ret;
+
+	if (snor_wait_ready(1))
+		return -1;
+	snor_write_enable();
+	SPI_CONTROLLER_Chip_Select_Low();
+	SPI_CONTROLLER_Write_One_Byte(OPCODE_WRSR);
+	ret = SPI_CONTROLLER_Write_NByte(d, 2, SPI_CONTROLLER_SPEED_SINGLE);
+	if (SPI_CONTROLLER_Chip_Select_High())
+		ret = -1;
+	if (snor_wait_busy())
+		ret = -1;
+	snor_write_disable();
+	return ret ? -1 : 0;
+}
+
+/* the write of a status register that clears QE, and the read back; 1: it stays */
+static int snor_clear_qe_bit(u8 wr, u8 rd, u8 *sr, u8 qe)
+{
+	*sr &= ~qe;
+	if (snor_unprotect_write(wr, sr) || snor_read_sr(rd, sr) < 0)
+		return -1;
+	return (*sr & qe) != 0;
+}
+
+/*
+ * -uu: the protection as -u, then QE. It protects nothing, but with it set the
+ * WP# and HOLD# pins are data lines. QE is bit 6 of status register 1 on
+ * Macronix chips and bit 1 of status register 2 on the others; a chip without
+ * that register or bit has nothing to clear. Returns as snor_unprotect().
+ */
+int snor_clear_qe(void)
+{
+	const int macronix = spi_chip_info->id == 0xc2;
+	const u8 rd = macronix ? OPCODE_RDSR : OPCODE_RDSR2;
+	const u8 wr = macronix ? OPCODE_WRSR : OPCODE_WRSR2;
+	const u8 qe = macronix ? 0x40 : SR2_QE;
+	u8 sr = 0;
+	int ret = unprotect(1);
+
+	if (ret)
+		return ret;
+	if (snor_is_sst25_aai() || snor_is_sst26()) {
+		printf("QE: this chip has no QE bit in its status registers.\n");
+		return 0;
+	}
+	if (snor_read_sr(rd, &sr) < 0) {
+		printf("%s: read_sr fail: %x\n", __func__, sr);
+		return -1;
+	}
+	if (!macronix && sr == 0xff) {		/* no status register 2, as in unprotect() */
+		printf("QE: this chip has no status register 2.\n");
+		return 0;
+	}
+	if (!(sr & qe)) {
+		printf("QE: already clear.\n");
+		return 0;
+	}
+	ret = snor_clear_qe_bit(wr, rd, &sr, qe);
+	if (ret < 0)
+		return -1;
+	if (ret && !macronix) {
+		u8 sr1 = 0;
+
+		if (snor_read_sr(OPCODE_RDSR, &sr1) < 0 || snor_write_sr12(sr1, sr & ~qe) ||
+		    snor_read_sr(rd, &sr) < 0)
+			return -1;
+		ret = (sr & qe) != 0;
+	}
+	if (ret) {
+		snprintf(snor_unprotect_why, sizeof(snor_unprotect_why),
+			 "QE stays set (status register 0x%02x): the chip does not take the write, "
+			 "or its QE is fixed at the factory", sr);
+		printf("Unprotect: %s.\n", snor_unprotect_why);
+		return -2;
+	}
+	printf("QE: cleared. A board that reads this chip in quad mode may not boot until QE is set again.\n");
+	return 0;
+}
+
 /*
  * Read the status register until the write in progress bit is clear: the
  * chip is ready. The other bits (block protection, write enable latch, quad

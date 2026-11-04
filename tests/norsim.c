@@ -32,7 +32,7 @@ static int fast_clock(clockid_t id, struct timespec *t)
 unsigned int bsize;
 const char *flash_chip_name;
 
-enum { ORDINARY, SST25, SST26, NO_SR23, QE_SR1, QE_FIXED };
+enum { ORDINARY, SST25, SST26, NO_SR23, QE_SR1, QE_FIXED, NO_WRSR2 };
 static int kind;
 static unsigned char id[5];
 static unsigned char mem[16 << 20];
@@ -95,14 +95,22 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Chip_Select_High(void)
 	switch (cmd[0]) {
 	case OPCODE_WREN: if (!busy) wel = 1; break;		/* ignored while the chip is busy */
 	case OPCODE_WRDI: wel = 0; aai = 0; break;
-	case OPCODE_WRSR: if (wel && ncmd > 1 && !(wp_low && (sr & 0x80))) { sr = (cmd[1] & 0xbc) | (kind == QE_SR1 ? 0x40 : 0); busy = 3; } wel = 0; break;
+	case OPCODE_WRSR:
+		if (wel && ncmd > 1 && !(wp_low && (sr & 0x80))) {
+			sr = (cmd[1] & (kind == QE_SR1 ? 0xfc : 0xbc));
+			if (ncmd > 2 && kind != NO_SR23)	/* the second byte goes to register 2 */
+				sr2 = (cmd[2] & 0x43) | (kind == QE_FIXED ? 0x02 : 0);
+			busy = 3;
+		}
+		wel = 0;
+		break;
 	case OPCODE_WRSR2:
-		if (kind != NO_SR23 && wel && ncmd > 1) {
+		if (kind != NO_SR23 && kind != NO_WRSR2 && wel && ncmd > 1) {
 			sr2 = (cmd[1] & 0x43) | (kind == QE_FIXED ? 0x02 : 0);	/* QE stays 1 on a QE-fixed part */
 			sr2_writes++;
 			busy = 3;
 		}
-		if (kind != NO_SR23) wel = 0;	/* a chip without the register ignores the command */
+		if (kind != NO_SR23 && kind != NO_WRSR2) wel = 0;	/* a chip without the register or the command ignores it */
 		break;
 	case OPCODE_ULBPR: if (wel && kind == SST26) { locked = 0; busy = 3; } wel = 0; break;
 	case OPCODE_PP:
@@ -278,6 +286,38 @@ int main(void)
 		check(snor_unprotect() == 0 && sr2 == 0x02, "W25Q32BV: unprotect clears CMP and keeps QE");
 		memset(mem, 0, 65536);
 		check(snor_erase(0, 65536) == 0 && mem[0] == 0xff, "  and the chip erases");
+	}
+
+	/* -uu: QE too, where each kind of chip keeps it */
+	{
+		chip(find("W25Q32BV"), ORDINARY);
+		snor_init();
+		sr = 0x1c; sr2 = 0x42;
+		check(snor_clear_qe() == 0 && sr == 0 && sr2 == 0 && !wel, "W25Q32BV: -uu clears the protection and QE");
+		sr2_writes = 0;
+		check(snor_clear_qe() == 0 && sr2_writes == 0, "  QE already clear: nothing is written");
+		chip(find("W25Q128BV"), QE_FIXED);
+		snor_init();
+		sr = 0; sr2 = 0x02;
+		check(snor_clear_qe() == -2 && sr2 == 0x02 && strstr(snor_unprotect_why, "QE stays") && !wel,
+		      "W25Q128BV with QE fixed at 1: -uu says it stays");
+		chip(find("W25Q32BV"), NO_WRSR2);
+		snor_init();
+		sr = 0; sr2 = 0x02;
+		check(snor_clear_qe() == 0 && sr2 == 0 && sr == 0 && !wel, "a chip that does not know WRSR2: QE goes with the two-byte WRSR");
+		chip(find("XM25QH64A"), NO_SR23);
+		snor_init();
+		sr = 0; sr2 = 0;
+		check(snor_clear_qe() == 0 && !wel, "XM25QH64A without status register 2: nothing to clear, no write enable left");
+		chip(find("MX25L3205D"), QE_SR1);
+		snor_init();
+		sr = 0x40; sr2 = 0x02;
+		check(snor_clear_qe() == 0 && sr == 0 && sr2 == 0x02, "MX25L3205D: QE is in status register 1, register 2 is not touched");
+		chip(find("W25Q32BV"), ORDINARY);
+		snor_init();
+		sr = 0x80; sr2 = 0x02; wp_low = 1;
+		check(snor_clear_qe() == -2 && sr2 == 0x02, "a protection that stays stops -uu before QE");
+		wp_low = 0; sr = 0;
 	}
 
 	/* SRP0 alone, no BP: unprotect clears it too (it used to be left, and

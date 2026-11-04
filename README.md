@@ -151,7 +151,8 @@ microsnander [options]
  -a <address>   manually set address
  -w <filename>  write chip with data from filename
  -r <filename>  read chip and save data to filename
- -u             unprotect chip
+ -u             unprotect chip; -uu: also clear QE (quad enable), a chip of a
+                board that boots in quad mode may then not boot
  -t             self-test: protection, then erase, write and read back one block
                 (the first; -a for another) and put its data back
  -v             verify after write on chip
@@ -177,6 +178,11 @@ skipped page is printed. A write stays inside `-a`/`-l` (without `-l`, up to the
 chip end): give `-l` the size of the partition, and a write that needs more room
 than that fails. A read that would need a page past the chip end fails. A page that failed to program is remembered only for `-v` in the same run:
 a later `-k` read may read it as data, and the dump is shifted from there on.
+
+`-u` clears the protection bits and keeps QE (quad enable), which protects nothing. `-uu`
+clears QE as well, SPI NOR on the command line only. QE turns the WP# and HOLD# pins into data
+lines, and a board that reads the chip in quad mode may not boot without it. Some chips have
+it fixed at the factory: then `-uu` says that it stays.
 
 `-t` is a quick check of the chip, with nothing to prepare: it reads the protection bits
 (SPI NOR: BP, TB, CMP, SRP in the status registers; SPI NAND: the block lock register), then

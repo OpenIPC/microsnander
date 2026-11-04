@@ -94,6 +94,14 @@ t 1 "-i chip not found"               MS_CHIP=none $B -i
 t 0 "-u NOR"                          $B -u
 t 1 "-u NOR fails"                    MS_FAIL=unprotect $B -u
 t 1 "-u NAND: not supported, no crash" MS_CHIP=nand $B -u
+t 0 "-uu NOR"                         $B -uu
+t 0 "-u -u NOR"                       $B -u -u
+t 1 "-uu NOR fails"                   MS_FAIL=qe $B -uu
+t 1 "-uu NAND: not supported, no crash" MS_CHIP=nand $B -uu
+t 1 "-uuu is an error"                $B -uuu
+t 1 "conflict -uu -i"                 $B -uu -i
+$B -u | grep -q 'clear QE' && { echo "FAIL -u clears QE"; fail=1; } || echo "ok     -u leaves QE"
+$B -uu | grep -q 'clear QE' && echo "ok     -uu clears QE" || { echo "FAIL -uu without QE"; fail=1; }
 t 0 "-e full"                         $B -e
 t 1 "-e fails"                        MS_FAIL=erase $B -e
 t 1 "-e len not block multiple"       $B -e -a 0 -l 100
