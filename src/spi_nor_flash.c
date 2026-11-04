@@ -94,8 +94,8 @@
 #define SR2_SUS				0x80
 
 #define SR3_WPS				4
-#define SR3_DRV0			8
-#define SR3_DRV1			0x10
+#define SR3_DRV0			0x20
+#define SR3_DRV1			0x40
 #define SR3_HOLD			0x80
 
 #define snor_dbg(args...)
