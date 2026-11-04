@@ -141,6 +141,11 @@ static int snor_is_sst26(void)
 
 int snor_block_locks(void) { return snor_is_sst26(); }	/* see snorcmd_api.h */
 
+static int snor_is_macronix(void)
+{
+	return spi_chip_info->id == 0xc2;
+}
+
 /*
  * Set write enable latch with Write Enable command.
  * Returns negative if error occurred.
@@ -187,7 +192,8 @@ char snor_unprotect_why[200];
 static int unprotect(int all)
 {
 	u8 sr = 0;
-	const u8 sr1_mask = all ? SR1_PROTECT : (SR_BP0 | SR_BP1 | SR_BP2);
+	/* Macronix: BP3 in bit 5 */
+	const u8 sr1_mask = (all ? SR1_PROTECT : (SR_BP0 | SR_BP1 | SR_BP2)) | (snor_is_macronix() ? 0x20 : 0);
 	const u8 sr2_mask = all ? (SR2_SRP1 | SR2_CMP) : SR2_CMP;
 
 	snor_unprotect_why[0] = 0;
@@ -232,8 +238,10 @@ static int unprotect(int all)
 		}
 	}
 
-	/* SST25-type chips have one status register (BP3 and BPL in it) */
-	if (snor_is_sst25_aai())
+	/* SST25-type chips have one status register (BP3 and BPL in it). On Macronix
+	   chips 0x35 and 0x15 read something else, or nothing: bits there are not CMP,
+	   SRP1 or WPS (MX25L12805D reads ff and 07), and they take no such write. */
+	if (snor_is_sst25_aai() || snor_is_macronix())
 		return 0;
 
 	/* Status registers 2 and 3: a chip without them leaves MISO high and
@@ -322,7 +330,7 @@ static int snor_clear_qe_bit(u8 wr, u8 rd, u8 *sr, u8 qe)
  */
 int snor_clear_qe(void)
 {
-	const int macronix = spi_chip_info->id == 0xc2;
+	const int macronix = snor_is_macronix();
 	const u8 rd = macronix ? OPCODE_RDSR : OPCODE_RDSR2;
 	const u8 wr = macronix ? OPCODE_WRSR : OPCODE_WRSR2;
 	const u8 qe = macronix ? 0x40 : SR2_QE;

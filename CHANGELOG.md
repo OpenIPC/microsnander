@@ -4,6 +4,17 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.21.1 — 2026-11-04
+
+- SPI NOR chips of Macronix with the ID `c2 20 xx` (MX25L4005A up to MX25L51245G) were taken
+  for the SPI NAND MX35LF2G14AC since 1.10.0: that entry compares only `c2 20`, and SPI NAND
+  is tried first. Erases and writes would have gone out as SPI NAND commands. An ID of the
+  NOR table now wins over a 2-byte SPI NAND entry, and a chip whose feature registers all
+  read 0xff is not a SPI NAND, whatever its ID. Both come before any write to the chip.
+- Macronix SPI NOR: `-u`, erases and writes failed with `status register 3 stays 0x07`. On
+  these chips the reads of status registers 2 and 3 return something else, and they are no
+  longer taken for CMP, SRP1 and WPS. BP3 (bit 5) is cleared with the other BP bits.
+
 ## 1.21.0 — 2026-11-04
 
 - SPI NOR: `-uu` clears the protection as `-u` does, and then QE (quad enable), which `-u`

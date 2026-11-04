@@ -76,8 +76,8 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Read_NByte(u8 *d, u32 len, SPI_CONTROLLER_SP
 		switch (cmd[0]) {
 		case OPCODE_RDID: d[i] = nread < 5 ? id[nread] : 0; break;
 		case OPCODE_RDSR: d[i] = sr | (wel ? SR_WEL : 0) | (aai ? 0x40 : 0) | (busy ? SR_WIP : 0); if (busy) busy--; break;
-		case OPCODE_RDSR2: d[i] = kind == NO_SR23 ? 0xff : sr2; sr2_reads++; break;
-		case OPCODE_RDSR3: d[i] = kind == NO_SR23 ? 0xff : 0; break;
+		case OPCODE_RDSR2: d[i] = kind == NO_SR23 || kind == QE_SR1 ? 0xff : sr2; sr2_reads++; break;
+		case OPCODE_RDSR3: d[i] = kind == NO_SR23 ? 0xff : kind == QE_SR1 ? 0x07 : 0; break;	/* another register on Macronix */
 		case OPCODE_READ: d[i] = mem[(addr() + nread) % sizeof(mem)]; break;
 		default: d[i] = 0;
 		}
@@ -209,7 +209,7 @@ static void write_read_erase(const char *name, int k)
 
 	if (k != SST25 && k != SST26) {
 		snprintf(what, sizeof(what), "%s: the write of 17 pages clears the protection once", name);
-		check(unprotects == 1, what);
+		if (kind != QE_SR1) check(unprotects == 1, what);	/* counted by the reads of register 2, Macronix has none */
 	}
 	snprintf(what, sizeof(what), "%s: nothing is sent while the chip is busy, the latch is clear at the end", name);
 	check(!busy_cmds && !wel, what);
@@ -313,6 +313,11 @@ int main(void)
 		snor_init();
 		sr = 0x40; sr2 = 0x02;
 		check(snor_clear_qe() == 0 && sr == 0 && sr2 == 0x02, "MX25L3205D: QE is in status register 1, register 2 is not touched");
+		sr = 0x20;
+		check(snor_unprotect() == 0 && sr == 0, "  BP3 in bit 5 is cleared");
+		sr = 0x40;
+		check(snor_unprotect() == 0 && sr == 0x40, "  -u keeps QE, and 0x07 from the 0x15 read is not WPS");
+		sr = 0;
 		chip(find("W25Q32BV"), ORDINARY);
 		snor_init();
 		sr = 0x80; sr2 = 0x02; wp_low = 1;
