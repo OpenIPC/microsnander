@@ -4,6 +4,14 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.21.0 — 2026-11-04
+
+- SPI NOR: `-uu` clears the protection as `-u` does, and then QE (quad enable), which `-u`
+  keeps: bit 1 of status register 2, also with the two-byte WRSR for the chips that do not
+  know WRSR2, bit 6 of status register 1 on Macronix chips. A QE that stays set, as on the
+  parts where the factory fixes it, is told, and a chip without the bit has nothing to
+  clear. A board that reads the chip in quad mode may not boot without QE. Command line only.
+
 ## 1.20.2 — 2026-11-04
 
 - SPI NAND: a USB transfer that fails now fails the operation. The result of a read from the

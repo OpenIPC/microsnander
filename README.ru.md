@@ -152,7 +152,8 @@ microsnander [options]
  -a <address>   manually set address
  -w <filename>  write chip with data from filename
  -r <filename>  read chip and save data to filename
- -u             unprotect chip
+ -u             unprotect chip; -uu: also clear QE (quad enable), a chip of a
+                board that boots in quad mode may then not boot
  -t             self-test: protection, then erase, write and read back one block
                 (the first; -a for another) and put its data back
  -v             verify after write on chip
@@ -180,6 +181,11 @@ microsnander [options]
 страница за концом микросхемы, тоже завершается ошибкой. Страница, которая не
 записалась, запоминается только для `-v` в том же запуске: позднее чтение с `-k`
 может прочитать её как данные, и дамп с этого места сдвинется.
+
+`-u` снимает биты защиты и оставляет QE (quad enable): он ничего не защищает. `-uu` снимает
+ещё и QE, только для SPI NOR и только в командной строке. QE превращает ножки WP# и HOLD# в линии
+данных, и плата, читающая микросхему в режиме Quad, без него может не загрузиться. У некоторых
+микросхем он задан на заводе: тогда `-uu` сообщит, что бит остался.
 
 `-t` — быстрая проверка микросхемы без подготовки: читает биты защиты (SPI NOR — BP, TB, CMP,
 SRP в регистрах состояния; SPI NAND — регистр блокировки блоков), затем берёт один блок —
