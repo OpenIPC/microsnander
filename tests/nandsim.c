@@ -38,7 +38,7 @@ static int stuck_busy;			/* the status register always shows OIP */
 static int busy_after = -1;		/* stay busy from this program execute on */
 static long loaded = -1;		/* the page last read into the chip's cache */
 static long fail_cache = -1;		/* the USB transfer fails when this page is read from the cache */
-static int fail_status;			/* the USB transfer of a status read fails */
+static int fail_feature = -1;		/* the USB transfer of a read of this feature register fails */
 
 static int in(const long *set, long v) { for (int i = 0; i < MAXBAD; i++) if (set[i] == v) return 1; return 0; }
 static unsigned long row(void) { return ((cmd[1] << 16) | (cmd[2] << 8) | cmd[3]) % PAGES; }
@@ -73,7 +73,7 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Read_NByte(u8 *d, u32 len, SPI_CONTROLLER_SP
 	if (fail_cache >= 0 && fail_cache == loaded &&
 	    (cmd[0] == 0x03 || cmd[0] == 0x0b || cmd[0] == 0x3b || cmd[0] == 0x6b))
 		return SPI_CONTROLLER_RTN_READ_DATAPFIFO_ERROR;
-	if (fail_status && cmd[0] == 0x0f && cmd[1] == 0xc0)
+	if (fail_feature >= 0 && cmd[0] == 0x0f && cmd[1] == fail_feature)
 		return SPI_CONTROLLER_RTN_READ_DATAPFIFO_ERROR;
 	for (u32 i = 0; i < len; i++, nread++) {
 		switch (cmd[0]) {
@@ -425,9 +425,9 @@ int main(void)
 	check(snand_read(got, 640L * PAGE, 3 * PAGE) == 3 * PAGE && !memcmp(got, buf, 3 * PAGE),
 	      "  the failed page is not kept: the next read brings the data");
 	snand_read(got, 0, PAGE);
-	fail_status = 1;
+	fail_feature = 0xc0;
 	check(snand_read(got, 640L * PAGE, PAGE) < 0, "read fails when the USB transfer of the status fails");
-	fail_status = 0;
+	fail_feature = -1;
 	Skip_BAD_page = 1;
 	snand_read(got, 0, PAGE);
 	fail_cache = 641;
@@ -447,10 +447,19 @@ int main(void)
 		for (int i = 0; i < PAGE; i++) if (page(660)[i] != 0xff) blank = 0;
 		check(blank, "  and nothing is programmed");
 	}
-	fail_status = 1;
+	fail_feature = 0xc0;
 	check(snand_write(buf, 661L * PAGE, PAGE) < 0, "write fails when the USB transfer of the status fails");
 	check(snand_erase(11L * 128 * 1024, 128 * 1024) != 0, "erase fails when the USB transfer of the status fails");
-	fail_status = 0;
+	fail_feature = -1;
+
+	/* the ECC setup of the detection: a chip it could not set is not reported as ready */
+	fail_feature = 0xb0;
+	check(snand_init() <= 0, "detection fails when the USB transfer of the ECC setup fails");
+	fail_feature = 0x90;
+	chip(0xcd, 0x71, 0x71);
+	check(snand_init() <= 0, "  also through the ECC register (F35SQA001G)");
+	fail_feature = -1;
+	check(snand_init() > 0, "  works again when the transfers do");
 
 	if (!fail) printf("all nandsim checks passed\n");
 	return fail;

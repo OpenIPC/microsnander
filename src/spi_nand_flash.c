@@ -5293,7 +5293,11 @@ SPI_NAND_FLASH_RTN_T SPI_NAND_Flash_Init(u32 rom_base)
 		} else {
 			_SPI_NAND_PRINTF("Disable Flash ECC.\n");
 		}
-		SPI_NAND_Flash_Enable_OnDie_ECC();
+		if( SPI_NAND_Flash_Enable_OnDie_ECC() != SPI_NAND_FLASH_RTN_NO_ERROR )
+		{
+			_SPI_NAND_PRINTF("SPI NAND Flash: the USB transfer failed while setting ECC\n");
+			return SPI_NAND_FLASH_RTN_IO_ERROR;
+		}
 		_SPI_NAND_PRINTF("Detected SPI NAND Flash: %s, Flash Size: %d MB\n", _current_flash_info_t.ptr_name,  ECC_fcheck ? _current_flash_info_t.device_size >> 20 : (_current_flash_info_t.device_size - ecc_size) >> 20);
 
 		rtn_status = SPI_NAND_FLASH_RTN_NO_ERROR;
@@ -5540,10 +5544,32 @@ void SPI_NAND_Flash_Clear_Read_Cache_Data( void )
 	_current_page_num = 0xFFFFFFFF;
 }
 
+/* Set or clear the on-die ECC bit of the feature register at addr. A failed USB
+   transfer is the result; the last read also brings the failure of the write. */
+static SPI_NAND_FLASH_RTN_T spi_nand_set_ondie_ecc( u8 addr )
+{
+	u8 feature;
+
+	if( spi_nand_protocol_get_feature(addr, &feature) != SPI_NAND_FLASH_RTN_NO_ERROR )
+		return SPI_NAND_FLASH_RTN_IO_ERROR;
+	_SPI_NAND_DEBUG_PRINTF(SPI_NAND_FLASH_DEBUG_LEVEL_1, "before setting : SPI_NAND_Flash_Enable_OnDie_ECC, reg 0x%x = 0x%x\n", addr, feature);
+	if (ECC_fcheck)
+		feature |= 0x10;
+	else
+		feature &= ~(1 << 4);
+	spi_nand_protocol_set_feature(addr, feature);
+
+	/* Value check*/
+	if( spi_nand_protocol_get_feature(addr, &feature) != SPI_NAND_FLASH_RTN_NO_ERROR )
+		return SPI_NAND_FLASH_RTN_IO_ERROR;
+	_SPI_NAND_DEBUG_PRINTF(SPI_NAND_FLASH_DEBUG_LEVEL_1, "after setting : SPI_NAND_Flash_Enable_OnDie_ECC, reg 0x%x = 0x%x\n", addr, feature);
+	return SPI_NAND_FLASH_RTN_NO_ERROR;
+}
+
 SPI_NAND_FLASH_RTN_T SPI_NAND_Flash_Enable_OnDie_ECC( void )
 {
-	unsigned char feature;
 	struct SPI_NAND_FLASH_INFO_T *ptr_dev_info_t;
+	SPI_NAND_FLASH_RTN_T rtn_status = SPI_NAND_FLASH_RTN_NO_ERROR;
 	u8 die_num;
 	int i;
 
@@ -5552,73 +5578,28 @@ SPI_NAND_FLASH_RTN_T SPI_NAND_Flash_Enable_OnDie_ECC( void )
 	if(((ptr_dev_info_t->feature) & SPI_NAND_FLASH_DIE_SELECT_1_HAVE)) {
 		die_num = (ptr_dev_info_t->device_size / ptr_dev_info_t->page_size) >> 16;
 
-		for(i = 0; i < die_num; i++) {
+		for(i = 0; i < die_num && rtn_status == SPI_NAND_FLASH_RTN_NO_ERROR; i++) {
 			spi_nand_protocol_die_select_1(i);
-
-			spi_nand_protocol_get_status_reg_2(&feature);
-			_SPI_NAND_DEBUG_PRINTF(SPI_NAND_FLASH_DEBUG_LEVEL_1, "before setting : SPI_NAND_Flash_Enable_OnDie_ECC, status reg = 0x%x\n", feature);
-			if (ECC_fcheck)
-				feature |= 0x10;
-			else
-				feature &= ~(1 << 4);
-			spi_nand_protocol_set_status_reg_2(feature);
-
-			/* Value check*/
-			spi_nand_protocol_get_status_reg_2(&feature);
-			_SPI_NAND_DEBUG_PRINTF(SPI_NAND_FLASH_DEBUG_LEVEL_1, "after setting : SPI_NAND_Flash_Enable_OnDie_ECC, status reg = 0x%x\n", feature);
+			rtn_status = spi_nand_set_ondie_ecc(_SPI_NAND_ADDR_FEATURE);
 		}
 	} else if(((ptr_dev_info_t->feature) & SPI_NAND_FLASH_DIE_SELECT_2_HAVE)) {
 		die_num = (ptr_dev_info_t->device_size / ptr_dev_info_t->page_size) >> 17;
 
-		for(i = 0; i < die_num; i++) {
+		for(i = 0; i < die_num && rtn_status == SPI_NAND_FLASH_RTN_NO_ERROR; i++) {
 			spi_nand_protocol_die_select_2(i);
-
-			spi_nand_protocol_get_status_reg_2(&feature);
-			_SPI_NAND_DEBUG_PRINTF(SPI_NAND_FLASH_DEBUG_LEVEL_1, "before setting : SPI_NAND_Flash_Enable_OnDie_ECC, status reg = 0x%x\n", feature);
-			if (ECC_fcheck)
-				feature |= 0x10;
-			else
-				feature &= ~(1 << 4);
-			spi_nand_protocol_set_status_reg_2(feature);
-
-			/* Value check*/
-			spi_nand_protocol_get_status_reg_2(&feature);
-			_SPI_NAND_DEBUG_PRINTF(SPI_NAND_FLASH_DEBUG_LEVEL_1, "after setting : SPI_NAND_Flash_Enable_OnDie_ECC, status reg = 0x%x\n", feature);
+			rtn_status = spi_nand_set_ondie_ecc(_SPI_NAND_ADDR_FEATURE);
 		}
 	} else {
 		if( ((ptr_dev_info_t->mfr_id) == _SPI_NAND_MANUFACTURER_ID_PN) ||
 			((ptr_dev_info_t->mfr_id) == _SPI_NAND_MANUFACTURER_ID_FM) ||
 			((ptr_dev_info_t->mfr_id) == _SPI_NAND_MANUFACTURER_ID_FORESEE) ||
 			(((ptr_dev_info_t->mfr_id) == _SPI_NAND_MANUFACTURER_ID_XTX) && ((ptr_dev_info_t->dev_id) == _SPI_NAND_DEVICE_ID_XT26G02B)) )
-		{
-			spi_nand_protocol_get_feature(_SPI_NAND_ADDR_ECC, &feature);
-			_SPI_NAND_DEBUG_PRINTF(SPI_NAND_FLASH_DEBUG_LEVEL_1, "before setting : SPI_NAND_Flash_Enable_OnDie_ECC, ecc reg = 0x%x\n", feature);
-			if (ECC_fcheck)
-				feature |= 0x10;
-			else
-				feature &= ~(1 << 4);
-			spi_nand_protocol_set_feature(_SPI_NAND_ADDR_ECC, feature);
-
-			/* Value check*/
-			spi_nand_protocol_get_feature(_SPI_NAND_ADDR_ECC, &feature);
-			_SPI_NAND_DEBUG_PRINTF(SPI_NAND_FLASH_DEBUG_LEVEL_1, "after setting : SPI_NAND_Flash_Enable_OnDie_ECC, ecc reg = 0x%x\n", feature);
-		}
+			rtn_status = spi_nand_set_ondie_ecc(_SPI_NAND_ADDR_ECC);
 		else
-		{
-			spi_nand_protocol_get_status_reg_2(&feature);
-			_SPI_NAND_DEBUG_PRINTF(SPI_NAND_FLASH_DEBUG_LEVEL_1, "before setting : SPI_NAND_Flash_Enable_OnDie_ECC, status reg = 0x%x\n", feature);
-			
-			if (ECC_fcheck)
-				feature |= 0x10;
-			else
-				feature &= ~(1 << 4);
-			spi_nand_protocol_set_status_reg_2(feature);
-
-			/* Value check*/
-			spi_nand_protocol_get_status_reg_2(&feature);
-			_SPI_NAND_DEBUG_PRINTF(SPI_NAND_FLASH_DEBUG_LEVEL_1, "after setting : SPI_NAND_Flash_Enable_OnDie_ECC, status reg = 0x%x\n", feature);
-		}
+			rtn_status = spi_nand_set_ondie_ecc(_SPI_NAND_ADDR_FEATURE);
 	}
+	if( rtn_status != SPI_NAND_FLASH_RTN_NO_ERROR )
+		return rtn_status;
 
 	if (ECC_fcheck)
 		_ondie_ecc_flag = 1;
