@@ -100,6 +100,14 @@ static int protection(const struct selftest *t, char *why, size_t n)
 	}
 	if (!t->sr_valid)
 		return 0;
+	if (t->sr_macronix) {
+		unsigned bp3 = (t->sr[0] >> 2) & 15;
+
+		if (bp3)
+			snprintf(why, n, "SR1 = 0x%02x: BP = %u%s", t->sr[0], bp3,
+				 t->sr[0] & 0x80 ? "; the register itself is locked (SRWD)" : "");
+		return bp3 != 0;
+	}
 	unsigned sr1 = t->sr[0], sr2 = t->sr[1] == 0xff ? 0 : t->sr[1];
 	unsigned bp = (sr1 >> 2) & 7, tb = (sr1 >> 5) & 1, cmp = (sr2 >> 6) & 1;
 	int on = cmp ? bp != 7 : bp != 0;	/* CMP turns the area round: BP 0 is all of it */

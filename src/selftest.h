@@ -19,6 +19,7 @@ struct selftest {
 	int kind;			/* FLASH_NOR, FLASH_NAND, FLASH_FIRMWARE */
 	int sr_valid;			/* SPI NOR: sr read */
 	unsigned char sr[3];
+	int sr_macronix;		/* only sr[0] counts: BP3-0 in bits 5-2, no TB, no CMP */
 	int lock;			/* SPI NAND: A0 when found, -1 */
 	const char *save_dir;		/* where the block goes if it does not come back; NULL: here */
 	char *out;			/* NULL, or the result lines are kept here too */

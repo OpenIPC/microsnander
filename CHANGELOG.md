@@ -4,6 +4,16 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.21.2 — 2026-11-04
+
+- Web mode and Android app: a Macronix SPI NOR shows its one status register with its own
+  bit names (SRWD, QE, BP3, BP2, BP1, BP0, WEL, WIP). What the reads of status registers 2 and
+  3 return on these chips is not shown as those registers any more.
+- `-i` prints one status register for Macronix chips, and `-t` reads their protection right:
+  BP3 counts, there is no TB and no CMP.
+- SPI NOR: `-u`, erases and writes clear CMP and SRP1 with the two-byte WRSR too, for the chips
+  that do not know WRSR2. Those chips failed with the register staying as it was.
+
 ## 1.21.1 — 2026-11-04
 
 - SPI NOR chips of Macronix with the ID `c2 20 xx` (MX25L4005A up to MX25L51245G) were taken

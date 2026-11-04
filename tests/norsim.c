@@ -305,6 +305,14 @@ int main(void)
 		snor_init();
 		sr = 0; sr2 = 0x02;
 		check(snor_clear_qe() == 0 && sr2 == 0 && sr == 0 && !wel, "a chip that does not know WRSR2: QE goes with the two-byte WRSR");
+		sr = 0; sr2 = 0x41;
+		check(snor_unprotect() == 0 && sr2 == 0 && !wel, "  CMP and SRP1 go with the two-byte WRSR too");
+		sr = 0x1c; sr2 = 0x42;
+		check(snor_unprotect() == 0 && sr == 0 && sr2 == 0x02 && !wel, "  and -u keeps QE that way");
+		chip(find("W25Q128BV"), QE_FIXED);
+		snor_init();
+		sr = 0; sr2 = 0x42;
+		check(snor_unprotect() == 0 && sr2 == 0x02, "  a chip that knows WRSR2 does not need it");
 		chip(find("XM25QH64A"), NO_SR23);
 		snor_init();
 		sr = 0; sr2 = 0;

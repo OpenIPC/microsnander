@@ -99,13 +99,15 @@ body:not(.ready) *{transition:none!important}
 <span class="rivet tl"></span><span class="rivet tr"></span><span class="rivet bl"></span><span class="rivet br"></span>
 <div class="top"><span class="plate">Status registers</span><span class="plate" id="srhex">&nbsp;</span></div>
 <div class="regs" id="regs"></div>
-<div class="note">Bit names as on most Winbond-type chips; other makers name some bits differently. Clear protection clears BP, SRP and CMP, as -u does, and keeps QE.</div>
+<div class="note" id="regnote">Bit names as on most Winbond-type chips; other makers name some bits differently. Clear protection clears BP, SRP and CMP, as -u does, and keeps QE.</div>
+<div class="note" id="regnote-mx" hidden>Macronix: one status register. Clear protection clears BP and SRWD, as -u does, and keeps QE.</div>
 <div class="regbtns"><button class="btn danger" id="b-unprotect">Clear protection<span class="ind"></span></button></div>
 </div>
 <div class="foot">MicroSNANDer &middot; OpenIPC &middot; GPL-2.0</div>
 <script>
 var bits=[['SRP0','SEC','TB','BP2','BP1','BP0','WEL','BUSY'],['SUS','CMP','LB3','LB2','LB1','R','QE','SRP1'],['HOLD','DRV1','DRV0','R','R','WPS','R','R']];
-var protect={SRP0:1,TB:1,BP2:1,BP1:1,BP0:1,CMP:1,SRP1:1,WPS:1};
+var bitsMx=[['SRWD','QE','BP3','BP2','BP1','BP0','WEL','WIP']];
+var protect={SRP0:1,TB:1,BP2:1,BP1:1,BP0:1,CMP:1,SRP1:1,WPS:1,SRWD:1,BP3:1};
 var ops=['detect','read','erase','write','registers','unprotect','selftest'],timer=null,lastOp='',busyLocal=false;
 var words={detect:'Detecting',read:'Reading',erase:'Erasing',write:'Writing',verify:'Verifying',registers:'Reading registers',unprotect:'Unprotecting',selftest:'Self-testing'};
 function $(i){return document.getElementById(i)}
@@ -138,9 +140,11 @@ function render(s){
  /* Erase and Write only on a chip found: nothing to confirm or to pick without one */
  ops.forEach(function(o){var b=$('b-'+o);b.disabled=!!s.busy||((o==='erase'||o==='write'||o==='selftest')&&!s.chip);b.classList.toggle('engaged',!!s.busy&&(s.op===o))});
  if(s.sr){
-  $('regpanel').hidden=false;$('srhex').textContent='SR '+s.sr.map(hex).join(' ');
+  var sr=s.sr_macronix?s.sr.slice(0,1):s.sr,names=s.sr_macronix?bitsMx:bits;
+  $('regnote').hidden=!!s.sr_macronix;$('regnote-mx').hidden=!s.sr_macronix;
+  $('regpanel').hidden=false;$('srhex').textContent='SR '+sr.map(hex).join(' ');
   var h='';
-  s.sr.forEach(function(v,i){h+='<div class="name">SR'+(i+1)+'</div>';bits[i].forEach(function(n,k){var on=(v>>(7-k))&1;h+='<div class="bit"><span class="bulb'+(on?(protect[n]?' on':' ok'):'')+'"></span>'+n+'</div>'})});
+  sr.forEach(function(v,i){h+='<div class="name">SR'+(i+1)+'</div>';names[i].forEach(function(n,k){var on=(v>>(7-k))&1;h+='<div class="bit"><span class="bulb'+(on?(protect[n]?' on':' ok'):'')+'"></span>'+n+'</div>'})});
   $('regs').innerHTML=h;
  }else if(!s.busy&&['detect','registers','unprotect'].indexOf(s.op)>=0)$('regpanel').hidden=true;
  if(!s.busy&&lastOp==='read'&&s.op==='read'&&s.ok&&s.file){lastOp='';location.href=base+'/dumps/'+encodeURIComponent(s.file)}

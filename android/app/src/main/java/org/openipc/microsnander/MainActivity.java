@@ -73,7 +73,8 @@ public class MainActivity extends Activity {
         {"SUS", "CMP", "LB3", "LB2", "LB1", "R", "QE", "SRP1"},
         {"HOLD", "DRV1", "DRV0", "R", "R", "WPS", "R", "R"},
     };
-    private static final String PROTECTION = " SRP0 TB BP2 BP1 BP0 CMP SRP1 WPS ";
+    private static final String[] BITS_MACRONIX = {"SRWD", "QE", "BP3", "BP2", "BP1", "BP0", "WEL", "WIP"};
+    private static final String PROTECTION = " SRP0 TB BP2 BP1 BP0 CMP SRP1 WPS SRWD BP3 ";
 
     // ---- the process-wide state of the operations (UI thread) ----
     private static final ExecutorService WORKER = Executors.newSingleThreadExecutor();
@@ -89,6 +90,7 @@ public class MainActivity extends Activity {
 
     private UsbManager usb;
     private TextView state, meta, regsTitle;
+    private TextView regsNote;
     private ProgressBar bar;
     private GridLayout regs;
     private View regsPanel;
@@ -107,6 +109,7 @@ public class MainActivity extends Activity {
         regs = findViewById(R.id.regs);
         regsPanel = findViewById(R.id.regs_panel);
         regsTitle = findViewById(R.id.regs_title);
+        regsNote = findViewById(R.id.regs_note);
         saveAs = findViewById(R.id.b_save_as);
         share = findViewById(R.id.b_share);
         ((TextView) findViewById(R.id.version)).setText(getString(R.string.version, BuildConfig.VERSION_NAME));
@@ -699,9 +702,12 @@ public class MainActivity extends Activity {
             return;
         }
         regsPanel.setVisibility(View.VISIBLE);
-        regsTitle.setText(getString(R.string.registers_hex, (sr >> 16) & 0xff, (sr >> 8) & 0xff, sr & 0xff));
+        boolean macronix = ((sr >> 24) & 1) != 0;
+        regsTitle.setText(macronix ? getString(R.string.registers_hex_1, (sr >> 16) & 0xff)
+                : getString(R.string.registers_hex, (sr >> 16) & 0xff, (sr >> 8) & 0xff, sr & 0xff));
+        regsNote.setText(macronix ? R.string.registers_note_macronix : R.string.registers_note);
         regs.removeAllViews();
-        for (int r = 0; r < 3; r++) {
+        for (int r = 0; r < (macronix ? 1 : 3); r++) {
             int v = (sr >> (16 - 8 * r)) & 0xff;
             TextView name = new TextView(this);
             name.setText(getString(R.string.sr_n, r + 1));
@@ -710,7 +716,7 @@ public class MainActivity extends Activity {
             for (int k = 0; k < 8; k++) {
                 TextView b = new TextView(this);
                 boolean on = ((v >> (7 - k)) & 1) != 0;
-                String n = BITS[r][k];
+                String n = macronix ? BITS_MACRONIX[k] : BITS[r][k];
                 b.setText(n);
                 b.setGravity(Gravity.CENTER);
                 b.setTextSize(11);

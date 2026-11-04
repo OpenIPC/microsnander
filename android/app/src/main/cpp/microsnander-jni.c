@@ -37,7 +37,7 @@ static jobject result(JNIEnv *env, int ok, const char *msg, const struct ms_chip
 	jclass k = (*env)->FindClass(env, "org/openipc/microsnander/Native$Result");
 	jmethodID init = (*env)->GetMethodID(env, k, "<init>",
 		"(ZLjava/lang/String;Ljava/lang/String;Ljava/lang/String;JILjava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
-	int sr = c->sr_valid ? (c->sr[0] << 16) | (c->sr[1] << 8) | c->sr[2] : -1;
+	int sr = c->sr_valid ? (c->sr_macronix << 24) | (c->sr[0] << 16) | (c->sr[1] << 8) | c->sr[2] : -1;
 
 	return (*env)->NewObject(env, k, init, (jboolean)ok, (*env)->NewStringUTF(env, msg),
 				 (*env)->NewStringUTF(env, c->programmer), (*env)->NewStringUTF(env, c->chip),
