@@ -41,6 +41,7 @@ static long fail_cache = -1;		/* the USB transfer fails when this page is read f
 static int fail_feature = -1;		/* the USB transfer of a read of this feature register fails */
 static int fail_after_program;		/* status reads fail from the next program execute on */
 static int fail_set_feature;		/* CS high fails after a write of a feature register */
+static int fail_load;			/* the USB transfer of the page data of a program load fails */
 
 static int in(const long *set, long v) { for (int i = 0; i < MAXBAD; i++) if (set[i] == v) return 1; return 0; }
 static unsigned long row(void) { return ((cmd[1] << 16) | (cmd[2] << 8) | cmd[3]) % PAGES; }
@@ -52,6 +53,8 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Chip_Select_Low(void) { ncmd = nread = 0; re
 SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Write_NByte(u8 *d, u32 len, SPI_CONTROLLER_SPEED_T speed)
 {
 	(void)speed;
+	if (fail_load && len > 4 && (cmd[0] == 0x02 || cmd[0] == 0x32 || cmd[0] == 0x84 || cmd[0] == 0x34))
+		return SPI_CONTROLLER_RTN_WRITE_DATAPFIFO_ERROR;
 	for (u32 i = 0; i < len; i++) {
 		if (ncmd < 3 || (cmd[0] != 0x02 && cmd[0] != 0x32 && cmd[0] != 0x84 && cmd[0] != 0x34)) {
 			if (ncmd < sizeof(cmd)) cmd[ncmd] = d[i];
@@ -469,6 +472,18 @@ int main(void)
 	memset(page(662), 0x5a, PAGE + OOB);
 	check(snand_read(got, 662L * PAGE, PAGE) == PAGE && got[0] == 0x5a && got[PAGE - 1] == 0x5a,
 	      "  the next read brings the chip's data, not the buffer's");
+
+	/* page data that did not reach the chip is not programmed */
+	memset(page(663), 0xff, PAGE + OOB);
+	fill(buf, 1, 24);
+	nprog = 0;
+	fail_load = 1;
+	check(snand_write(buf, 663L * PAGE, PAGE) < 0, "write fails when the USB transfer of the page data fails");
+	fail_load = 0;
+	check(nprog == 0, "  and the chip is not told to program");
+	check(!(feat[0xc0] & 0x02), "  and the write enable latch is cleared");
+	memset(page(663), 0x5a, PAGE + OOB);
+	check(snand_read(got, 663L * PAGE, PAGE) == PAGE && got[0] == 0x5a, "  the next read brings the chip's data");
 
 	/* the ECC setup of the detection: a chip it could not set is not reported as ready */
 	fail_feature = 0xb0;

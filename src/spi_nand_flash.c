@@ -3358,13 +3358,15 @@ static SPI_NAND_FLASH_RTN_T spi_nand_protocol_program_load ( u32 addr, u8 *ptr_d
 {
 	struct SPI_NAND_FLASH_INFO_T *ptr_dev_info_t;
 	SPI_NAND_FLASH_RTN_T rtn_status = SPI_NAND_FLASH_RTN_NO_ERROR;
+	SPI_CONTROLLER_RTN_T ret = SPI_CONTROLLER_RTN_NO_ERROR;
 
 	ptr_dev_info_t = _SPI_NAND_GET_DEVICE_INFO_PTR;
 
 	_SPI_NAND_DEBUG_PRINTF(SPI_NAND_FLASH_DEBUG_LEVEL_1, "spi_nand_protocol_program_load: addr = 0xl%x, len = 0x%x\n", addr, len );
 
 	/* 1. Chip Select low */
-	_SPI_NAND_READ_CHIP_SELECT_LOW();
+	if( _SPI_NAND_READ_CHIP_SELECT_LOW() != SPI_CONTROLLER_RTN_NO_ERROR )
+		rtn_status = SPI_NAND_FLASH_RTN_IO_ERROR;
 #if 0
 	/* 2. Send opcode */
 	switch (write_mode)
@@ -3401,19 +3403,23 @@ static SPI_NAND_FLASH_RTN_T spi_nand_protocol_program_load ( u32 addr, u8 *ptr_d
 	switch (write_mode)
 	{
 		case SPI_NAND_FLASH_WRITE_SPEED_MODE_SINGLE:
-			_SPI_NAND_WRITE_NBYTE( ptr_data, len, SPI_CONTROLLER_SPEED_SINGLE);
+			ret = _SPI_NAND_WRITE_NBYTE( ptr_data, len, SPI_CONTROLLER_SPEED_SINGLE);
 			break;
 
 		case SPI_NAND_FLASH_WRITE_SPEED_MODE_QUAD:
-			_SPI_NAND_WRITE_NBYTE( ptr_data, len, SPI_CONTROLLER_SPEED_QUAD);
+			ret = _SPI_NAND_WRITE_NBYTE( ptr_data, len, SPI_CONTROLLER_SPEED_QUAD);
 			break;
 
 		default:
 			break;
 	}
+	/* a page is too long to be held: this is the only place its failure shows */
+	if( ret != SPI_CONTROLLER_RTN_NO_ERROR )
+		rtn_status = SPI_NAND_FLASH_RTN_IO_ERROR;
 	
 	/* 5. Chip Select High */
-	_SPI_NAND_READ_CHIP_SELECT_HIGH();
+	if( _SPI_NAND_READ_CHIP_SELECT_HIGH() != SPI_CONTROLLER_RTN_NO_ERROR )
+		rtn_status = SPI_NAND_FLASH_RTN_IO_ERROR;
 	
 	return (rtn_status);
 }
@@ -4329,9 +4335,7 @@ static SPI_NAND_FLASH_RTN_T spi_nand_write_page( u32 page_number, u32 data_offse
 			((ptr_dev_info_t->mfr_id) == _SPI_NAND_MANUFACTURER_ID_ATO_2) ||
 			(((ptr_dev_info_t->mfr_id) == _SPI_NAND_MANUFACTURER_ID_ATO) && ((ptr_dev_info_t->dev_id) == _SPI_NAND_DEVICE_ID_ATO25D2GA)))
 		{
-			{
-				spi_nand_protocol_program_load(write_addr, &_current_cache_page[0], ((ptr_dev_info_t->page_size) + (ptr_dev_info_t->oob_size)), speed_mode);
-			}
+			rtn_status = spi_nand_protocol_program_load(write_addr, &_current_cache_page[0], ((ptr_dev_info_t->page_size) + (ptr_dev_info_t->oob_size)), speed_mode);
 
 			/* Enable write_to flash */
 			spi_nand_protocol_write_enable();
@@ -4341,10 +4345,16 @@ static SPI_NAND_FLASH_RTN_T spi_nand_write_page( u32 page_number, u32 data_offse
 			/* Enable write_to flash */
 			spi_nand_protocol_write_enable();
 
-			{
-				/* Proram data into buffer of SPI NAND chip */
-				spi_nand_protocol_program_load(write_addr, &_current_cache_page[0], ((ptr_dev_info_t->page_size) + (ptr_dev_info_t->oob_size)), speed_mode);
-			}
+			/* Proram data into buffer of SPI NAND chip */
+			rtn_status = spi_nand_protocol_program_load(write_addr, &_current_cache_page[0], ((ptr_dev_info_t->page_size) + (ptr_dev_info_t->oob_size)), speed_mode);
+		}
+
+		/* the chip's cache does not hold the page: nothing to program */
+		if( rtn_status != SPI_NAND_FLASH_RTN_NO_ERROR ) {
+			_SPI_NAND_PRINTF("\nPage program 0x%x: the USB transfer failed\n", page_number);
+			spi_nand_protocol_write_disable();
+			SPI_NAND_Flash_Clear_Read_Cache_Data();
+			return rtn_status;
 		}
 
 		/* Execute program data into SPI NAND chip  */
