@@ -36,6 +36,7 @@
 #include <time.h>
 #include "types.h"
 #include "spi_nand_flash.h"
+#include "snorcmd_api.h"
 #include "spi_controller.h"
 #include "nandcmd_api.h"
 #include "timer.h"
@@ -5141,6 +5142,44 @@ static SPI_NAND_FLASH_RTN_T spi_nand_compare( const struct SPI_NAND_FLASH_INFO_T
  *
  *------------------------------------------------------------------------------------
  */
+/* A table entry with a 2-byte ID also matches a SPI NOR chip that starts with those
+   bytes (MX35LF2G14AC, c2 20; the MX25L chips, c2 20 xx). The third byte tells them
+   apart when the whole ID is in the NOR table. Any other chip: a SPI NAND has reserved
+   bits that read 0, a SPI NOR does not answer the feature read and all of them read
+   0xff. Nothing is written to the chip here. */
+static int spi_nand_is_nor( const struct SPI_NAND_FLASH_INFO_T *ptr_id )
+{
+	const unsigned char nor_id[3] = { ptr_id->mfr_id, ptr_id->dev_id, ptr_id->dev_id_2 };
+	static const u8 addrs[] = { _SPI_NAND_ADDR_PROTECTION, _SPI_NAND_ADDR_FEATURE, _SPI_NAND_ADDR_STATUS };
+	unsigned long size, sector;
+	int addr4b, all_ff = 1;
+	u32 i;
+
+	for ( i = 0; i < (sizeof(spi_nand_flash_tables)/sizeof(struct SPI_NAND_FLASH_INFO_T)); i++)
+	{
+		if ( spi_nand_compare( ptr_id, &spi_nand_flash_tables[i] ) != SPI_NAND_FLASH_RTN_NO_ERROR )
+			continue;
+		if ( spi_nand_flash_tables[i].dev_id_2 == 0 && snor_lookup(nor_id, &size, &sector, &addr4b) )
+		{
+			_SPI_NAND_PRINTF("ID %02x %02x %02x is a SPI NOR chip, not %s.\n", nor_id[0], nor_id[1], nor_id[2],
+					 spi_nand_flash_tables[i].ptr_name);
+			return 1;
+		}
+		break;
+	}
+
+	for ( i = 0; i < sizeof(addrs); i++)
+	{
+		u8 feature = 0;
+
+		if ( spi_nand_protocol_get_feature(addrs[i], &feature) != SPI_NAND_FLASH_RTN_NO_ERROR || feature != 0xff )
+			all_ff = 0;
+	}
+	if ( all_ff )
+		_SPI_NAND_PRINTF("The feature registers read 0xff: this is not a SPI NAND chip.\n");
+	return all_ff;
+}
+
 static SPI_NAND_FLASH_RTN_T spi_nand_probe( struct SPI_NAND_FLASH_INFO_T *ptr_rtn_device_t )
 {
 	u32 i = 0;
@@ -5247,6 +5286,10 @@ static SPI_NAND_FLASH_RTN_T spi_nand_probe( struct SPI_NAND_FLASH_INFO_T *ptr_rt
 		_SPI_NAND_PRINTF("spi_nand_probe: mfr_id = 0x%x, dev_id = 0x%x, dev_id_2 = 0x%x\n",
 				 ptr_rtn_device_t->mfr_id, ptr_rtn_device_t->dev_id, ptr_rtn_device_t->dev_id_2);
 	}
+
+	/* before anything is written to the chip */
+	if( rtn_status == SPI_NAND_FLASH_RTN_NO_ERROR && spi_nand_is_nor(ptr_rtn_device_t) )
+		return SPI_NAND_FLASH_RTN_PROBE_ERROR;
 
 	if(rtn_status == SPI_NAND_FLASH_RTN_NO_ERROR)
 	{
