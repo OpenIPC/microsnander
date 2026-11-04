@@ -46,6 +46,8 @@
     <string name="no_picker_save">This device has no file picker: the dump is in Downloads, or use Share.</string>
     <string name="status_registers">STATUS REGISTERS</string>
     <string name="registers_hex">SR %1$02X %2$02X %3$02X</string>
+    <string name="registers_hex_1">SR %1$02X</string>
     <string name="sr_n">SR%1$d</string>
+    <string name="registers_note_macronix">Macronix: one status register. Amber: a protection bit. Clear protection clears BP and SRWD, as -u does, and keeps QE.</string>
     <string name="registers_note">Bit names as on most Winbond-type chips. Amber: a protection bit. Clear protection clears BP, SRP and CMP, as -u does, and keeps QE.</string>
 </resources>

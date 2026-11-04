@@ -15,6 +15,13 @@
 #include "../src/voltage.c"
 const char *flash_chip_name;
 
+/* the part of the NOR table that shares its first bytes with a SPI NAND entry */
+const char *snor_lookup(const unsigned char i[3], unsigned long *size, unsigned long *sector, int *addr4b)
+{
+	(void)size; (void)sector; (void)addr4b;
+	return i[0] == 0xc2 && i[1] == 0x20 && i[2] >= 0x13 && i[2] <= 0x1a ? "MX25L" : NULL;
+}
+
 int snand_read(unsigned char *buf, unsigned long from, unsigned long len);
 int snand_write(unsigned char *buf, unsigned long to, unsigned long len);
 long snand_init(void);
@@ -42,6 +49,8 @@ static int fail_feature = -1;		/* the USB transfer of a read of this feature reg
 static int fail_after_program;		/* status reads fail from the next program execute on */
 static int fail_set_feature;		/* CS high fails after a write of a feature register */
 static int fail_load;			/* the USB transfer of the page data of a program load fails */
+static int nor_chip;			/* a SPI NOR: no answer to the feature read, 0xff */
+static unsigned int nset;		/* writes of a feature register (0x1f) */
 
 static int in(const long *set, long v) { for (int i = 0; i < MAXBAD; i++) if (set[i] == v) return 1; return 0; }
 static unsigned long row(void) { return ((cmd[1] << 16) | (cmd[2] << 8) | cmd[3]) % PAGES; }
@@ -87,7 +96,7 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Read_NByte(u8 *d, u32 len, SPI_CONTROLLER_SP
 			d[i] = (ncmd == 1 && nread == 0) || k >= 3 ? 0 : id[k];
 			break;
 		}
-		case 0x0f: d[i] = feat[cmd[1]] | (stuck_busy && cmd[1] == 0xc0 ? 0x01 : 0); break;
+		case 0x0f: d[i] = nor_chip ? 0xff : feat[cmd[1]] | (stuck_busy && cmd[1] == 0xc0 ? 0x01 : 0); break;
 		case 0x03: case 0x0b: case 0x3b: case 0x6b: {
 			unsigned int c = col() + nread;
 			d[i] = c < sizeof(cache) ? cache[c] : 0xff;
@@ -109,7 +118,7 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Chip_Select_High(void)
 	switch (cmd[0]) {
 	case 0x03: case 0x0b: case 0x3b: case 0x6b: col_hi_read = cmd[1]; break;
 	case 0x02: case 0x32: case 0x84: case 0x34: col_hi_load = cmd[1]; break;
-	case 0x1f: feat[cmd[1]] = cmd[2]; break;
+	case 0x1f: feat[cmd[1]] = cmd[2]; nset++; break;
 	case 0x06: feat[0xc0] |= 0x02; break;
 	case 0x04: feat[0xc0] &= ~0x02; break;
 	case 0x13:				/* page read: ECC result in status bits 5:4 */
@@ -484,6 +493,27 @@ int main(void)
 	check(!(feat[0xc0] & 0x02), "  and the write enable latch is cleared");
 	memset(page(663), 0x5a, PAGE + OOB);
 	check(snand_read(got, 663L * PAGE, PAGE) == PAGE && got[0] == 0x5a, "  the next read brings the chip's data");
+
+	/* a SPI NOR that shares the first ID bytes with a SPI NAND entry is left alone */
+	for (int third = 0x13; third <= 0x1a; third++) {
+		chip(0xc2, 0x20, third);
+		nor_chip = 1;
+		nset = 0;
+		if (snand_init() > 0 || nset) { check(0, "MX25L c2 20 xx is not a SPI NAND"); break; }
+		if (third == 0x1a) check(1, "MX25L c2 20 13..1a: not a SPI NAND, no feature written");
+	}
+	chip(0xc2, 0x20, 0x18);
+	nor_chip = 0;
+	check(snand_init() <= 0, "  by the NOR table alone, the registers answering");
+	chip(0xc2, 0x20, 0x00);
+	check(snand_init() == 256L << 20, "MX35LF2G14AC with its own third byte is still found");
+	chip(0xef, 0xaa, 0x21);
+	nor_chip = 1;
+	nset = 0;
+	check(snand_init() <= 0 && !nset, "feature registers all 0xff: not a SPI NAND, whatever the ID");
+	nor_chip = 0;
+	feat[0xa0] = 0xff; feat[0xb0] = 0xff; feat[0xc0] = 0x00;
+	check(snand_init() > 0, "  one register that is not 0xff is enough");
 
 	/* the ECC setup of the detection: a chip it could not set is not reported as ready */
 	fail_feature = 0xb0;

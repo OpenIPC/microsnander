@@ -66,6 +66,7 @@ static struct {
 	char warning[320];
 	int sr_valid;
 	unsigned char sr[3];
+	int sr_macronix;
 	char file[160];
 } st = { .lock = PTHREAD_MUTEX_INITIALIZER, .ok = -1 };
 
@@ -127,6 +128,7 @@ static void keep_chip(const struct ms_chip *c, int registers_op)
 	if (registers_op || c->sr_valid) {
 		st.sr_valid = c->sr_valid;
 		memcpy(st.sr, c->sr, 3);
+		st.sr_macronix = c->sr_macronix;
 	}
 	pthread_mutex_unlock(&st.lock);
 }
@@ -356,11 +358,11 @@ static void reply_state(int fd)
 	int n = snprintf(body, sizeof(body),
 			 "{\"busy\":%d,\"op\":\"%s\",\"ok\":%s,\"phase\":\"%s\",\"done\":%llu,\"total\":%llu,"
 			 "\"message\":\"%s\",\"programmer\":\"%s\",\"chip\":\"%s\",\"size\":%lld,\"voltage\":\"%s\","
-			 "\"warning\":\"%s\",\"sr\":%s,\"file\":\"%s\","
+			 "\"warning\":\"%s\",\"sr\":%s,\"sr_macronix\":%s,\"file\":\"%s\","
 			 "\"seq\":%u,\"version\":\"%s\"}",
 			 st.busy, op_names[st.op], st.ok < 0 ? "null" : st.ok ? "true" : "false", st.phase,
 			 st.done, st.total, msg, prg, chip, st.size, st.chip[0] ? ms_voltage_name(st.voltage) : "",
-			 warn, sr, file, st.seq, ms_version);
+			 warn, sr, st.sr_valid && st.sr_macronix ? "true" : "false", file, st.seq, ms_version);
 	pthread_mutex_unlock(&st.lock);
 	reply(fd, "200 OK", "application/json", NULL, body, n);
 }

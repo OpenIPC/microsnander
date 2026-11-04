@@ -85,6 +85,9 @@ t 0 "-t on a good chip"               $B -t
 $B -t | grep -q '^Self-test: OK' && cmp -s chip.img before.img && $B -t | grep -q 'block 0x0 + 0x1000' && echo "ok     the first block, OK, and the chip is as it was" || { echo "FAIL -t OK"; fail=1; }
 $B -t -a 0x8123 | grep -q 'block 0x8000 + 0x1000' && echo "ok     -a 0x8123: the block at 0x8000" || { echo "FAIL -t -a"; fail=1; }
 t 2 "-t, protected by BP bits"        MS_SR=1c0000 MS_PROTECT=1 $B -t
+t 2 "-t Macronix, BP3 alone protects" MS_MACRONIX=1 MS_SR=20ff07 MS_PROTECT=1 $B -t
+MS_MACRONIX=1 MS_SR=20ff07 $B -t | grep -q 'SR1 = 0x20: BP = 8' && echo "ok     -t Macronix names BP3" || { echo "FAIL -t Macronix BP3"; fail=1; }
+MS_MACRONIX=1 MS_SR=40ff07 $B -t | grep -q 'PROTECTED' && { echo "FAIL -t Macronix QE taken for protection"; fail=1; } || echo "ok     -t Macronix: QE is not a protection, ff and 07 are not read as registers"
 cp before.img chip.img; MS_SR=1c0000 $B -t | grep -q 'PROTECTED, the registers protect part.*-u' && MS_SR=1c0000 $B -t | grep -q 'BP = 7, TB = 0' && cmp -s chip.img before.img && echo "ok     says PROTECTED, the bits and -u, and erases nothing" || { echo "FAIL -t protected"; fail=1; }
 t 2 "-t, nothing changes, no bits set" MS_PROTECT=1 $B -t
 MS_PROTECT=1 $B -t | grep -q 'no register bit says so' && echo "ok     a block that keeps its data with no bit set: told apart" || { echo "FAIL -t hidden protection"; fail=1; }
@@ -108,6 +111,14 @@ t 1 "-i chip not found"               MS_CHIP=none $B -i
 t 0 "-u NOR"                          $B -u
 t 1 "-u NOR fails"                    MS_FAIL=unprotect $B -u
 t 1 "-u NAND: not supported, no crash" MS_CHIP=nand $B -u
+t 0 "-uu NOR"                         $B -uu
+t 0 "-u -u NOR"                       $B -u -u
+t 1 "-uu NOR fails"                   MS_FAIL=qe $B -uu
+t 1 "-uu NAND: not supported, no crash" MS_CHIP=nand $B -uu
+t 1 "-uuu is an error"                $B -uuu
+t 1 "conflict -uu -i"                 $B -uu -i
+$B -u | grep -q 'clear QE' && { echo "FAIL -u clears QE"; fail=1; } || echo "ok     -u leaves QE"
+$B -uu | grep -q 'clear QE' && echo "ok     -uu clears QE" || { echo "FAIL -uu without QE"; fail=1; }
 t 0 "-e full"                         $B -e
 t 1 "-e fails"                        MS_FAIL=erase $B -e
 t 1 "-e len not block multiple"       $B -e -a 0 -l 100

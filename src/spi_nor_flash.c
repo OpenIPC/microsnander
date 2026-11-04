@@ -94,8 +94,8 @@
 #define SR2_SUS				0x80
 
 #define SR3_WPS				4
-#define SR3_DRV0			8
-#define SR3_DRV1			0x10
+#define SR3_DRV0			0x20
+#define SR3_DRV1			0x40
 #define SR3_HOLD			0x80
 
 #define snor_dbg(args...)
@@ -141,6 +141,13 @@ static int snor_is_sst26(void)
 
 int snor_block_locks(void) { return snor_is_sst26(); }	/* see snorcmd_api.h */
 
+static int snor_is_macronix(void)
+{
+	return spi_chip_info->id == 0xc2;
+}
+
+int snor_sr1_macronix(void) { return snor_is_macronix(); }	/* see snorcmd_api.h */
+
 /*
  * Set write enable latch with Write Enable command.
  * Returns negative if error occurred.
@@ -175,6 +182,27 @@ static int snor_unprotect_write(u8 opcode, u8 *val)
 	return ret;
 }
 
+/* The write of registers 1 and 2 with one command: the only way for the chips
+   that do not know WRSR2, as the older Winbond parts. */
+static int snor_write_sr12(u8 sr1, u8 sr2)
+{
+	u8 d[2] = { sr1, sr2 };
+	int ret;
+
+	if (snor_wait_ready(1))
+		return -1;
+	snor_write_enable();
+	SPI_CONTROLLER_Chip_Select_Low();
+	SPI_CONTROLLER_Write_One_Byte(OPCODE_WRSR);
+	ret = SPI_CONTROLLER_Write_NByte(d, 2, SPI_CONTROLLER_SPEED_SINGLE);
+	if (SPI_CONTROLLER_Chip_Select_High())
+		ret = -1;
+	if (snor_wait_busy())
+		ret = -1;
+	snor_write_disable();
+	return ret ? -1 : 0;
+}
+
 /*
  * Set all sectors (global) unprotected if they are protected.
  * Returns negative if error occurred.
@@ -187,7 +215,8 @@ char snor_unprotect_why[200];
 static int unprotect(int all)
 {
 	u8 sr = 0;
-	const u8 sr1_mask = all ? SR1_PROTECT : (SR_BP0 | SR_BP1 | SR_BP2);
+	/* Macronix: BP3 in bit 5 */
+	const u8 sr1_mask = (all ? SR1_PROTECT : (SR_BP0 | SR_BP1 | SR_BP2)) | (snor_is_macronix() ? 0x20 : 0);
 	const u8 sr2_mask = all ? (SR2_SRP1 | SR2_CMP) : SR2_CMP;
 
 	snor_unprotect_why[0] = 0;
@@ -232,8 +261,10 @@ static int unprotect(int all)
 		}
 	}
 
-	/* SST25-type chips have one status register (BP3 and BPL in it) */
-	if (snor_is_sst25_aai())
+	/* SST25-type chips have one status register (BP3 and BPL in it). On Macronix
+	   chips 0x35 and 0x15 read something else, or nothing: bits there are not CMP,
+	   SRP1 or WPS (MX25L12805D reads ff and 07), and they take no such write. */
+	if (snor_is_sst25_aai() || snor_is_macronix())
 		return 0;
 
 	/* Status registers 2 and 3: a chip without them leaves MISO high and
@@ -252,6 +283,13 @@ static int unprotect(int all)
 		sr &= ~sr2_mask;
 		if (snor_unprotect_write(OPCODE_WRSR2, &sr) || snor_read_sr(OPCODE_RDSR2, &sr) < 0)
 			return -1;
+		if (sr & sr2_mask) {		/* no WRSR2 on this chip, perhaps */
+			u8 sr1 = 0;
+
+			if (snor_read_sr(OPCODE_RDSR, &sr1) < 0 || snor_write_sr12(sr1, sr & ~sr2_mask) ||
+			    snor_read_sr(OPCODE_RDSR2, &sr) < 0)
+				return -1;
+		}
 		if (sr & sr2_mask) {
 			snprintf(snor_unprotect_why, sizeof(snor_unprotect_why),
 				 "status register 2 stays 0x%02x (was 0x%02x): %s", sr, was,
@@ -283,6 +321,70 @@ static int unprotect(int all)
 }
 
 int snor_unprotect(void) { return unprotect(1); }
+
+/* the write of a status register that clears QE, and the read back; 1: it stays */
+static int snor_clear_qe_bit(u8 wr, u8 rd, u8 *sr, u8 qe)
+{
+	*sr &= ~qe;
+	if (snor_unprotect_write(wr, sr) || snor_read_sr(rd, sr) < 0)
+		return -1;
+	return (*sr & qe) != 0;
+}
+
+/*
+ * -uu: the protection as -u, then QE. It protects nothing, but with it set the
+ * WP# and HOLD# pins are data lines. QE is bit 6 of status register 1 on
+ * Macronix chips and bit 1 of status register 2 on the others; a chip without
+ * that register or bit has nothing to clear. Returns as snor_unprotect().
+ */
+int snor_clear_qe(void)
+{
+	const int macronix = snor_is_macronix();
+	const u8 rd = macronix ? OPCODE_RDSR : OPCODE_RDSR2;
+	const u8 wr = macronix ? OPCODE_WRSR : OPCODE_WRSR2;
+	const u8 qe = macronix ? 0x40 : SR2_QE;
+	u8 sr = 0;
+	int ret = unprotect(1);
+
+	if (ret)
+		return ret;
+	if (snor_is_sst25_aai() || snor_is_sst26()) {
+		printf("QE: this chip has no QE bit in its status registers.\n");
+		return 0;
+	}
+	if (snor_read_sr(rd, &sr) < 0) {
+		printf("%s: read_sr fail: %x\n", __func__, sr);
+		return -1;
+	}
+	if (!macronix && sr == 0xff) {		/* no status register 2, as in unprotect() */
+		printf("QE: this chip has no status register 2.\n");
+		return 0;
+	}
+	if (!(sr & qe)) {
+		printf("QE: already clear.\n");
+		return 0;
+	}
+	ret = snor_clear_qe_bit(wr, rd, &sr, qe);
+	if (ret < 0)
+		return -1;
+	if (ret && !macronix) {
+		u8 sr1 = 0;
+
+		if (snor_read_sr(OPCODE_RDSR, &sr1) < 0 || snor_write_sr12(sr1, sr & ~qe) ||
+		    snor_read_sr(rd, &sr) < 0)
+			return -1;
+		ret = (sr & qe) != 0;
+	}
+	if (ret) {
+		snprintf(snor_unprotect_why, sizeof(snor_unprotect_why),
+			 "QE stays set (status register 0x%02x): the chip does not take the write, "
+			 "or its QE is fixed at the factory", sr);
+		printf("Unprotect: %s.\n", snor_unprotect_why);
+		return -2;
+	}
+	printf("QE: cleared. A board that reads this chip in quad mode may not boot until QE is set again.\n");
+	return 0;
+}
 
 /*
  * Read the status register until the write in progress bit is clear: the
@@ -862,6 +964,11 @@ struct chip_info *chip_prob(void)
 			if ((info->jedec_id == jedec) || ((info->jedec_id & 0xffff0000) == jedec_strip)) {
 				u8 sr,sr2,sr3=0;
 				snor_read_sr(OPCODE_RDSR, &sr);
+
+				if (info->id == 0xc2) {	/* Macronix: one status register */
+					printf("Detected SPI NOR Flash: %s, Flash Size: %ld MB, SR: [%02x]\n", info->name, (info->sector_size * info->n_sectors) >> 20, sr);
+					return info;
+				}
 				snor_read_sr(OPCODE_RDSR2, &sr2);
 				snor_read_sr(OPCODE_RDSR3, &sr3);
 

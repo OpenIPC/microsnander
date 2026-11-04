@@ -121,6 +121,7 @@ static void chip_close(void)
 static int read_registers(struct ms_chip *c)
 {
 	c->sr_valid = prog.flash_unprotect && programmer->send && !snor_read_status(c->sr);
+	c->sr_macronix = c->sr_valid && snor_sr1_macronix();
 	return c->sr_valid ? 0 : -1;
 }
 
@@ -313,6 +314,7 @@ int ms_selftest(struct ms_chip *c, const char *save_dir, char *saved, size_t sav
 	if (prog.kind == FLASH_NOR && programmer->send) {
 		t.sr_valid = c->sr_valid;
 		memcpy(t.sr, c->sr, 3);
+		t.sr_macronix = c->sr_macronix;
 		t.block_locks = snor_block_locks();
 	}
 	t.save_dir = save_dir;

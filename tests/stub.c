@@ -13,6 +13,7 @@ static int r(unsigned char *b, unsigned long f, unsigned long l) { if (!strcmp(e
 static int w(unsigned char *b, unsigned long t, unsigned long l) { if (*env("MS_PROTECT")) return l; if (!strcmp(env("MS_FAIL"),"write")) return -1; if (!strcmp(env("MS_FAIL"),"partial")) { memcpy(chip + t, b, l / 2); return l / 2; } memcpy(chip + t, b, l); if (*env("MS_CORRUPT")) chip[t + atol(env("MS_CORRUPT"))] ^= 0x5a; return l; }
 static int e(unsigned long o, unsigned long l) { if (*env("MS_PROTECT")) return 0; if (!strcmp(env("MS_FAIL"),"erase")) return -2; memset(chip + o, 0xff, l); return 0; }
 static int u(void) { return strcmp(env("MS_FAIL"),"unprotect") ? 0 : -3; }
+static int q(void) { printf("clear QE\n"); return strcmp(env("MS_FAIL"),"qe") ? 0 : -2; }
 #include <strings.h>
 #include "programmer.h"
 /* the I2C of the CH341A and the CH347: a SigmaStar ISP bridge at 0x49 and 0x59, or (MS_I2C=none) nothing */
@@ -40,7 +41,7 @@ void support_flash_list(void) {}
 long flash_cmd_init(struct flash_cmd *c) {
 	if (!strcmp(env("MS_CHIP"), "none")) return -1;
 	c->flash_read = r; c->flash_write = w; c->flash_erase = e;
-	if (strcmp(env("MS_CHIP"), "nand")) c->flash_unprotect = u;
+	if (strcmp(env("MS_CHIP"), "nand")) { c->flash_unprotect = u; c->flash_clear_qe = q; }
 	c->kind = !strcmp(env("MS_CHIP"), "nand") ? FLASH_NAND : FLASH_NOR;
 	c->lock = *env("MS_LOCK") ? (int)strtol(env("MS_LOCK"), NULL, 16) : -1;
 	if (programmer && !strcmp(programmer->key, "ezp")) c->kind = FLASH_FIRMWARE;
@@ -50,3 +51,4 @@ long flash_cmd_init(struct flash_cmd *c) {
 /* MS_SR=1c0000: the status registers SR1 SR2 SR3 */
 int snor_read_status(unsigned char sr[3]) { unsigned long v = strtoul(*env("MS_SR") ? env("MS_SR") : "000200", NULL, 16); sr[0] = v >> 16; sr[1] = v >> 8; sr[2] = v; return 0; }
 int snor_block_locks(void) { return *env("MS_SST26") != 0; }
+int snor_sr1_macronix(void) { return *env("MS_MACRONIX") != 0; }

@@ -139,7 +139,8 @@ microsnander [options]
  -a <address>   manually set address
  -w <filename>  write chip with data from filename
  -r <filename>  read chip and save data to filename
- -u             unprotect chip
+ -u             unprotect chip; -uu: also clear QE (quad enable), a chip of a
+                board that boots in quad mode may then not boot
  -t             self-test: protection, then erase, write and read back one block
                 (the first; -a for another) and put its data back
  -v             verify after write on chip
@@ -168,6 +169,10 @@ SPI NAND 芯片默认使用片内 ECC 读写：文件中只有数据页。使用
 末尾之后的页的读取也会失败。
 写入失败的页只在同一次运行的 `-v` 中被记住：之后用 `-k` 读取时可能把它当作数据读出，
 转储从该页起会错位。
+
+`-u` 清除保护位并保留 QE（quad enable），QE 不起保护作用。`-uu` 还会清除 QE，仅限 SPI NOR
+和命令行。QE 把 WP# 和 HOLD# 引脚变为数据线，以四线模式读取芯片的电路板没有它可能无法启动。
+部分芯片的 QE 在出厂时已固定：此时 `-uu` 会提示该位未被清除。
 
 `-t` 是无需准备的芯片快速检查：读取保护位（SPI NOR：状态寄存器中的 BP、TB、CMP、SRP；SPI NAND：
 块锁定寄存器），然后取一个块（默认第一个块，通常是被锁定的引导程序所在处，或 `-a` 指定的块），保存其数据，

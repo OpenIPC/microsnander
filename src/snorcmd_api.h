@@ -20,8 +20,10 @@ int snor_erase(unsigned long offs, unsigned long len);
 int snor_write(unsigned char *buf, unsigned long to, unsigned long len);
 int snor_block_locks(void);	/* 1: the chip locks its blocks at power-up (SST26), its own way */
 int snor_unprotect(void);	/* 0; -1: the chip does not answer; -2: a register stays (snor_unprotect_why) */
+int snor_clear_qe(void);	/* -uu: snor_unprotect(), then QE; the same results */
 extern char snor_unprotect_why[200];
 int snor_read_status(unsigned char sr[3]);
+int snor_sr1_macronix(void);	/* 1: only SR1 is a status register, with the bits of Macronix */
 extern const char *flash_chip_name;	/* name of the chip found, for file names */
 const char *snor_lookup(const unsigned char id[3], unsigned long *size, unsigned long *sector, int *addr4b);
 long snor_init(void);

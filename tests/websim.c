@@ -42,6 +42,8 @@ char snor_unprotect_why[200];
 int snor_unprotect(void) { return 0; }		/* the real driver is not in this test */
 unsigned int bsize = 4096;
 int snor_block_locks(void) { return 0; }
+static int sim_macronix;
+int snor_sr1_macronix(void) { return sim_macronix; }
 static unsigned char sim_sr1 = 0x1c;		/* BP bits set: a protected chip */
 int snor_read_status(unsigned char sr[3]) { sr[0] = sim_sr1; sr[1] = 0x02; sr[2] = 0x60; return 0; }
 
@@ -327,6 +329,14 @@ int main(void)
 	wait_idle();
 	request("GET", "/api/state", NULL, NULL, 0);
 	check(unprotects == 1 && strstr(body_of(), "\"sr\":[28,2,96]"), "  unprotect, then the registers again");
+	check(strstr(body_of(), "\"sr_macronix\":false") != NULL, "  not Macronix");
+	sim_macronix = 1;
+	request("POST", "/api/registers", NULL, NULL, 0);
+	wait_idle();
+	request("GET", "/api/state", NULL, NULL, 0);
+	check(strstr(body_of(), "\"sr_macronix\":true") != NULL, "  a Macronix chip is told, the page shows its one register");
+	sim_macronix = 0;
+	check(strstr(web_page, "'SRWD','QE','BP3'") != NULL, "  the page has the bits of Macronix");
 
 	swap_chip = 1; inits = 0;			/* another chip in the socket between detect and read */
 	request("POST", "/api/read", NULL, NULL, 0);

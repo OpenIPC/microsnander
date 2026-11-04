@@ -37,7 +37,7 @@
 struct flash_cmd prog;
 extern unsigned int bsize;
 
-#define _VER	"1.21.0"
+#define _VER	"1.22.0"
 
 const char *ms_version = _VER;
 
@@ -77,7 +77,8 @@ void usage(int code)
 		" -a <address>   manually set address\n"\
 		" -w <filename>  write chip with data from filename\n"\
 		" -r <filename>  read chip and save data to filename\n"\
-		" -u             unprotect chip\n"\
+		" -u             unprotect chip; -uu: also clear QE (quad enable), a chip of a\n"\
+		"                board that boots in quad mode may then not boot\n"\
 		" -t             self-test: protection, then erase, write and read back one block\n"\
 		"                (the first; -a for another) and put its data back\n"\
 		" -v             verify after write on chip\n"\
@@ -103,6 +104,7 @@ int main(int argc, char* argv[])
 	char *fname = NULL, op = 0, *web = NULL, *web_key = NULL, *web_dir = NULL;
 	unsigned char *buf;
 	int long long len = 0, addr = 0, flen = 0, wlen = 0;
+	int unlock = 0;		/* how many -u: 2 also clears QE */
 	FILE *fp;
 
 	title();
@@ -159,9 +161,15 @@ int main(int argc, char* argv[])
 			case 'q':			/* before the operation, or alone */
 				scan = 1;
 				break;
+			case 'u':
+				/* -u and -uu, nothing more and with no other operation */
+				if (++unlock > 2 || (op && op != 'u'))
+					op = 'x';
+				else
+					op = 'u';
+				break;
 			case 'i':
 			case 'e':
-			case 'u':
 			case 't':
 				if(!op)
 					op = c;
@@ -260,6 +268,7 @@ int main(int argc, char* argv[])
 
 		if (prog.kind == FLASH_NOR && programmer->send) {
 			t.sr_valid = !snor_read_status(t.sr);
+			t.sr_macronix = t.sr_valid && snor_sr1_macronix();
 			t.block_locks = snor_block_locks();
 		}
 		rc = selftest(&t);		/* 0 OK, 2 protected, 1 failed */
@@ -294,7 +303,7 @@ int main(int argc, char* argv[])
 			printf("Unprotect is not supported for this chip type or programmer (SPI NOR through CH341A or CH347 only).\n");
 			goto out;
 		}
-		ret = prog.flash_unprotect();
+		ret = unlock > 1 ? prog.flash_clear_qe() : prog.flash_unprotect();
 		if(!ret) {
 			printf("Status: OK\n");
 			rc = 0;

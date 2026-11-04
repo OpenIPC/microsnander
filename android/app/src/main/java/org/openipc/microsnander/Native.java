@@ -20,7 +20,7 @@ final class Native {
         final String programmer;
         final String chip;
         final long size;
-        /** SR1 << 16 | SR2 << 8 | SR3, or -1 when they cannot be read */
+        /** SR1 << 16 | SR2 << 8 | SR3, bit 24: Macronix, only SR1 counts; -1 when they cannot be read */
         final int sr;
         /** for a read: the dump name, flash-YYYYMMDDHHMM-CHIP.bin; for a self-test: the block
          *  that did not come back, selftest-CHIP-0x0.bin, or "" */

@@ -4,7 +4,7 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
-## 1.21.0 — 2026-11-04
+## 1.22.0 — 2026-11-04
 
 - SigmaStar ISP (`-m sigmastar`): the SPI flash of a SigmaStar (MStar) board through the ISP
   bridge of its SoC over I2C, without desoldering, to bring back a board with a broken
@@ -14,6 +14,35 @@ from every push to `main`; this file is the change history.
   that answer, alone or before the operation (`-m sigmastar -i -q`). Every operation and
   SPI NOR and SPI NAND work as with a chip in the socket; not in the web mode or the app.
   The CH341A and the CH347 drivers get I2C transactions.
+
+## 1.21.2 — 2026-11-04
+
+- Web mode and Android app: a Macronix SPI NOR shows its one status register with its own
+  bit names (SRWD, QE, BP3, BP2, BP1, BP0, WEL, WIP). What the reads of status registers 2 and
+  3 return on these chips is not shown as those registers any more.
+- `-i` prints one status register for Macronix chips, and `-t` reads their protection right:
+  BP3 counts, there is no TB and no CMP.
+- SPI NOR: `-u`, erases and writes clear CMP and SRP1 with the two-byte WRSR too, for the chips
+  that do not know WRSR2. Those chips failed with the register staying as it was.
+
+## 1.21.1 — 2026-11-04
+
+- SPI NOR chips of Macronix with the ID `c2 20 xx` (MX25L4005A up to MX25L51245G) were taken
+  for the SPI NAND MX35LF2G14AC since 1.10.0: that entry compares only `c2 20`, and SPI NAND
+  is tried first. Erases and writes would have gone out as SPI NAND commands. An ID of the
+  NOR table now wins over a 2-byte SPI NAND entry, and a chip whose feature registers all
+  read 0xff is not a SPI NAND, whatever its ID. Both come before any write to the chip.
+- Macronix SPI NOR: `-u`, erases and writes failed with `status register 3 stays 0x07`. On
+  these chips the reads of status registers 2 and 3 return something else, and they are no
+  longer taken for CMP, SRP1 and WPS. BP3 (bit 5) is cleared with the other BP bits.
+
+## 1.21.0 — 2026-11-04
+
+- SPI NOR: `-uu` clears the protection as `-u` does, and then QE (quad enable), which `-u`
+  keeps: bit 1 of status register 2, also with the two-byte WRSR for the chips that do not
+  know WRSR2, bit 6 of status register 1 on Macronix chips. A QE that stays set, as on the
+  parts where the factory fixes it, is told, and a chip without the bit has nothing to
+  clear. A board that reads the chip in quad mode may not boot without QE. Command line only.
 
 ## 1.20.2 — 2026-11-04
 
