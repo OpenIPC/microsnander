@@ -4,7 +4,7 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
-## 1.20.0 — 2026-11-04
+## 1.21.0 — 2026-11-04
 
 - SigmaStar ISP (`-m sigmastar`): the SPI flash of a SigmaStar (MStar) board through the ISP
   bridge of its SoC over I2C, without desoldering, to bring back a board with a broken
@@ -14,6 +14,30 @@ from every push to `main`; this file is the change history.
   that answer, alone or before the operation (`-m sigmastar -i -q`). Every operation and
   SPI NOR and SPI NAND work as with a chip in the socket; not in the web mode or the app.
   The CH341A and the CH347 drivers get I2C transactions.
+
+## 1.20.2 — 2026-11-04
+
+- SPI NAND: a USB transfer that fails now fails the operation. The result of a read from the
+  cache and of a status read was not looked at: a read ended with `Status: OK` and wrong data,
+  a write programmed a page over data it had not read, and page data that never reached the
+  chip still ended in a program command and `Status: OK`. The read, write or erase stops with
+  a message, and the failed page is not kept. So does the detection, when the ECC setup fails.
+
+## 1.20.1 — 2026-11-04
+
+- Faster SPI NAND reads: the ECC check of a page takes the status its ready poll has already
+  read, with no second status read per page. CH347: CS low goes in the same USB transfer as
+  the command after it, one round trip less for every SPI transaction. 1 MB from a W25N01G
+  through the CH347: 1.93 s before, 1.48 s now. The CH341A is bound by its own SPI clock
+  (about 110 KB/s, as with SPI NOR).
+
+## 1.20.0 — 2026-11-04
+
+- Self-test in the web mode and the Android app: a **Self-test** button runs `-t` on the
+  first block of the chip — Detect first, then a question naming the chip found, and only
+  that chip is tested. The protection and the verdict (`OK`, `PROTECTED`, `FAILED`) are the
+  message; a block that does not come back is saved in the dump directory (`-o`, the app's
+  dumps). `ms_selftest()` in the operations; the self-test keeps its lines for them.
 
 ## 1.19.1 — 2026-11-04
 

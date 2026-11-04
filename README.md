@@ -77,7 +77,9 @@ sudo ./microsnander -w firmware.bin -v
       write over data;
     - the status registers can be neither read nor written: no `-u`, and the
       detection does not show them;
-    - no SPI NAND.
+    - no SPI NAND, and none will come: their firmware works with SPI NOR only (it reads even
+      the chip ID as a NOR chip, so a SPI NAND answers with a shifted ID), and the maker lists
+      only SPI NOR and EEPROM chips for them. Use the CH341A or the CH347 for SPI NAND.
 
   With one programmer connected microsnander uses it; with several, choose one with
   `-P ch341a`, `-P ch347` or `-P ezp`. A kernel driver that has taken the programmer (for
@@ -235,6 +237,7 @@ is connected.
 <p align="center">
   <img src="screenshots/web-reading.png" alt="MicroSNANDer Web while reading: lamps, progress gauge, display, brass buttons" width="45%">
   <img src="screenshots/web-registers.png" alt="MicroSNANDer Web after a read: dump link and status register lamps" width="45%">
+  <img src="screenshots/web-selftest.png" alt="MicroSNANDer Web after a self-test: SELF-TEST OK, the protection and the verdict" width="45%">
 </p>
 
 ```sh
@@ -262,6 +265,9 @@ The page:
   chips; amber: a protection bit, green: another bit) and **Clear protection**, which does
   what `-u` does: it clears BP, SRP and CMP and keeps QE. SPI NOR through the CH341A or the
   CH347 only; the EZP programmers cannot read the registers.
+- **Self-test**: `-t` on the first block (see [Usage](#usage)) — Detect first, then the
+  question naming the chip found; the verdict (`OK`, `PROTECTED`, `FAILED`) and the protection
+  are the message. A block that does not come back is saved in the `-o` directory.
 
 File names: `flash-YYYYMMDDHHMM-CHIP.bin` in the local time of the machine that runs the
 service, for example `flash-202611031706-W25Q128BV.bin`. With `-a`/`-l` the range is added:
@@ -330,7 +336,7 @@ with the remote).
 - **Write** takes a file from the file picker and writes it from address 0 into an erased chip,
   then verifies it; the file is read in parts, not held in memory. **Erase** erases the whole chip.
 - **Registers** and **Clear protection** as in the web mode (SPI NOR through the CH341A or the
-  CH347).
+  CH347), and **Self-test** (`-t` on the first block, after Detect and a question).
 - The app runs the same C code as microsnander (`src/`), built with the NDK, on the device the
   Android USB manager opened (its file descriptor, through the usbfs code, no libusb). The signed APK is in the release:
   `microsnander-android.apk` in [latest](https://github.com/OpenIPC/microsnander/releases/latest).

@@ -16,7 +16,7 @@ static int nresp;
 static unsigned int pending_in;			/* SPI_IN bytes still to send */
 static unsigned int max_out, max_in, nout;
 static int cs_while_write_ok = 1;
-static int nout_in;
+static int nout_in, ncmd;
 static int bad = 0;	/* 1: write status 1, 2: read answer with another command, 3: empty read answer, 4: length header too big */
 
 static unsigned char pattern(unsigned int i) { return (unsigned char)(i * 29 + (i >> 9)); }
@@ -38,31 +38,39 @@ int libusb_release_interface(libusb_device_handle *h, int i) { (void)h; (void)i;
 int libusb_bulk_transfer(libusb_device_handle *h, unsigned char ep, unsigned char *d, int len, int *done, unsigned int timeout)
 {
 	(void)h; (void)timeout;
-	if (ep == CH347_WRITE_EP) {
-		unsigned int n = d[1] | (d[2] << 8);
+	if (ep == CH347_WRITE_EP) {		/* one or more commands: "cmd, length, data" each */
 		if ((unsigned int)len > max_out) max_out = len;
 		nout++;
-		if (n + 3 != (unsigned int)len) return LIBUSB_ERROR_IO;
-		switch (d[0]) {
-		case CH347_CMD_SPI_SET_CFG: cfg15 = d[15]; resp[0] = d[0]; resp[1] = 1; resp[2] = 0; resp[3] = 0; nresp = 4; break;
+		for (int off = 0; off < len; ) {
+		unsigned char *c = d + off;
+		unsigned int n;
+		if (len - off < 3) return LIBUSB_ERROR_IO;
+		n = c[1] | (c[2] << 8);
+		if (off + 3 + (int)n > len) return LIBUSB_ERROR_IO;
+		off += 3 + n;
+		ncmd++;
+		switch (c[0]) {
+		case CH347_CMD_SPI_SET_CFG: cfg15 = c[15]; resp[0] = c[0]; resp[1] = 1; resp[2] = 0; resp[3] = 0; nresp = 4; break;
 		case CH347_CMD_SPI_CS_CTRL:
-			if (d[3] & CH347_CS_CHANGE) cs_low = !(d[3] & CH347_CS_DEASSERT);
+			if (c[3] & CH347_CS_CHANGE) cs_low = !(c[3] & CH347_CS_DEASSERT);
 			break;
 		case CH347_CMD_SPI_OUT:
 			if (!cs_low) cs_while_write_ok = 0;
-			memcpy(mosi + nmosi, d + 3, n); nmosi += n; clocked += n;
-			resp[0] = d[0]; resp[1] = 1; resp[2] = 0; resp[3] = bad == 1; nresp = 4;
+			memcpy(mosi + nmosi, c + 3, n); nmosi += n; clocked += n;
+			resp[0] = c[0]; resp[1] = 1; resp[2] = 0; resp[3] = bad == 1; nresp = 4;
 			break;
 		case CH347_CMD_SPI_IN:
-			pending_in = d[3] | (d[4] << 8) | (d[5] << 16) | ((unsigned int)d[6] << 24);
+			pending_in = c[3] | (c[4] << 8) | (c[5] << 16) | ((unsigned int)c[6] << 24);
 			break;
 		case CH347_CMD_SPI_OUT_IN:		/* sent bytes go out, the pattern comes in */
-			memcpy(mosi + nmosi, d + 3, n); nmosi += n;
-			resp[0] = d[0]; resp[1] = n & 0xff; resp[2] = n >> 8;
+			if (!cs_low) cs_while_write_ok = 0;
+			memcpy(mosi + nmosi, c + 3, n); nmosi += n;
+			resp[0] = c[0]; resp[1] = n & 0xff; resp[2] = n >> 8;
 			for (unsigned int i = 0; i < n; i++) resp[3 + i] = pattern(clocked++);
 			nresp = n + 3; nout_in++;
 			break;
 		default: return LIBUSB_ERROR_IO;
+		}
 		}
 		if (done) *done = len;
 		return 0;
@@ -95,12 +103,15 @@ int main(void)
 
 	check(ch347_spi_init() == 0 && claimed_iface == 2 && detached_iface == 2, "CH347T: interface 2 claimed");
 	check(cfg15 == (1 << 3), "default SPI clock 30 MHz (divisor 1)");
-	check(ch347_cs(true) == 0 && cs_low, "CS low");
+	nout = 0;
+	check(ch347_cs(true) == 0 && ch347_cs(false) == 0 && nout == 0 && !cs_low, "CS low and high with nothing between: nothing sent");
+	check(ch347_cs(true) == 0 && !cs_low && nout == 0, "CS low waits for the command it goes with");
 	for (unsigned i = 0; i < sizeof(w); i++) w[i] = (unsigned char)(i * 3);
 	nmosi = 0; clocked = 0; max_out = 0;
 	check(ch347_spi_send_command(sizeof(w), 0, w, NULL) == 0 && nmosi == sizeof(w) && !memcmp(mosi, w, sizeof(w)),
 	      "3000-byte write arrives in order");
 	check(max_out <= CH347_PACKET_SIZE, "  in packets of at most 510 bytes");
+	check(cs_low && cs_while_write_ok, "  CS low before the first byte");
 	clocked = 4;
 	check(ch347_spi_send_command(4, sizeof(r), w, r) == 0, "4 command bytes, then a 100000-byte read");
 	int same = 1;
@@ -110,8 +121,10 @@ int main(void)
 	nmosi = 0; clocked = 0; nout_in = 0;
 	unsigned char st[2];
 	w[0] = 0x05;
-	check(ch347_spi_send_command(1, 2, w, st) == 0 && nout_in == 1 && nmosi == 3 && mosi[0] == 0x05 && mosi[1] == 0xff
-	      && st[0] == pattern(1) && st[1] == pattern(2), "a short command and its answer in one full-duplex transfer");
+	check(ch347_cs(false) == 0 && !cs_low && ch347_cs(true) == 0, "CS high, then low again for the next command");
+	nout = 0; ncmd = 0;
+	check(ch347_spi_send_command(1, 2, w, st) == 0 && nout_in == 1 && nout == 1 && ncmd == 2 && cs_low && nmosi == 3 && mosi[0] == 0x05 && mosi[1] == 0xff
+	      && st[0] == pattern(1) && st[1] == pattern(2), "a short command and its answer in one full-duplex transfer, CS low in the same USB transfer");
 	check(ch347_cs(false) == 0 && !cs_low, "CS high");
 	bad = 1;
 	check(ch347_spi_send_command(4, 0, w, NULL) < 0, "a write answered with a nonzero status fails");

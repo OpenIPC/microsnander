@@ -14,6 +14,27 @@
 #include <sys/time.h>
 #include "flashcmd_api.h"
 #include "selftest.h"
+#include <stdarg.h>
+
+/* a line of the result: to the console, and kept in t->out for the web
+   mode and the app (the lines one after the other) */
+static void report(const struct selftest *t, const char *fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+	vprintf(fmt, ap);
+	va_end(ap);
+	if (t->out && t->out_size) {
+		size_t k = strlen(t->out);
+
+		if (k < t->out_size) {
+			va_start(ap, fmt);
+			vsnprintf(t->out + k, t->out_size - k, fmt, ap);
+			va_end(ap);
+		}
+	}
+}
 
 static double now(void)
 {
@@ -101,43 +122,43 @@ int selftest(const struct selftest *t)
 
 	printf("SELF-TEST: %s, block 0x%llx + 0x%lx\n", t->chip, a, n);
 	if (why[0])
-		printf("Protection: %s.\n", why);
+		report(t, "Protection: %s.\n", why);
 	else if (t->kind != FLASH_FIRMWARE)
-		printf("Protection: none set in the registers.\n");
+		report(t, "Protection: none set in the registers.\n");
 	if (!orig || !buf || !pat) {
-		printf("Self-test: FAILED, out of memory.\n");
+		report(t, "Self-test: FAILED, out of memory.\n");
 		goto out;
 	}
 	if (a + n > t->size) {
-		printf("Self-test: FAILED, the block is past the chip end (0x%llx).\n", t->size);
+		report(t, "Self-test: FAILED, the block is past the chip end (0x%llx).\n", t->size);
 		goto out;
 	}
 	if (t->kind == FLASH_NAND && a) {
 		/* block 0 is the one every maker guarantees good; another one may
 		   be a bad block, whose mark the erase would take away */
-		printf("Self-test: SPI NAND is tested on block 0 only (-a 0).\n");
+		report(t, "Self-test: SPI NAND is tested on block 0 only (-a 0).\n");
 		goto out;
 	}
 	if (prot) {
 		/* an erase would clear the protection bits, and they are the user's:
 		   no test of the block until -u is given for it */
-		printf("Self-test: PROTECTED, the registers protect part of the chip (exit 2). "
+		report(t, "Self-test: PROTECTED, the registers protect part of the chip (exit 2). "
 		       "Clear them with -u, then run -t again.\n");
 		ret = 2;
 		goto out;
 	}
 	if (t->cmd->flash_read(orig, a, n) != (int)n || t->cmd->flash_read(buf, a, n) != (int)n) {
-		printf("Self-test: FAILED, the block does not read.\n");
+		report(t, "Self-test: FAILED, the block does not read.\n");
 		goto out;
 	}
 	if (memcmp(orig, buf, n)) {
-		printf("Self-test: FAILED, two reads of the block differ at 0x%llx (an unstable read: "
+		report(t, "Self-test: FAILED, two reads of the block differ at 0x%llx (an unstable read: "
 		       "the wires, the voltage, the clock).\n", a + first_diff(buf, orig, n));
 		goto out;
 	}
 	if (t->kind == FLASH_FIRMWARE) {
 		/* the EZP erases the whole chip only: no erase and write of one block */
-		printf("Self-test: READ OK (two reads equal); the %s erases only the whole chip, so the "
+		report(t, "Self-test: READ OK (two reads equal); the %s erases only the whole chip, so the "
 		       "erase and the write of a block are not tried.\n", t->programmer);
 		ret = 0;
 		goto out;
@@ -158,32 +179,32 @@ int selftest(const struct selftest *t)
 		   in a way the registers do not show (the WP# pin, a block lock); an
 		   erase that fails as a command is a fault of its own */
 		if (same && !e) {
-			printf("Self-test: PROTECTED, the block takes the erase and keeps its data, though no "
+			report(t, "Self-test: PROTECTED, the block takes the erase and keeps its data, though no "
 			       "register bit says so (the WP# pin, a block lock?).\n");
 			ret = 2;
 		} else if (e)
-			printf("Self-test: FAILED, the erase command fails.\n");
+			report(t, "Self-test: FAILED, the erase command fails.\n");
 		else if (!got)
-			printf("Self-test: FAILED, the erased block does not read.\n");
+			report(t, "Self-test: FAILED, the erased block does not read.\n");
 		else
-			printf("Self-test: FAILED, the erase does not take: 0x%02x at 0x%llx.\n", buf[d], a + d);
+			report(t, "Self-test: FAILED, the erase does not take: 0x%02x at 0x%llx.\n", buf[d], a + d);
 		goto restore;
 	}
 	for (unsigned long i = 0; i < n; i++)
 		pat[i] = pattern(a + i);
 	t0 = now();
 	if (t->cmd->flash_write(pat, a, n) != (int)n) {
-		printf("Self-test: FAILED, the write command fails.\n");
+		report(t, "Self-test: FAILED, the write command fails.\n");
 		goto restore;
 	}
 	t_write = now() - t0;
 	if (t->cmd->flash_read(buf, a, n) != (int)n) {
-		printf("Self-test: FAILED, the written block does not read back.\n");
+		report(t, "Self-test: FAILED, the written block does not read back.\n");
 		goto restore;
 	}
 	d = first_diff(buf, pat, n);
 	if (d >= 0) {
-		printf("Self-test: FAILED, the write does not take: 0x%02x at 0x%llx, written 0x%02x.\n", buf[d], a + d, pat[d]);
+		report(t, "Self-test: FAILED, the write does not take: 0x%02x at 0x%llx, written 0x%02x.\n", buf[d], a + d, pat[d]);
 		goto restore;
 	}
 	ret = 0;
@@ -197,18 +218,33 @@ restore:
 		if (t->cmd->flash_erase(a, n) ||
 		    (!blank && t->cmd->flash_write(orig, a, n) != (int)n) ||
 		    t->cmd->flash_read(buf, a, n) != (int)n || memcmp(buf, orig, n)) {
-			char name[160];
-			FILE *f;
+			char base[120], *name;
+			FILE *f = NULL;
 
-			snprintf(name, sizeof(name), "selftest-%s-0x%llx.bin", t->chip, a);
-			for (char *p = name; *p; p++)
+			snprintf(base, sizeof(base), "selftest-%s-0x%llx.bin", t->chip, a);
+			for (char *p = base; *p; p++)
 				if (*p == ' ' || *p == '/')
 					*p = '_';
-			if ((f = fopen(name, "wb")) && fwrite(orig, 1, n, f) == n && !fclose(f))
-				printf("Self-test: the block did not come back as it was: its old data is in %s "
+			/* the whole directory, never a shortened one */
+			name = malloc((t->save_dir ? strlen(t->save_dir) + 1 : 0) + strlen(base) + 1);
+			if (name) {
+				sprintf(name, "%s%s%s", t->save_dir ? t->save_dir : "", t->save_dir ? "/" : "", base);
+				f = fopen(name, "wb");
+			}
+			int kept = f && fwrite(orig, 1, n, f) == n;
+
+			if (f && fclose(f))
+				kept = 0;
+			if (kept) {
+				report(t, "Self-test: the block did not come back as it was: its old data is in %s "
 				       "(write it with -a 0x%llx -w %s).\n", name, a, name);
-			else
-				printf("Self-test: the block did not come back as it was, and %s cannot be written.\n", name);
+				if (t->saved)
+					snprintf(t->saved, t->saved_size, "%s", base);
+			} else {
+				report(t, "Self-test: the block did not come back as it was, and %s cannot be written.\n",
+				       name ? name : base);
+			}
+			free(name);
 			ret = 1;
 			goto out;
 		}
@@ -216,7 +252,7 @@ restore:
 	if (ret == 0) {
 		char te[16], tw[16];
 
-		printf("Self-test: OK, the block erases in %s, takes a write in %s, reads back; "
+		report(t, "Self-test: OK, the block erases in %s, takes a write in %s, reads back; "
 		       "its data is back%s.\n", took(t_erase, te, sizeof(te)), took(t_write, tw, sizeof(tw)),
 		       t->kind == FLASH_NAND ? " (its spare area besides the ECC is not kept)" : "");
 	}

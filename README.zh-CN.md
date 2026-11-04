@@ -69,7 +69,8 @@ sudo ./microsnander -w firmware.bin -v
     - `-e` 只能擦除整片芯片：不要带 `-a` 和 `-l`，擦除部分区域会被拒绝；
     - `-w` 只写入已擦除的区域：先读取该区域，若已有数据则拒绝写入；
     - 状态寄存器既不能读也不能写：没有 `-u`，识别芯片时也不显示它们；
-    - 不支持 SPI NAND。
+    - 不支持 SPI NAND，今后也不会支持：其固件只支持 SPI NOR（连芯片 ID 也按 NOR 方式读取，因此 SPI NAND
+      返回的 ID 是错位的），厂商也只为其列出 SPI NOR 和 EEPROM 芯片。SPI NAND 请使用 CH341A 或 CH347。
 
   只连接一个编程器时 microsnander 直接使用它；连接多个时请用 `-P ch341a`、`-P ch347` 或 `-P ezp`
   选择。占用编程器的内核驱动（例如 `spi-ch341`）会在运行期间分离，结束后重新绑定。
@@ -215,6 +216,7 @@ microsnander -d -r raw.bin
 <p align="center">
   <img src="screenshots/web-reading.png" alt="MicroSNANDer Web 读取中：指示灯、进度表盘、显示屏、黄铜按钮" width="45%">
   <img src="screenshots/web-registers.png" alt="MicroSNANDer Web 读取完成：转储链接和状态寄存器各位的指示灯" width="45%">
+  <img src="screenshots/web-selftest.png" alt="MicroSNANDer Web 自检之后：SELF-TEST OK、保护状态和结果" width="45%">
 </p>
 
 ```sh
@@ -238,6 +240,8 @@ microsnander -P ch347 -W 8080 -o /srv/dumps
 - **Registers**：状态寄存器 1–3 的每一位一个指示灯（位名称与 Winbond 类芯片相同；琥珀色为保护位，
   绿色为其他位），以及 **Clear protection**，与 `-u` 相同：清除 BP、SRP 和 CMP，保留 QE。仅限通过
   CH341A 或 CH347 操作 SPI NOR；EZP 编程器无法读取寄存器。
+- **Self-test**：对第一个块执行 `-t`（见[用法](#用法)）：先 Detect，再弹出写明所找到芯片的确认；结果
+  （`OK`、`PROTECTED`、`FAILED`）和保护状态显示在消息中。无法写回的块保存到 `-o` 目录。
 
 文件名：`flash-YYYYMMDDHHMM-芯片.bin`，使用运行服务的机器的本地时间，例如
 `flash-202611031706-W25Q128BV.bin`。使用 `-a`/`-l` 时会加上区域：
@@ -298,7 +302,8 @@ root；在电视盒子上会出现在主屏幕，可用遥控器操作）。
 - **Read** 将 `flash-YYYYMMDDHHMM-芯片.bin` 保存到“下载”；**Save as…** 可保存到任意位置，**Share**
   可发送给其他应用。
 - **Write** 通过文件选择器选取文件，从地址 0 写入已擦除的芯片，然后校验；文件分段读取，不会整个载入内存。**Erase** 擦除整片芯片。
-- **Registers** 和 **Clear protection** 与 Web 模式相同（通过 CH341A 或 CH347 操作 SPI NOR）。
+- **Registers** 和 **Clear protection** 与 Web 模式相同（通过 CH341A 或 CH347 操作 SPI NOR），以及
+  **Self-test**（在 Detect 和确认之后对第一个块执行 `-t`）。
 - 应用使用与 microsnander 相同的 C 代码（`src/`），由 NDK 编译，访问 Android USB 管理器打开的
   设备（通过其文件描述符和 usbfs 代码，不使用 libusb）。签名的 APK 在发布版中：[latest](https://github.com/OpenIPC/microsnander/releases/latest) 里的 `microsnander-android.apk`。
 

@@ -41,7 +41,7 @@ h1{font-size:clamp(22px,4.5vw,40px);letter-spacing:.2em;text-transform:uppercase
 .meta a{color:var(--amber)}
 .meta .warn{color:var(--amber)}
 .meta .warn.v18{color:var(--red)}
-.btns{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-top:24px}
+.btns{display:grid;grid-template-columns:repeat(6,1fr);gap:14px;margin-top:24px}
 @media (max-width:620px){.btns{grid-template-columns:repeat(2,1fr)}}
 .btn{position:relative;border:0;cursor:pointer;font-family:Georgia,'Times New Roman',serif;font-size:14px;letter-spacing:.18em;text-transform:uppercase;color:#2a1c10;padding:18px 6px 14px;border-radius:12px;background:linear-gradient(180deg,#e9cd84,#b08b3c 55%,#7c5c1f);box-shadow:0 7px 0 #4a3510,0 12px 20px rgba(0,0,0,.6),inset 0 1px 0 #fff1c0;transition:transform .1s,box-shadow .1s,filter .2s}
 .btn:hover{filter:brightness(1.07)}
@@ -90,6 +90,7 @@ body:not(.ready) *{transition:none!important}
 <button class="btn danger" id="b-erase" disabled>Erase<span class="ind"></span></button>
 <button class="btn danger" id="b-write" disabled>Write<span class="ind"></span></button>
 <button class="btn" id="b-registers">Registers<span class="ind"></span></button>
+<button class="btn danger" id="b-selftest" disabled>Self-test<span class="ind"></span></button>
 </div>
 <input type="file" id="file" hidden>
 <div class="log" id="log">&nbsp;</div>
@@ -105,8 +106,8 @@ body:not(.ready) *{transition:none!important}
 <script>
 var bits=[['SRP0','SEC','TB','BP2','BP1','BP0','WEL','BUSY'],['SUS','CMP','LB3','LB2','LB1','R','QE','SRP1'],['HOLD','DRV1','DRV0','R','R','WPS','R','R']];
 var protect={SRP0:1,TB:1,BP2:1,BP1:1,BP0:1,CMP:1,SRP1:1,WPS:1};
-var ops=['detect','read','erase','write','registers','unprotect'],timer=null,lastOp='',busyLocal=false;
-var words={detect:'Detecting',read:'Reading',erase:'Erasing',write:'Writing',verify:'Verifying',registers:'Reading registers',unprotect:'Unprotecting'};
+var ops=['detect','read','erase','write','registers','unprotect','selftest'],timer=null,lastOp='',busyLocal=false;
+var words={detect:'Detecting',read:'Reading',erase:'Erasing',write:'Writing',verify:'Verifying',registers:'Reading registers',unprotect:'Unprotecting',selftest:'Self-testing'};
 function $(i){return document.getElementById(i)}
 var base=location.origin;	/* without user:password@ of the address, which fetch() refuses */
 function bulb(id,c){$(id).className='bulb'+(c?' '+c:'')}
@@ -123,7 +124,7 @@ function render(s){
  $('ver').textContent='microsnander '+(s.version||'');
  var st=$('state'),pct=s.total?Math.floor(100*s.done/s.total):0;
  if(s.busy){st.textContent=(words[s.phase]||words[s.op]||s.op)+(s.total?' '+pct+'%':'');st.className='state'}
- else if(s.ok===true){st.textContent=s.op==='read'?'Saved':s.op==='write'?'Written':s.op==='erase'?'Erased':s.op==='unprotect'?'Unprotected':'Ready';st.className='state'}
+ else if(s.ok===true){st.textContent=s.op==='read'?'Saved':s.op==='write'?'Written':s.op==='erase'?'Erased':s.op==='unprotect'?'Unprotected':s.op==='selftest'?'Self-test OK':'Ready';st.className='state'}
  else if(s.ok===false){st.textContent='Failed';st.className='state bad'}
  else{st.textContent='Stand by';st.className='state off'}
  $('needle').style.transform='rotate('+(s.busy&&s.total?(-88+176*s.done/s.total):(s.ok===true&&s.total?88:-88))+'deg)';
@@ -135,7 +136,7 @@ function render(s){
  if(s.message)m+=esc(s.message);
  $('meta').innerHTML=m||'Press Detect to find the chip.';
  /* Erase and Write only on a chip found: nothing to confirm or to pick without one */
- ops.forEach(function(o){var b=$('b-'+o);b.disabled=!!s.busy||((o==='erase'||o==='write')&&!s.chip);b.classList.toggle('engaged',!!s.busy&&(s.op===o))});
+ ops.forEach(function(o){var b=$('b-'+o);b.disabled=!!s.busy||((o==='erase'||o==='write'||o==='selftest')&&!s.chip);b.classList.toggle('engaged',!!s.busy&&(s.op===o))});
  if(s.sr){
   $('regpanel').hidden=false;$('srhex').textContent='SR '+s.sr.map(hex).join(' ');
   var h='';
@@ -177,6 +178,8 @@ function detectThen(btn,cb){
 function chipName(s){return s.chip+' ('+size(s.size)+')'}
 $('b-erase').onclick=function(){var b=this;detectThen(b,function(s){if(confirm('Erase the whole '+chipName(s)+'?'))run('erase',null,b,null,s)})};
 $('b-unprotect').onclick=function(){run('unprotect',null,this)};
+/* the self-test erases the first block and writes its data back: the chip found, then the question */
+$('b-selftest').onclick=function(){var b=this;detectThen(b,function(s){if(confirm('Self-test of the '+chipName(s)+': erase its first block, write and read a pattern, put the old data back?'))run('selftest',null,b,null,s)})};
 $('b-write').onclick=function(){$('file').click()};
 $('file').onchange=function(){
  var f=$('file').files[0];$('file').value='';

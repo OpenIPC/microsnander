@@ -49,6 +49,7 @@ typedef enum{
 	SPI_NAND_FLASH_RTN_ERASE_FAIL,
 	SPI_NAND_FLASH_RTN_PROGRAM_FAIL,
 	SPI_NAND_FLASH_RTN_TIMEOUT,		/* the chip stayed busy (OIP) too long */
+	SPI_NAND_FLASH_RTN_IO_ERROR,		/* a USB transfer failed: nothing is known of the chip */
 	SPI_NAND_FLASH_RTN_DEF_NO
 } SPI_NAND_FLASH_RTN_T;
 

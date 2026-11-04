@@ -113,6 +113,7 @@ public class MainActivity extends Activity {
         buttons = new Button[] {
             findViewById(R.id.b_detect), findViewById(R.id.b_read), findViewById(R.id.b_erase),
             findViewById(R.id.b_write), findViewById(R.id.b_registers), findViewById(R.id.b_unprotect),
+            findViewById(R.id.b_selftest),
         };
         buttons[0].setOnClickListener(v -> run(R.string.detecting, true, (fd, vid, pid, p) -> Native.detect(fd, vid, pid)));
         buttons[1].setOnClickListener(v -> read());
@@ -125,6 +126,11 @@ public class MainActivity extends Activity {
         buttons[3].setOnClickListener(v -> detectThen((a, r) -> a.pickWrite()));
         buttons[4].setOnClickListener(v -> run(R.string.reading_registers, true, (fd, vid, pid, p) -> Native.registers(fd, vid, pid)));
         buttons[5].setOnClickListener(v -> run(R.string.unprotecting, true, (fd, vid, pid, p) -> Native.unprotect(fd, vid, pid)));
+        // the self-test erases the first block and writes it back: Detect, then the question
+        buttons[6].setOnClickListener(v -> detectThen((a, r) -> new AlertDialog.Builder(a)
+                .setMessage(a.getString(R.string.selftest_confirm, r.chip, sizeOf(r.size)))
+                .setPositiveButton(R.string.selftest, (d, w) -> a.selftest(r))
+                .setNegativeButton(android.R.string.cancel, null).show()));
         saveAs.setOnClickListener(v -> {
             File dump = lastDump();
             if (dump == null) return;
@@ -191,9 +197,14 @@ public class MainActivity extends Activity {
         super.onDestroy();
     }
 
+    /** a file of files/dumps: a Read (flash-*.bin) or a block a self-test saved (selftest-*.bin) */
+    static boolean isDump(String n) {
+        return (n.startsWith("flash-") || n.startsWith("selftest-")) && n.endsWith(".bin");
+    }
+
     /** the newest dump the app keeps (files/dumps), or null */
     private File lastDump() {
-        File[] l = new File(getFilesDir(), "dumps").listFiles((d, n) -> n.startsWith("flash-") && n.endsWith(".bin"));
+        File[] l = new File(getFilesDir(), "dumps").listFiles((d, n) -> isDump(n));
         File last = null;
         if (l != null)
             for (File f : l)
@@ -295,6 +306,23 @@ public class MainActivity extends Activity {
     private static long pendingAt;		// when that Detect ended (elapsedRealtime)
     /** a screen recreated within this keeps the step (a rotation); later it is dropped */
     private static final long PENDING_MS = 10000;
+
+    /** -t on the first block, only if it is still the chip r found */
+    private void selftest(Native.Result r) {
+        Context app = getApplicationContext();
+        File dir = new File(getFilesDir(), "dumps");	// a block that does not come back goes there
+        run(R.string.selftesting, true, (fd, vid, pid, p) -> {
+            Native.expect(r.chip, r.size);
+            Native.Result t = Native.selftest(fd, vid, pid, dir.getPath());
+            if (t == null || t.name.isEmpty())
+                return t;
+            // the old data of that block: a copy in Downloads too, for the Write picker
+            String where = toDownloads(app, new File(dir, t.name));
+            String more = where != null ? app.getString(R.string.dump_is, where) : app.getString(R.string.dump_kept);
+            return new Native.Result(t.ok, t.message + "\n" + more, t.programmer, t.chip, t.size, t.sr, t.name,
+                    t.voltage, t.warning);
+        });
+    }
 
     /** the whole chip, only if it is still the one r found */
     private void erase(Native.Result r) {

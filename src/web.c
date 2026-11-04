@@ -49,8 +49,8 @@
 #define WEB_HEADERS	8192
 #define WEB_MAX_BODY	(512UL << 20)		/* largest file to write */
 
-enum { OP_NONE, OP_DETECT, OP_READ, OP_ERASE, OP_WRITE, OP_REGISTERS, OP_UNPROTECT };
-static const char *const op_names[] = { "", "detect", "read", "erase", "write", "registers", "unprotect" };
+enum { OP_NONE, OP_DETECT, OP_READ, OP_ERASE, OP_WRITE, OP_REGISTERS, OP_UNPROTECT, OP_SELFTEST };
+static const char *const op_names[] = { "", "detect", "read", "erase", "write", "registers", "unprotect", "selftest" };
 
 static struct {
 	pthread_mutex_t lock;
@@ -59,7 +59,7 @@ static struct {
 	unsigned int seq;			/* the number of the last operation started */
 	unsigned long long done, total;
 	char phase[16];				/* "", "write", "verify" */
-	char message[256];
+	char message[512];
 	char programmer[32], chip[64];
 	long long size;
 	int voltage;
@@ -218,7 +218,7 @@ static void *worker(void *arg)
 {
 	int op = (int)(long)arg, ret = -1;
 	struct ms_chip c = { .size = 0 };
-	char msg[256] = "";
+	char msg[512] = "";
 
 	switch (op) {
 	case OP_DETECT:    ret = ms_detect(&c, msg, sizeof(msg)); break;
@@ -229,8 +229,20 @@ static void *worker(void *arg)
 			   ret = ms_write_file(&c, upload, on_progress, NULL, msg, sizeof(msg)); break;
 	case OP_REGISTERS: ret = ms_registers(&c, msg, sizeof(msg)); break;
 	case OP_UNPROTECT: ret = ms_unprotect(&c, msg, sizeof(msg)); break;
+	case OP_SELFTEST: {
+		char saved[160];
+
+		ms_expect(want_chip, want_size);		/* it erases the first block */
+		ret = ms_selftest(&c, web_dir, saved, sizeof(saved), msg, sizeof(msg));
+		if (saved[0]) {					/* the block that did not come back */
+			pthread_mutex_lock(&st.lock);
+			snprintf(st.file, sizeof(st.file), "%s", saved);
+			pthread_mutex_unlock(&st.lock);
+		}
+		break;
 	}
-	keep_chip(&c, op == OP_DETECT || op == OP_REGISTERS || op == OP_UNPROTECT);
+	}
+	keep_chip(&c, op == OP_DETECT || op == OP_REGISTERS || op == OP_UNPROTECT || op == OP_SELFTEST);
 	set_msg("%s", msg);
 	if (upload)
 		fclose(upload);
@@ -266,7 +278,7 @@ static int start(int op, FILE *body, const char *chip, long long size, unsigned 
 	st.done = st.total = 0;
 	st.phase[0] = 0;
 	st.message[0] = 0;
-	if (op == OP_DETECT || op == OP_REGISTERS || op == OP_UNPROTECT)
+	if (op == OP_DETECT || op == OP_REGISTERS || op == OP_UNPROTECT || op == OP_SELFTEST)
 		st.sr_valid = 0;
 	pthread_mutex_unlock(&st.lock);
 	if (pthread_create(&t, NULL, worker, (void *)(long)op)) {
@@ -331,7 +343,7 @@ static void json_str(char *out, size_t n, const char *s)
 
 static void reply_state(int fd)
 {
-	char body[2048], msg[512], prg[64], chip[128], file[256], warn[640], sr[32] = "null";
+	char body[3072], msg[1100], prg[64], chip[128], file[256], warn[640], sr[32] = "null";
 
 	pthread_mutex_lock(&st.lock);
 	json_str(msg, sizeof(msg), st.message);
@@ -434,12 +446,14 @@ static int host_ok(const char *headers)
 	return 0;
 }
 
-/* a dump name made by Read: no path, flash-*.bin */
+/* a dump name made by Read (flash-*.bin) or the block a self-test saved
+   (selftest-*.bin): no path */
 static int dump_ok(const char *name)
 {
 	size_t n = strlen(name);
+	int read = n > 10 && !strncmp(name, "flash-", 6), saved = n > 13 && !strncmp(name, "selftest-", 9);
 
-	return n > 10 && !strncmp(name, "flash-", 6) && !strcmp(name + n - 4, ".bin") && !strchr(name, '/') && !strstr(name, "..");
+	return (read || saved) && !strcmp(name + n - 4, ".bin") && !strchr(name, '/') && !strstr(name, "..");
 }
 
 static void send_dump(int fd, const char *name)
@@ -565,6 +579,7 @@ static void handle(int fd)
 	static const struct { const char *path; int op; } routes[] = {
 		{ "/api/detect", OP_DETECT }, { "/api/read", OP_READ }, { "/api/erase", OP_ERASE },
 		{ "/api/write", OP_WRITE }, { "/api/registers", OP_REGISTERS }, { "/api/unprotect", OP_UNPROTECT },
+		{ "/api/selftest", OP_SELFTEST },
 	};
 	int op = 0;
 
@@ -626,7 +641,7 @@ static void handle(int fd)
 	long long want_sz = 0;
 	const char *h = find_header(head, "X-MicroSNANDer-Chip:");
 
-	if (h && (op == OP_ERASE || op == OP_WRITE)) {
+	if (h && (op == OP_ERASE || op == OP_WRITE || op == OP_SELFTEST)) {
 		size_t k = 0;
 
 		for (h += 2 + strlen("X-MicroSNANDer-Chip:"); *h == ' '; h++)
@@ -635,6 +650,10 @@ static void handle(int fd)
 			want[k++] = *h++;
 		want[k] = 0;
 		want_sz = *h == ';' ? strtoll(h + 1, NULL, 10) : 0;
+	}
+	if (op == OP_SELFTEST && (!want[0] || want_sz <= 0)) {	/* the page always names the chip */
+		reply_text(fd, "400 Bad Request", "A self-test needs the chip confirmed: X-MicroSNANDer-Chip: NAME;SIZE.\n");
+		return;
 	}
 	unsigned int seq;
 
