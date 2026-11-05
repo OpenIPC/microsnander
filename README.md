@@ -331,9 +331,9 @@ Access:
 - For help over the internet use an SSH tunnel: `microsnander -W 127.0.0.1:8080 -K secret` on the
   machine with the programmer, so that the port stays closed to the network, then
   `ssh -L 8080:127.0.0.1:8080 user@machine` and `http://127.0.0.1:8080/` on the specialist's side.
-  A forwarded port works by the IP address
-  only: a domain name (dynamic DNS, a tunnel service) is refused, as above, and the password
-  and the firmware cross the internet unencrypted.
+  The tunnel is encrypted. A plain forwarded port without it is not: the password and the firmware
+  cross the internet in the clear, and it works by the IP address only, because a domain name
+  (dynamic DNS, a tunnel service) is refused, as above.
 - Only dumps made by Read are served from the `-o` directory, never links to other files.
 
 As a systemd service (the user in the `plugdev` group of the udev rule above):
