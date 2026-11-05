@@ -10,9 +10,10 @@ from every push to `main`; this file is the change history.
   range in memory, so a board with little memory reads and writes a chip of any size. A file
   that does not fit the memory no longer ends in `Malloc failed`. In one piece as before, with
   the memory that takes: `-k`, `-d`, the EZP programmers and a file that is no regular file.
-- `-r` writes to a new file next to the dump and gives it the name at the end: a bad path fails
-  before the read, a read that fails leaves no half dump and an earlier dump as it was. While
-  it runs, the disk holds both. A link, a FIFO or a device is written directly.
+- `-r` writes to a new file next to the dump and puts it in place at the end: a bad path or a
+  read-only dump fails before the read, a read that fails leaves no half dump and an earlier
+  dump as it was. An earlier dump stays the same file, with its owner and permissions. While
+  it runs, the disk holds both. A symbolic link, a FIFO or a device is written directly.
 
 ## 1.23.0 — 2026-11-05
 

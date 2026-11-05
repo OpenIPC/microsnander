@@ -134,12 +134,13 @@ static void parts_end(const char *what, long long done, long long len)
 		timer_end();
 }
 
-/* A dump goes to a new file next to fname and takes that name at the end: half a
-   dump looks like a dump, and a read that fails leaves an earlier dump as it was.
-   mode: that of the earlier file, -1: as a new file gets. NULL: no such file here. */
-static char *dump_temp(const char *fname, int mode, FILE **fp)
+/* A dump goes to a new file next to fname and into place at the end: half a dump
+   looks like a dump, and a read that fails leaves an earlier dump as it was.
+   NULL: no such file here. */
+static char *dump_temp(const char *fname, FILE **fp)
 {
 	char *tmp = malloc(strlen(fname) + 8);
+	mode_t mask;
 	int fd;
 
 	if (!tmp)
@@ -149,13 +150,9 @@ static char *dump_temp(const char *fname, int mode, FILE **fp)
 		free(tmp);
 		return NULL;
 	}
-	if (mode < 0) {
-		mode_t mask = umask(0);
-
-		umask(mask);
-		mode = 0666 & ~mask;
-	}
-	if (fchmod(fd, mode) || !(*fp = fdopen(fd, "wb"))) {
+	mask = umask(0);
+	umask(mask);
+	if (fchmod(fd, 0666 & ~mask) || !(*fp = fdopen(fd, "w+b"))) {
 		close(fd);
 		unlink(tmp);
 		free(tmp);
@@ -163,6 +160,21 @@ static char *dump_temp(const char *fname, int mode, FILE **fp)
 		return NULL;
 	}
 	return tmp;
+}
+
+/* The finished dump into the earlier file: the same file, with its owner, its
+   permissions and its other names. buf: a work area of n bytes. */
+static int dump_copy(FILE *from, FILE *to, unsigned char *buf, size_t n)
+{
+	size_t got;
+
+	rewind(from);
+	if (ftruncate(fileno(to), 0))
+		return -1;
+	while ((got = fread(buf, 1, n, from)) > 0)
+		if (fwrite(buf, 1, got, to) != got)
+			return -1;
+	return ferror(from) ? -1 : 0;
 }
 
 /* Read the range back and compare it with the file, which holds exactly the bytes
@@ -511,14 +523,25 @@ int main(int argc, char* argv[])
 
 	if (op == 'r') {
 		char *tmp = NULL;
+		FILE *old = NULL;
 		int ok, have = !lstat(fname, &st);
 
 		printf("READ:\n");
 		/* a link, a FIFO or a device is written as it is */
-		if (!have || S_ISREG(st.st_mode))
-			tmp = dump_temp(fname, have ? (int)(st.st_mode & 07777) : -1, &fp);
-		if (!tmp)
+		if (!have || S_ISREG(st.st_mode)) {
+			if (have && !(old = fopen(fname, "r+b"))) {
+				printf("Couldn't open file %s for writing.\n", fname);
+				free(buf);
+				goto out;
+			}
+			tmp = dump_temp(fname, &fp);
+		}
+		if (!tmp) {
+			if (old)
+				fclose(old);
+			old = NULL;
 			fp = fopen(fname, "wb");
+		}
 		if (!fp) {
 			printf("Couldn't open file %s for writing.\n", fname);
 			free(buf);
@@ -545,17 +568,27 @@ int main(int argc, char* argv[])
 		if (done == len)
 			parts_end("Read", len, len);
 		ok = done == len;
-		/* fclose() flushes: its result counts as much as that of fwrite() */
+		/* fflush and fclose: their results count as much as that of fwrite() */
+		if (old) {
+			if (ok && (fflush(fp) || dump_copy(fp, old, buf, part_size ? part_size : len))) {
+				printf("Error writing file [%s]\n", fname);
+				ok = 0;
+			}
+			if (fclose(old) != 0 && ok) {
+				printf("Error writing file [%s]\n", fname);
+				ok = 0;
+			}
+		}
 		if (fclose(fp) != 0 && ok) {
 			printf("Error writing file [%s]\n", fname);
 			ok = 0;
 		}
 		if (tmp) {
-			if (ok && rename(tmp, fname)) {
+			if (!old && ok && rename(tmp, fname)) {
 				printf("Error writing file [%s]\n", fname);
 				ok = 0;
 			}
-			if (!ok)
+			if (old || !ok)
 				unlink(tmp);
 			free(tmp);
 		}

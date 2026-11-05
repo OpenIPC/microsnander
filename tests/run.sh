@@ -137,12 +137,25 @@ t 1 "-r fails over an earlier dump"   MS_FAIL=read $B -r keep.bin
 [ "$(cat keep.bin)" = earlier ] && [ "$(ls keep.bin.* 2>/dev/null)" = "" ] && echo "ok   the earlier dump stays, no temporary file" || { echo "FAIL earlier dump or a temporary file"; fail=1; }
 t 0 "-r over an earlier dump"         $B -r keep.bin
 cmp -s keep.bin img.bin && [ "$(stat -c %a keep.bin)" = 640 ] && echo "ok   the dump replaces it, with its mode" || { echo "FAIL dump over an earlier one"; fail=1; }
+printf 'earlier' > hard.bin; ln hard.bin alias.bin
+t 0 "-r over a file with two names"   $B -r hard.bin
+cmp -s alias.bin img.bin && echo "ok   the other name has the dump too" || { echo "FAIL other name keeps the old data"; fail=1; }
+printf 'earlier' > ro.bin; chmod 440 ro.bin
+if [ "$(id -u)" != 0 ]; then
+	t 1 "-r over a read-only dump"    $B -r ro.bin
+	[ "$(cat ro.bin)" = earlier ] && echo "ok   a read-only dump stays" || { echo "FAIL read-only dump replaced"; fail=1; }
+fi
 ln -s keep.bin link.bin; t 0 "-r into a link" $B -r link.bin
 [ -L link.bin ] && echo "ok   a link stays a link" || { echo "FAIL link replaced"; fail=1; }
 t 0 "-w of a file of size 0 with data" $B -w /proc/self/status -l 8
 # a range goes in parts of whole blocks, 64 KiB here; in one piece where parts would not do
 dd if=/dev/urandom of=big.bin bs=1024 count=1024 2>/dev/null
-big() { want=$1; shift; MS_BIG=1 MS_LARGEST=1 "$@" | grep -q "^largest $want\$" && echo "ok   longest transfer $want: ${*#*ms}" || { echo "FAIL longest transfer not $want: $*"; fail=1; }; }
+big() {
+	want=$1; shift
+	o=$(MS_BIG=1 MS_LARGEST=1 "$@"); e=$?
+	[ $e = 0 ] && printf '%s\n' "$o" | grep -q "^largest $want\$" && echo "ok   longest transfer $want: ${*#*ms}" ||
+		{ echo "FAIL longest transfer not $want or exit $e: $*"; fail=1; }
+}
 big 0x10000 $B -w big.bin -v
 big 0x10000 $B -r bigout.bin
 cmp -s big.bin bigout.bin && echo "ok   1 MiB in parts: same data" || { echo "FAIL 1 MiB in parts"; fail=1; }
