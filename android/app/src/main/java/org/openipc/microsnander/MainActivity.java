@@ -269,6 +269,7 @@ public class MainActivity extends Activity {
         busyText = getString(phase);
         busyPct = -1;
         showBusy();
+        meta.setText(chipLines(lastResult));	// the last outcome is not about this operation
         if (usb.hasPermission(d)) {
             r.run();
             return;
@@ -677,7 +678,18 @@ public class MainActivity extends Activity {
             showFailed(getString(R.string.no_programmer));
             return;
         }
+        SpannableStringBuilder m = chipLines(r);
+        if (saved != null) m.append(saved).append('\n');
+        m.append(r.message);
+        meta.setText(m);
+        state.setTextColor(col(r.ok ? R.color.amber : R.color.red));
+        state.setText(r.ok ? R.string.done : R.string.failed);
+    }
+
+    /** the programmer, the chip and its warning: what stays on the screen during the next operation */
+    private SpannableStringBuilder chipLines(Native.Result r) {
         SpannableStringBuilder m = new SpannableStringBuilder();
+        if (r == null) return m;
         if (!r.programmer.isEmpty()) m.append(getString(R.string.programmer_is, r.programmer)).append('\n');
         if (!r.chip.isEmpty())
             m.append(getString(R.string.chip_is, r.chip, r.size >= 1 << 20 ? (r.size >> 20) + " MB" : (r.size >> 10) + " KB"))
@@ -689,11 +701,7 @@ public class MainActivity extends Activity {
                       from, m.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
             m.append('\n');
         }
-        if (saved != null) m.append(saved).append('\n');
-        m.append(r.message);
-        meta.setText(m);
-        state.setTextColor(col(r.ok ? R.color.amber : R.color.red));
-        state.setText(r.ok ? R.string.done : R.string.failed);
+        return m;
     }
 
     private void showRegisters(int sr) {
