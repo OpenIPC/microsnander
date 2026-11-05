@@ -31,6 +31,7 @@ static bool on;				/* -m sigmastar */
 static int speed = 1;			/* 100 kHz */
 static const struct programmer *bus;	/* the programmer whose I2C it is */
 static struct programmer isp;		/* bus with send and cs of the bridge */
+static bool stuck;			/* an end of a command failed: CS may still be low */
 
 static const struct { const char *name; int code; } speeds[] = {
 	{ "20K", 0 }, { "100K", 1 }, { "400K", 2 }, { "750K", 3 },
@@ -65,6 +66,8 @@ static int isp_send(unsigned int writecnt, unsigned int readcnt, const unsigned 
 	unsigned char buf[64];
 	unsigned int part = bus->i2c_max - 1;	/* the command byte first */
 
+	if (stuck)				/* not every caller looks at cs(false) */
+		return -1;
 	for (unsigned int done = 0; done < writecnt; ) {
 		unsigned int n = writecnt - done < part ? writecnt - done : part;
 
@@ -89,7 +92,13 @@ static int isp_cs(bool low)
 {
 	unsigned char end = ISP_END;
 
-	return low ? 0 : bus->i2c_write(ISP_ADDR, &end, 1);
+	if (low)
+		return 0;
+	if (bus->i2c_write(ISP_ADDR, &end, 1)) {
+		stuck = true;
+		return -1;
+	}
+	return 0;
 }
 
 /* the debug port lets the UART pins of the SoC go to the ISP bridge */
@@ -145,8 +154,12 @@ const struct programmer *sigmastar_attach(const struct programmer *p)
 		return NULL;
 	}
 	bus = p;
+	stuck = false;
 	if (p->i2c_speed(speed))
 		return NULL;
+	if (!strcmp(p->key, "ch341a"))
+		printf("Warning: the black CH341A board puts 5 V on SDA and SCL unless it is modified for 3.3 V;\n"
+		       "the UART of the SoC is not made for that.\n");
 	if (p->i2c_read(ISP_ADDR, NULL, 0)) {
 		printf("SigmaStar ISP: nothing answers at I2C 0x%02x. Check the wires (TX to SDA, RX to SCL, GND)\n"
 		       "and that the board is powered; a power cycle of the board can help.\n", ISP_ADDR);
@@ -170,5 +183,6 @@ const struct programmer *sigmastar_attach(const struct programmer *p)
 	isp.cs = isp_cs;
 	isp.clock = false;
 	isp.flash_init = NULL;
+	isp.on_board = true;
 	return &isp;
 }

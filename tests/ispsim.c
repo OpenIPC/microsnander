@@ -116,7 +116,13 @@ int main(void)
 	/* a debug port that answers gets no unlock */
 	answers59 = 1;
 	before = writes59;
-	check(sigmastar_attach(&fake) && writes59 == before, "a debug port that answers is left alone");
+	check((p = sigmastar_attach(&fake)) && writes59 == before && p->on_board, "a debug port that answers is left alone");
+
+	/* a failed end of a command stops what comes next, whoever looked at it */
+	refuse_end = 1;
+	check(p->cs(false) && p->send(1, 3, (const unsigned char[]){ 0x9f }, id), "a failed 0x12: the next command fails");
+	refuse_end = 0;
+	check(sigmastar_attach(&fake) && !p->send(1, 3, (const unsigned char[]){ 0x9f }, id), "  a new attach starts clean");
 
 	return fail;
 }

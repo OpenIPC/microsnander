@@ -354,7 +354,7 @@ root；在电视盒子上会出现在主屏幕，可用遥控器操作）。
 用于修复引导程序损坏的板子（[OpenIPC wiki：SigmaStar unbrick](https://github.com/OpenIPC/wiki/blob/master/en/sigmastar-unbrick.md)）。
 
 - 接线：SoC 的 UART 接编程器的 I2C，TX 接 SDA，RX 接 SCL，并连接 GND。板子自行供电；桥无响应时，
-  给板子重新上电通常有效。
+  给板子重新上电通常有效。黑色 CH341A 板未改为 3.3 V 时，SDA 和 SCL 上为 5 V，而 SoC 的 UART 不适用该电压。
 - I2C 主机为 CH341A 或 CH347（CH347T 模式 1、CH347F），照常用 `-P` 选择或自动选择；EZP 编程器没有 I2C。
 - 此模式下 `-S` 为 I2C 时钟：`20K`、`100K`（默认）、`400K`、`750K`。
 - `-q` 列出有响应的 I2C 地址，用于检查接线（桥为 `0x49`，SoC 调试端口为 `0x59`，解锁前可能没有响应）：可单独使用，也可在操作之前，如 `-m sigmastar -i -q`。此后 CH347F 的引脚仍为 I2C：通过 SPI 操作芯片前请重新插拔。

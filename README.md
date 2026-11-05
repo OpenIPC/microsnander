@@ -404,6 +404,8 @@ bootloader ([OpenIPC wiki: SigmaStar unbrick](https://github.com/OpenIPC/wiki/bl
 
 - Wires: the UART of the SoC to the I2C of the programmer, TX to SDA, RX to SCL, and GND. The
   board is powered on its own; when the bridge does not answer, a power cycle of the board helps.
+  The black CH341A board puts 5 V on SDA and SCL unless it is modified for 3.3 V: the UART of the
+  SoC is not made for that.
 - The I2C master is that of the CH341A or the CH347 (CH347T in mode 1, CH347F), chosen as always
   with `-P` or by itself; the EZP programmers have no I2C.
 - `-S` is the I2C clock in this mode: `20K`, `100K` (default), `400K`, `750K`.
