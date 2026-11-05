@@ -1152,7 +1152,8 @@ int snor_read(unsigned char *buf, unsigned long from, unsigned long len)
 		timer_end();
 		return -1;
 	}
-	printf("Read 100%% [%lu] of [%lu] bytes      \n", len - remain_len, len);
+	if (!timer_quiet)
+		printf("Read 100%% [%lu] of [%lu] bytes      \n", len - remain_len, len);
 	timer_end();
 
 	return len;
@@ -1250,7 +1251,8 @@ static int snor_write_aai(unsigned char *buf, unsigned long to, unsigned long le
 		len--;
 	}
 	snor_write_disable();
-	printf("Written 100%% [%lu] of [%lu] bytes      \n", plen - len, plen);
+	if (!timer_quiet)
+		printf("Written 100%% [%lu] of [%lu] bytes      \n", plen - len, plen);
 	timer_end();
 	return plen;
 
@@ -1360,9 +1362,10 @@ int snor_write(unsigned char *buf, unsigned long to, unsigned long len)
 
 	snor_write_disable();
 
-	if (retlen == (int)plen)
-		printf("Written 100%% [%lu] of [%lu] bytes      \n", plen, plen);
-	else
+	if (retlen == (int)plen) {
+		if (!timer_quiet)
+			printf("Written 100%% [%lu] of [%lu] bytes      \n", plen, plen);
+	} else
 		printf("Written [%d] of [%lu] bytes\n", retlen, plen);
 	timer_end();
 

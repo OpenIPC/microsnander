@@ -243,7 +243,8 @@ static int ezp_read(unsigned char *buf, unsigned long from, unsigned long len)
 	timer_start();
 	ret = ezp_read_range(buf, from, len, 1);
 	if (!ret)
-		printf("Read 100%% [%lu] of [%lu] bytes      \n", len, len);
+		if (!timer_quiet)
+			printf("Read 100%% [%lu] of [%lu] bytes      \n", len, len);
 	timer_end();
 	return ret ? -1 : (int)len;
 }
@@ -332,7 +333,8 @@ static int ezp_write(unsigned char *buf, unsigned long to, unsigned long len)
 	}
 	if (ezp_wait(10 * 1000, 2000))
 		goto fail;
-	printf("Written 100%% [%lu] of [%lu] bytes      \n", len, len);
+	if (!timer_quiet)
+		printf("Written 100%% [%lu] of [%lu] bytes      \n", len, len);
 	timer_end();
 	return len;
 

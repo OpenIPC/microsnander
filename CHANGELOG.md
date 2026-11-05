@@ -4,6 +4,15 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.24.0 — 2026-11-05
+
+- `-r`, `-w` and `-v` go in parts of whole blocks, about 64 KB, instead of keeping the whole
+  range in memory, so a board with little memory reads and writes a chip of any size. A file
+  that does not fit the memory no longer ends in `Malloc failed`. In one piece as before, with
+  the memory that takes: `-k`, `-d`, the EZP programmers and a file that is no regular file.
+- `-r` opens the file first, so a bad path fails before the read, and a read that fails leaves
+  no half dump.
+
 ## 1.23.0 — 2026-11-05
 
 - Release file `microsnander-linux-mips`: a static binary for big-endian MIPS (MIPS32r2,

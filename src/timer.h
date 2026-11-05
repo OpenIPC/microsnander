@@ -15,6 +15,8 @@
 #ifndef __TIMER_H__
 #define __TIMER_H__
 
+extern int timer_quiet;		/* main.c prints the time and the progress of the parts */
+
 void timer_start(void);
 void timer_end(void);
 int timer_progress(void);

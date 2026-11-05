@@ -4488,7 +4488,8 @@ static SPI_NAND_FLASH_RTN_T spi_nand_write_internal( u32 dst_addr, u32 len, u32 
 			fflush(stdout);
 		}
 	}
-	printf("Written 100%% [%u] of [%u] bytes      \n", len - remain_len, len);
+	if (!timer_quiet)
+		printf("Written 100%% [%u] of [%u] bytes      \n", len - remain_len, len);
 	_SPI_NAND_SEMAPHORE_UNLOCK();
 
 	return (rtn_status);
@@ -4592,7 +4593,8 @@ static SPI_NAND_FLASH_RTN_T spi_nand_read_internal ( u32 addr, u32 len, u8 *ptr_
 			fflush(stdout);
 		}
 	}
-	printf("Read 100%% [%u] of [%u] bytes      \n", len - remain_len, len);
+	if (!timer_quiet)
+		printf("Read 100%% [%u] of [%u] bytes      \n", len - remain_len, len);
 	_SPI_NAND_SEMAPHORE_UNLOCK();
 
 	return (rtn_status);
