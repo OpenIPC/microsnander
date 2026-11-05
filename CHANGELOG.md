@@ -4,6 +4,11 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.22.0 — 2026-11-05
+
+- Release file `microsnander-linux-mipsel`: a static binary for little-endian MIPS (MIPS32r2,
+  soft-float), for MediaTek routers and Ingenic cameras. `ci/build-musl.sh mipsel` builds it.
+
 ## 1.21.2 — 2026-11-04
 
 - Web mode and Android app: a Macronix SPI NOR shows its one status register with its own
