@@ -8,6 +8,9 @@ from every push to `main`; this file is the change history.
 
 - Release file `microsnander-linux-mipsel`: a static binary for little-endian MIPS (MIPS32r2,
   soft-float), for MediaTek routers and Ingenic cameras. `ci/build-musl.sh mipsel` builds it.
+- Web mode: the threads are joined, not detached. In the static mipsel build a detached thread
+  could fault as it ended, and the service went down, for example after a request without the
+  password of `-K`.
 
 ## 1.21.2 — 2026-11-04
 

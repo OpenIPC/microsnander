@@ -47,6 +47,7 @@
 
 #define WEB_PART	(64 * 1024)		/* read, write and verify in parts: the progress */
 #define WEB_HEADERS	8192
+#define WEB_MAX_CONN	16
 #define WEB_MAX_BODY	(512UL << 20)		/* largest file to write */
 
 enum { OP_NONE, OP_DETECT, OP_READ, OP_ERASE, OP_WRITE, OP_REGISTERS, OP_UNPROTECT, OP_SELFTEST };
@@ -216,6 +217,34 @@ static int op_read(struct ms_chip *c, char *msg, size_t n)
 static char want_chip[64];
 static long long want_size;
 
+/* The threads are joined, not detached. A detached thread unmaps its own stack
+   as it ends, and in the static mipsel build that faults on a real kernel: the
+   code of the libc takes the stack for its last system calls from t9, which its
+   non-PIC call leaves unset. Every thread says that it has ended, under st.lock,
+   and the accept loop joins it. Between two rounds of that loop there are at most
+   WEB_MAX_CONN connections and an operation from each, and one operation before. */
+static pthread_t ended[2 * WEB_MAX_CONN + 1];
+static int ended_n;
+
+static void thread_ended(void)
+{
+	ended[ended_n++] = pthread_self();
+}
+
+static void reap_threads(void)
+{
+	pthread_t t[sizeof(ended) / sizeof(ended[0])];
+	int n;
+
+	pthread_mutex_lock(&st.lock);
+	n = ended_n;
+	memcpy(t, ended, n * sizeof(t[0]));
+	ended_n = 0;
+	pthread_mutex_unlock(&st.lock);
+	while (n--)
+		pthread_join(t[n], NULL);
+}
+
 static void *worker(void *arg)
 {
 	int op = (int)(long)arg, ret = -1;
@@ -252,6 +281,7 @@ static void *worker(void *arg)
 	pthread_mutex_lock(&st.lock);
 	st.ok = ret == 0;
 	st.busy = 0;
+	thread_ended();
 	pthread_mutex_unlock(&st.lock);
 	return NULL;
 }
@@ -290,7 +320,6 @@ static int start(int op, FILE *body, const char *chip, long long size, unsigned 
 		pthread_mutex_unlock(&st.lock);
 		return -1;
 	}
-	pthread_detach(t);
 	return 0;
 }
 
@@ -673,7 +702,6 @@ static void handle(int fd)
 	reply_text(fd, "202 Accepted", started);
 }
 
-#define WEB_MAX_CONN	16
 static int connections;
 
 static void *conn_thread(void *arg)
@@ -684,6 +712,7 @@ static void *conn_thread(void *arg)
 	close(c);
 	pthread_mutex_lock(&st.lock);
 	connections--;
+	thread_ended();
 	pthread_mutex_unlock(&st.lock);
 	return NULL;
 }
@@ -739,6 +768,7 @@ int web_serve(const char *listen_on, const char *password, const char *dir,
 		int c = accept(s, NULL, NULL);
 		pthread_t t;
 
+		reap_threads();
 		if (c < 0) {
 			if (errno == EMFILE || errno == ENFILE || errno == ENOBUFS || errno == ENOMEM)
 				usleep(100000);		/* out of resources: wait, do not stop */
@@ -760,8 +790,6 @@ int web_serve(const char *listen_on, const char *password, const char *dir,
 			}
 			reply_text(c, "503 Service Unavailable", "Too many connections.\n");
 			close(c);
-			continue;
 		}
-		pthread_detach(t);
 	}
 }
