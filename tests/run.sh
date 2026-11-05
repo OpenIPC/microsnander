@@ -142,6 +142,8 @@ printf 'earlier' > hard.bin; ln hard.bin alias.bin
 t 0 "-r over a file with two names"   $B -r hard.bin
 cmp -s alias.bin img.bin && echo "ok   the other name has the dump too" || { echo "FAIL other name keeps the old data"; fail=1; }
 printf 'earlier' > ro.bin; chmod 440 ro.bin
+printf 'earlier' > wo.bin; chmod 200 wo.bin
+t 0 "-r over a write-only dump"       $B -r wo.bin
 if [ "$(id -u)" != 0 ]; then
 	t 1 "-r over a read-only dump"    $B -r ro.bin
 	[ "$(cat ro.bin)" = earlier ] && echo "ok   a read-only dump stays" || { echo "FAIL read-only dump replaced"; fail=1; }

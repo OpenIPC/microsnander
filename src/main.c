@@ -23,6 +23,7 @@
 #include <string.h>
 #include <getopt.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <sys/stat.h>
 #include <time.h>
 #include <stdio.h>
@@ -486,6 +487,9 @@ int main(int argc, char* argv[])
 				}
 				/* the size of a file in /sys is only an upper limit */
 				if ((long long)got < k) {
+					parts_end(NULL, 0, 0);
+					printf("File %s ends early, writing 0x%llX of 0x%llX bytes.\n", fname, done + (long long)got, len);
+					parts_begin();
 					k = got;
 					len = done + k;
 					if (!k)
@@ -531,8 +535,12 @@ int main(int argc, char* argv[])
 		printf("READ:\n");
 		/* a link, a FIFO or a device is written as it is */
 		if (!have || S_ISREG(st.st_mode)) {
-			if (have && !(old = fopen(fname, "r+b"))) {
+			int fd = have ? open(fname, O_WRONLY) : -1;	/* not truncated */
+
+			if (have && (fd < 0 || !(old = fdopen(fd, "wb")))) {
 				printf("Couldn't open file %s for writing.\n", fname);
+				if (fd >= 0)
+					close(fd);
 				free(buf);
 				goto out;
 			}

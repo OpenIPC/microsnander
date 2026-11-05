@@ -13,7 +13,8 @@ from every push to `main`; this file is the change history.
 - `-r` writes to a new file next to the dump and puts it in place at the end: a bad path or a
   read-only dump fails before the read, a read that fails leaves no half dump and an earlier
   dump as it was. An earlier dump stays the same file, with its owner and permissions. While
-  it runs, the disk holds both. A symbolic link, a FIFO or a device is written directly.
+  it runs, the disk holds both. A symbolic link, a FIFO or a device is written directly, and so
+  is a dump in a directory that takes no new file.
 
 ## 1.23.0 — 2026-11-05
 
