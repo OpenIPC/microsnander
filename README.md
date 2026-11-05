@@ -70,9 +70,9 @@ them with a graphical interface. MicroSNANDer is made for the places they do not
 - **Nothing to install.** No kernel driver for the programmer, no libc and no libusb on the
   system: the Linux binaries are static and reach the programmer through the USB support of
   the kernel.
-- **Runs on the device at hand.** Any Linux board with a USB host port is enough: repairing a
-  device, a working one of the same kind can flash the chip of the broken one, with no PC
-  nearby.
+- **Runs on the device at hand.** A Linux board with a USB host port is enough, x86_64 or
+  32-bit ARM: repairing a device, a working one of the same kind can flash the chip of the
+  broken one, with no PC nearby.
 - **No desoldering.** With a clip on the chip, the flash of a board is read and written in
   place.
 - **Help from a distance.** With [web mode](#web-mode) the person at the bench connects the
@@ -328,8 +328,10 @@ Access:
 - Operations need a header that only the page sends, so a page of another site cannot start an
   erase or a write. A request has to name this machine by its IP address, `localhost` or its
   host name (no other names: DNS rebinding).
-- For help over the internet use an SSH tunnel: `ssh -L 8080:127.0.0.1:8080 user@machine`, then
-  `http://127.0.0.1:8080/` on the specialist's side. A forwarded port works by the IP address
+- For help over the internet use an SSH tunnel: `microsnander -W 127.0.0.1:8080 -K secret` on the
+  machine with the programmer, so that the port stays closed to the network, then
+  `ssh -L 8080:127.0.0.1:8080 user@machine` and `http://127.0.0.1:8080/` on the specialist's side.
+  A forwarded port works by the IP address
   only: a domain name (dynamic DNS, a tunnel service) is refused, as above, and the password
   and the firmware cross the internet unencrypted.
 - Only dumps made by Read are served from the `-o` directory, never links to other files.
