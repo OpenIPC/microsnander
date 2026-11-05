@@ -25,7 +25,7 @@ PC 上运行，也可以直接在 USB 口插着编程器的 ARM 摄像机上运�
 ## 快速开始
 
 ```sh
-# 1. 下载静态二进制文件（arm：microsnander-linux-arm，MIPS：microsnander-linux-mipsel）
+# 1. 下载静态二进制文件（arm：microsnander-linux-arm，MIPS：microsnander-linux-mips 或 -mipsel）
 curl -fLo microsnander https://github.com/OpenIPC/microsnander/releases/latest/download/microsnander-linux-x86_64
 chmod +x microsnander
 
@@ -65,7 +65,7 @@ MicroSNANDer 面向的是它们覆盖不到的场合：
   编程器（CH341A、CH347T、CH347F、EZP2019、EZP2019+、EZP2023）的驱动以及网页。
 - **无需安装。** 系统中不需要编程器的内核驱动，也不需要 libc 和 libusb：Linux 二进制文件为静态链接，
   通过内核的 USB 支持访问编程器。
-- **在手边的设备上运行。** 带 USB host 接口的 Linux 开发板（x86_64、32 位 ARM 或小端 MIPS）即可：维修时，一台正常的设备可以为
+- **在手边的设备上运行。** 带 USB host 接口的 Linux 开发板（x86_64、32 位 ARM 或 MIPS）即可：维修时，一台正常的设备可以为
   同型号的故障设备烧写芯片，身边不需要 PC。
 - **无需拆焊。** 用夹子夹住芯片，即可直接在板上读写闪存。
 - **远程协助。** 使用 [Web 模式](#web-模式)时，现场人员连接编程器，异地的专家在浏览器中查看进度并
@@ -96,7 +96,7 @@ microsnander 的设备（路由器、电脑、摄像机、Linux 电视盒子）�
 
   只连接一个编程器时 microsnander 直接使用它；连接多个时请用 `-P ch341a`、`-P ch347` 或 `-P ezp`
   选择。占用编程器的内核驱动（例如 `spi-ch341`）会在运行期间分离，结束后重新绑定。
-- x86_64、32 位 ARM（ARMv5TE 及以上）或小端 MIPS（MIPS32r2，有无 FPU 均可：路由器）上的 Linux。发布的二进制文件为静态链接（musl），
+- x86_64、32 位 ARM（ARMv5TE 及以上）或 MIPS（MIPS32r2，大端和小端，有无 FPU 均可：路由器）上的 Linux。发布的二进制文件为静态链接（musl），
   不使用 libusb：microsnander 自己通过 Linux usbfs（`/dev/bus/usb`）访问编程器。无需安装任何东西：
   不需要编程器的内核驱动，只需要内核的 USB host 支持和 `/dev/bus/usb` 中的设备节点。
 - USB 设备访问权限：以 root 运行，或用 udev 规则授权给某个用户组（之后重新插拔编程器）：
@@ -143,6 +143,7 @@ microsnander 的设备（路由器、电脑、摄像机、Linux 电视盒子）�
 | [`microsnander-linux-x86_64`](https://github.com/OpenIPC/microsnander/releases/latest/download/microsnander-linux-x86_64) | PC 和服务器                                                            |
 | [`microsnander-linux-arm`](https://github.com/OpenIPC/microsnander/releases/latest/download/microsnander-linux-arm)       | 32 位 ARM：摄像机、树莓派及其他开发板（soft-float，有无 FPU 均可运行） |
 | [`microsnander-linux-mipsel`](https://github.com/OpenIPC/microsnander/releases/latest/download/microsnander-linux-mipsel) | 小端 MIPS（MIPS32r2，软浮点）：MediaTek 路由器、Ingenic 摄像机         |
+| [`microsnander-linux-mips`](https://github.com/OpenIPC/microsnander/releases/latest/download/microsnander-linux-mips)     | 大端 MIPS（MIPS32r2，软浮点）：Atheros 和 Qualcomm 路由器              |
 | [`microsnander-android.apk`](https://github.com/OpenIPC/microsnander/releases/latest/download/microsnander-android.apk)   | Android 5.0 及以上：带 USB 主机端口的手机和电视盒子，无需 root         |
 
 发布页面：`https://github.com/OpenIPC/microsnander/releases/latest`
@@ -407,12 +408,13 @@ make -C src
 闪存。原版 SNANDer 的 EEPROM 部分（`-E`、`-8`、`-f`）已删除。
 
 静态发布文件由 `ci/build-musl.sh` 构建（Docker 或任何带 `curl`、`make` 的 x86_64
-Linux，arm 和 mipsel 还需要 `qemu-user`）。脚本会下载 musl 工具链并按 SHA256 校验：
+Linux，arm 和 MIPS 还需要 `qemu-user`）。脚本会下载 musl 工具链并按 SHA256 校验：
 
 ```sh
 ci/build-musl.sh x86_64 dist    # dist/microsnander-linux-x86_64
 ci/build-musl.sh arm dist       # dist/microsnander-linux-arm
 ci/build-musl.sh mipsel dist    # dist/microsnander-linux-mipsel
+ci/build-musl.sh mips dist      # dist/microsnander-linux-mips
 ```
 
 ## 致谢

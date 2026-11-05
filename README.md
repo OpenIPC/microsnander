@@ -28,7 +28,7 @@ Changes: [CHANGELOG.md](CHANGELOG.md).
 ## Quick start
 
 ```sh
-# 1. Download the static binary (arm: microsnander-linux-arm, MIPS: microsnander-linux-mipsel)
+# 1. Download the static binary (arm: microsnander-linux-arm, MIPS: microsnander-linux-mips or -mipsel)
 curl -fLo microsnander https://github.com/OpenIPC/microsnander/releases/latest/download/microsnander-linux-x86_64
 chmod +x microsnander
 
@@ -71,7 +71,7 @@ them with a graphical interface. MicroSNANDer is made for the places they do not
   system: the Linux binaries are static and reach the programmer through the USB support of
   the kernel.
 - **Runs on the device at hand.** A Linux board with a USB host port is enough, x86_64,
-  32-bit ARM or little-endian MIPS: repairing a device, a working one of the same kind can flash the chip of the
+  32-bit ARM or MIPS: repairing a device, a working one of the same kind can flash the chip of the
   broken one, with no PC nearby.
 - **No desoldering.** With a clip on the chip, the flash of a board is read and written in
   place.
@@ -112,8 +112,8 @@ suit you, or for EEPROM chips, which MicroSNANDer does not handle, use a native 
   With one programmer connected microsnander uses it; with several, choose one with
   `-P ch341a`, `-P ch347` or `-P ezp`. A kernel driver that has taken the programmer (for
   example `spi-ch341`) is detached for the run and attached back after it.
-- Linux on x86_64, 32-bit ARM (ARMv5TE and later) or little-endian MIPS (MIPS32r2, with or
-  without an FPU: routers). The release binaries are
+- Linux on x86_64, 32-bit ARM (ARMv5TE and later) or MIPS (MIPS32r2, both byte orders, with
+  or without an FPU: routers). The release binaries are
   static (musl), without libusb: microsnander talks to the programmers through the Linux
   usbfs (`/dev/bus/usb`) itself. Nothing to install: no kernel driver for the programmer
   is needed, only USB host support in the kernel and the device nodes in `/dev/bus/usb`.
@@ -163,6 +163,7 @@ have no version, so these links always give the newest build:
 | [`microsnander-linux-x86_64`](https://github.com/OpenIPC/microsnander/releases/latest/download/microsnander-linux-x86_64) | PCs and servers                                                                              |
 | [`microsnander-linux-arm`](https://github.com/OpenIPC/microsnander/releases/latest/download/microsnander-linux-arm)       | 32-bit ARM: cameras, Raspberry Pi and other boards (soft-float, runs with or without an FPU) |
 | [`microsnander-linux-mipsel`](https://github.com/OpenIPC/microsnander/releases/latest/download/microsnander-linux-mipsel) | Little-endian MIPS (MIPS32r2, soft-float): MediaTek routers, Ingenic cameras                 |
+| [`microsnander-linux-mips`](https://github.com/OpenIPC/microsnander/releases/latest/download/microsnander-linux-mips)     | Big-endian MIPS (MIPS32r2, soft-float): Atheros and Qualcomm routers                         |
 | [`microsnander-android.apk`](https://github.com/OpenIPC/microsnander/releases/latest/download/microsnander-android.apk)   | Android 5.0 and later: phones and TV boxes with a USB host port, no root                     |
 
 Release page: `https://github.com/OpenIPC/microsnander/releases/latest`
@@ -460,13 +461,14 @@ SPI NOR and SPI NAND flash. The EEPROM part of the original SNANDer (`-E`, `-8`,
 was removed.
 
 The static release binaries are built by `ci/build-musl.sh` (Docker or any Linux
-x86_64 host with `curl`, `make` and, for arm and mipsel, `qemu-user`). It downloads the musl
+x86_64 host with `curl`, `make` and, for arm and MIPS, `qemu-user`). It downloads the musl
 toolchain and checks it by SHA256:
 
 ```sh
 ci/build-musl.sh x86_64 dist    # dist/microsnander-linux-x86_64
 ci/build-musl.sh arm dist       # dist/microsnander-linux-arm
 ci/build-musl.sh mipsel dist    # dist/microsnander-linux-mipsel
+ci/build-musl.sh mips dist      # dist/microsnander-linux-mips
 ```
 
 ## Credits

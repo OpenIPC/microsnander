@@ -10,13 +10,15 @@
 #         mipsel   OpenWrt toolchain (ramips/mt7621, musl, soft-float) — runs on every
 #                  little-endian MIPS32r2 core with or without an FPU: MediaTek routers,
 #                  Ingenic cameras
+#         mips     OpenWrt toolchain (ath79/generic, musl, soft-float) — the same for
+#                  big-endian cores: Atheros and Qualcomm routers
 #
 # Produces <outdir>/microsnander-linux-<target>: static, stripped, no version in the
 # name, so the release links never change. The programmers are reached through the
 # Linux usbfs (/dev/bus/usb) by src/usbfs.c, without libusb, so the binary has no
 # dependencies and runs whatever the libc of the system. Any compiler
 # warning in microsnander fails the build. The binary must start and print the
-# version that src/main.c defines (under qemu-user for arm and mipsel).
+# version that src/main.c defines (under qemu-user for arm and MIPS).
 #
 # Toolchains are downloaded once into $TOOLCHAIN_CACHE and checked by SHA256 before
 # their compiler is run; the OpenIPC toolchain is a rolling release asset, checked
@@ -52,7 +54,13 @@ case "$ARCH" in
         SHA=bb08478a46869009a2a8b85f88e266cc6b6d3ccefc34de61907ead2a986e08c9
         SUBDIR=/toolchain-mipsel_24kc_gcc-12.3.0_musl
         RUN=qemu-mipsel ;;
-    *) echo "usage: $0 <x86_64|arm|mipsel> [outdir]" >&2; exit 2 ;;
+    mips)
+        DIRNAME=openwrt-toolchain-23.05.5-ath79-generic_gcc-12.3.0_musl.Linux-x86_64
+        URL=$OPENWRT/ath79/generic/$DIRNAME.tar.xz
+        SHA=6cf197b2705307057548e65158396ca4d26b343f557bf81c97fd5643978cc991
+        SUBDIR=/toolchain-mips_24kc_gcc-12.3.0_musl
+        RUN=qemu-mips ;;
+    *) echo "usage: $0 <x86_64|arm|mipsel|mips> [outdir]" >&2; exit 2 ;;
 esac
 
 # Download first (with retries), then check, then extract: a truncated stream piped

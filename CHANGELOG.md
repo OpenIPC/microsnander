@@ -4,6 +4,11 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.23.0 — 2026-11-05
+
+- Release file `microsnander-linux-mips`: a static binary for big-endian MIPS (MIPS32r2,
+  soft-float), for Atheros and Qualcomm routers. `ci/build-musl.sh mips` builds it.
+
 ## 1.22.0 — 2026-11-05
 
 - Release file `microsnander-linux-mipsel`: a static binary for little-endian MIPS (MIPS32r2,
