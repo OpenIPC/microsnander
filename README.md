@@ -51,6 +51,7 @@ sudo ./microsnander -w firmware.bin -v
 - [Examples](#examples)
 - [Web mode](#web-mode)
 - [Android app](#android-app)
+- [SigmaStar ISP](#sigmastar-isp)
 - [Supported chips](#supported-chips)
 - [Chip voltage](#chip-voltage)
 - [Chips with uncertain data](#chips-with-uncertain-data)
@@ -190,7 +191,12 @@ microsnander [options]
                 (the first; -a for another) and put its data back
  -v             verify after write on chip
  -P <name>      programmer: ch341a, ch347, ezp, auto (default: the one connected)
- -S <speed>     SPI clock of the CH347: 60M, 30M (default), 15M, 7.5M, 3.75M, 1.875M
+ -S <speed>     SPI clock of the CH347: 60M, 30M (default), 15M, 7.5M, 3.75M, 1.875M;
+                with -m sigmastar the I2C clock: 20K, 100K (default), 400K, 750K
+ -m sigmastar   the flash of a SigmaStar board through the ISP of its SoC: the SoC's UART
+                (TX to SDA, RX to SCL, GND) on the I2C of the CH341A or the CH347
+ -q             list the addresses that answer on the I2C of the programmer (alone, or
+                before the operation: -m sigmastar -i -q)
  -W [addr:]port web mode: a page with Detect, Read, Erase, Write, Registers
  -K <password>  web mode: ask for this password (any user name)
  -o <dir>       web mode: where Read saves the dumps (default: the current one)
@@ -322,8 +328,8 @@ How it works:
   can be replugged, or used by a normal microsnander run.
 - One operation runs at a time; a request while one runs gets `409`. The page polls the state
   twice a second while an operation runs.
-- `-W` takes no operation of its own (`-i`, `-r`, `-w`, `-e`, `-u`, `-t`) and no `-v`, `-S`, `-d`,
-  `-I` or `-k`: the page does the operations, writes whole files from address 0 with ECC on
+- `-W` takes no operation of its own (`-i`, `-r`, `-w`, `-e`, `-u`, `-t`) and no `-q`, `-m`, `-v`,
+  `-S`, `-d`, `-I` or `-k`: the page does the operations, writes whole files from address 0 with ECC on
   and always verifies. `-K` and `-o` go with `-W` only.
 - The service keeps running when a client disconnects; a slow client does not hold the others
   (up to 16 connections at a time).
@@ -389,6 +395,36 @@ with the remote).
   `microsnander-android.apk` in [latest](https://github.com/OpenIPC/microsnander/releases/latest).
 
 Build: `cd android && gradle assembleDebug` with the Android SDK and NDK r27c.
+
+## SigmaStar ISP
+
+`-m sigmastar` reaches the SPI flash of a SigmaStar (MStar) board on its SoC, without
+desoldering: through the ISP bridge of the SoC, over I2C. It brings back a board with a broken
+bootloader ([OpenIPC wiki: SigmaStar unbrick](https://github.com/OpenIPC/wiki/blob/master/en/sigmastar-unbrick.md)).
+
+- Wires: the UART of the SoC to the I2C of the programmer, TX to SDA, RX to SCL, and GND. The
+  board is powered on its own; when the bridge does not answer, a power cycle of the board helps.
+  The black CH341A board puts 5 V on SDA and SCL unless it is modified for 3.3 V: the UART of the
+  SoC is not made for that.
+- The I2C master is that of the CH341A or the CH347 (CH347T in mode 1, CH347F), chosen as always
+  with `-P` or by itself; the EZP programmers have no I2C.
+- `-S` is the I2C clock in this mode: `20K`, `100K` (default), `400K`, `750K`.
+- `-q` lists the I2C addresses that answer, to check the wiring (the bridge is at `0x49`, the
+  debug port of the SoC at `0x59`, which may stay silent until it is unlocked): alone, or before
+  the operation, as `-m sigmastar -i -q`. A CH347F keeps its pins on I2C afterwards: replug it
+  before working with a chip over SPI.
+- Everything else works as with a chip in the socket: `-i`, `-r`, `-w`, `-e`, `-v`, `-a`, `-l`,
+  SPI NOR and SPI NAND. Not in the web mode or the Android app.
+
+```sh
+microsnander -m sigmastar -i -q                  # 0x49 must answer, then the flash
+microsnander -m sigmastar -r backup.bin          # back it up first
+microsnander -m sigmastar -a 0 -l 0x40000 -e     # the loader part, then
+microsnander -m sigmastar -w u-boot.bin -v       # a working loader
+```
+
+It is slow: the data goes over I2C, about 20-25 bytes a transaction. A loader of a few
+hundred KB is minutes; a whole 16 MB chip is much longer.
 
 ## Supported chips
 

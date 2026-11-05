@@ -31,6 +31,7 @@
 #include "flashcmd_api.h"
 #include "programmer.h"
 #include "ch347_spi.h"
+#include "sigmastar.h"
 #include "selftest.h"
 #include "web.h"
 #include "timer.h"
@@ -39,7 +40,7 @@
 struct flash_cmd prog;
 extern unsigned int bsize;
 
-#define _VER	"1.24.0"
+#define _VER	"1.25.0"
 
 const char *ms_version = _VER;
 
@@ -85,7 +86,12 @@ void usage(int code)
 		"                (the first; -a for another) and put its data back\n"\
 		" -v             verify after write on chip\n"\
 		" -P <name>      programmer: ch341a, ch347, ezp, auto (default: the one connected)\n"\
-		" -S <speed>     SPI clock of the CH347: 60M, 30M (default), 15M, 7.5M, 3.75M, 1.875M\n"\
+		" -S <speed>     SPI clock of the CH347: 60M, 30M (default), 15M, 7.5M, 3.75M, 1.875M;\n"\
+		"                with -m sigmastar the I2C clock: 20K, 100K (default), 400K, 750K\n"\
+		" -m sigmastar   the flash of a SigmaStar board through the ISP of its SoC: the SoC's UART\n"\
+		"                (TX to SDA, RX to SCL, GND) on the I2C of the CH341A or the CH347\n"\
+		" -q             list the addresses that answer on the I2C of the programmer (alone, or\n"\
+		"                before the operation: -m sigmastar -i -q)\n"\
 		" -W [addr:]port web mode: a page with Detect, Read, Erase, Write, Registers\n"\
 		" -K <password>  web mode: ask for this password (any user name)\n"\
 		" -o <dir>       web mode: where Read saves the dumps (default: the current one)\n";
@@ -234,6 +240,8 @@ static int verify(unsigned char *buf, const char *fname, long long addr, long lo
 int main(int argc, char* argv[])
 {
 	int c, vr = 0, ret = 0, rc = 1, speed_set = 0;
+	const char *speed = NULL;
+	int scan = 0;
 	char *fname = NULL, op = 0, *web = NULL, *web_key = NULL, *web_dir = NULL;
 	unsigned char *buf;
 	int long long len = 0, addr = 0, flen = 0, wlen = 0, done = 0, k = 0;
@@ -244,7 +252,7 @@ int main(int argc, char* argv[])
 
 	title();
 
-	while ((c = getopt(argc, argv, "diIhveutkLl:a:w:r:P:S:W:K:o:")) != -1)
+	while ((c = getopt(argc, argv, "diIhveutkqLl:a:w:r:P:S:W:K:o:m:")) != -1)
 	{
 		switch(c)
 		{
@@ -260,10 +268,12 @@ int main(int argc, char* argv[])
 					exit(1);
 				}
 				break;
-			case 'S':
-				speed_set = 1;
-				if (ch347_set_speed(optarg) < 0) {
-					printf("Unknown SPI speed %s; use one of: %s.\n\n", optarg, ch347_speed_list());
+			case 'S':			/* SPI or I2C: known after -m */
+				speed = optarg;
+				break;
+			case 'm':
+				if (sigmastar_mode(optarg) < 0) {
+					printf("Unknown mode %s; the one there is: sigmastar.\n\n", optarg);
 					exit(1);
 				}
 				break;
@@ -290,6 +300,9 @@ int main(int argc, char* argv[])
 				break;
 			case 'o':
 				web_dir = optarg;
+				break;
+			case 'q':			/* before the operation, or alone */
+				scan = 1;
 				break;
 			case 'u':
 				/* -u and -uu, nothing more and with no other operation */
@@ -324,12 +337,23 @@ int main(int argc, char* argv[])
 		}
 	}
 
+	if (speed) {
+		speed_set = 1;
+		if (sigmastar_on() ? sigmastar_set_speed(speed) < 0 : ch347_set_speed(speed) < 0) {
+			if (sigmastar_on())
+				printf("Unknown I2C speed %s; use one of: %s.\n\n", speed, sigmastar_speed_list());
+			else
+				printf("Unknown SPI speed %s; use one of: %s.\n\n", speed, ch347_speed_list());
+			exit(1);
+		}
+	}
+
 	if (web) {
 		/* the web mode: the page does the operations, one programmer, auto */
 		/* the page writes whole files from 0 with ECC on: no raw NAND
 		   (-d), no ECC ignore (-I), no BAD page skipping (-k) */
-		if (op || vr || speed_set || !ECC_fcheck || ECC_ignore || Skip_BAD_page) {
-			printf("-W runs the web mode: give no -i, -r, -w, -e, -u, -t, -v, -S, -d, -I or -k with it.\n\n");
+		if (op || scan || vr || speed_set || !ECC_fcheck || ECC_ignore || Skip_BAD_page || sigmastar_on()) {
+			printf("-W runs the web mode: give no -i, -r, -w, -e, -u, -t, -q, -v, -S, -m, -d, -I or -k with it.\n\n");
 			return 1;
 		}
 		return web_serve(web, web_key, web_dir, addr, len);
@@ -339,7 +363,13 @@ int main(int argc, char* argv[])
 		return 1;
 	}
 
+	if (op == 0 && scan)
+		op = 'q';			/* -q alone: only the bus */
 	if (op == 0) usage(1);
+	if (scan && op != 'q' && !sigmastar_on()) {	/* the bus stays in I2C after it */
+		printf("-q goes alone, or before an operation with -m sigmastar.\n\n");
+		return 1;
+	}
 
 	if (op == 'x' || (ECC_ignore && !ECC_fcheck) || (ECC_ignore && Skip_BAD_page) || (op == 'w' && ECC_ignore) ||
 	    (op == 't' && (!ECC_fcheck || ECC_ignore || Skip_BAD_page))) {	/* -t: one block, ECC on, no skipping */
@@ -347,11 +377,26 @@ int main(int argc, char* argv[])
 		return 1;
 	}
 
-	ret = programmer_init(speed_set);
+	/* in the SigmaStar mode -S is the I2C clock, not the SPI one */
+	ret = programmer_init(speed_set && !sigmastar_on());
 	if (ret < 0) {
 		if (ret == -1)
 			printf("Programmer device not found!\n\n");
 		return 1;
+	}
+
+	if (scan && i2c_scan(programmer))
+		goto out;
+	if (op == 'q') {
+		rc = 0;
+		goto out;
+	}
+	if (sigmastar_on()) {
+		const struct programmer *isp = sigmastar_attach(programmer);
+
+		if (!isp)
+			goto out;
+		programmer = isp;
 	}
 
 	if((flen = flash_cmd_init(&prog)) <= 0)

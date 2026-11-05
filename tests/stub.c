@@ -19,7 +19,14 @@ static int u(void) { return strcmp(env("MS_FAIL"),"unprotect") ? 0 : -3; }
 static int q(void) { printf("clear QE\n"); return strcmp(env("MS_FAIL"),"qe") ? 0 : -2; }
 #include <strings.h>
 #include "programmer.h"
-static const struct programmer stubprogs[] = { { .key = "ch341a", .name = "CH341A", .send = (void *)1 }, { .key = "ch347", .name = "CH347", .send = (void *)1, .clock = true }, { .key = "ezp", .name = "EZP" } };
+/* the I2C of the CH341A and the CH347: a SigmaStar ISP bridge at 0x49 and 0x59, or (MS_I2C=none) nothing */
+static int i2c_sp(unsigned int sp) { (void)sp; return 0; }
+static int i2c_w(unsigned char a, const unsigned char *b, unsigned int n) { (void)b; (void)n; return strcmp(env("MS_I2C"), "none") && (a == 0x49 || a == 0x59) ? 0 : -1; }
+static int i2c_r(unsigned char a, unsigned char *b, unsigned int n) { if (n) memset(b, 0, n); return i2c_w(a, NULL, 0); }
+static const struct programmer stubprogs[] = {
+	{ .key = "ch341a", .name = "CH341A", .send = (void *)1, .i2c_speed = i2c_sp, .i2c_write = i2c_w, .i2c_read = i2c_r, .i2c_max = 24 },
+	{ .key = "ch347", .name = "CH347", .send = (void *)1, .clock = true, .i2c_speed = i2c_sp, .i2c_write = i2c_w, .i2c_read = i2c_r, .i2c_max = 60 },
+	{ .key = "ezp", .name = "EZP" } };
 static const struct programmer *chosen = &stubprogs[0];	/* auto: the stub has a CH341A */
 const struct programmer *programmer;
 int programmer_select(const char *n) {

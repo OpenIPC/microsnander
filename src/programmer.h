@@ -25,6 +25,16 @@ struct programmer {
 	/* a programmer that runs the SPI in its own firmware: sets up the
 	   flash operations itself (no send/cs); returns the chip size or -1 */
 	long (*flash_init)(struct flash_cmd *cmd);
+	/* its I2C master, for the SigmaStar ISP (-m sigmastar) and -q; NULL: none.
+	   speed: 0 20 kHz, 1 100 kHz, 2 400 kHz, 3 750 kHz. A write or a read is
+	   one I2C transaction (START, address, data, STOP) of up to i2c_max
+	   bytes; a read of 0 bytes only tells whether the address answers.
+	   0, or -1 (also on NACK; a CH341A write does not see one). */
+	int (*i2c_speed)(unsigned int speed);
+	int (*i2c_write)(unsigned char addr, const unsigned char *buf, unsigned int len);
+	int (*i2c_read)(unsigned char addr, unsigned char *buf, unsigned int len);
+	unsigned int i2c_max;
+	bool on_board;		/* the chip sits on its board: the board powers it, no lines of ours go to it */
 };
 
 extern const struct programmer *programmer;	/* the one in use */

@@ -18,8 +18,10 @@
 
 
 static const struct programmer programmers[] = {
-	{ "ch341a", "CH341A", 0x1a86, { 0x5512 }, ch341a_spi_init, ch341a_spi_shutdown, ch341a_spi_send_command, ch341a_cs, false },
-	{ "ch347",  "CH347",  0x1a86, { 0x55db, 0x55de }, ch347_spi_init, ch347_spi_shutdown, ch347_spi_send_command, ch347_cs, true },
+	{ "ch341a", "CH341A", 0x1a86, { 0x5512 }, ch341a_spi_init, ch341a_spi_shutdown, ch341a_spi_send_command, ch341a_cs, false,
+	  NULL, ch341a_i2c_speed, ch341a_i2c_write, ch341a_i2c_read, CH341A_I2C_MAX },
+	{ "ch347",  "CH347",  0x1a86, { 0x55db, 0x55de }, ch347_spi_init, ch347_spi_shutdown, ch347_spi_send_command, ch347_cs, true,
+	  NULL, ch347_i2c_speed, ch347_i2c_write, ch347_i2c_read, CH347_I2C_MAX },
 	{ "ezp",    "EZP",    0x1fc8, { 0x310b, 0x310c, 0x310d }, ezp_init, ezp_shutdown, NULL, NULL, false, ezp_flash_init },
 };
 #define NPROG (sizeof(programmers) / sizeof(programmers[0]))

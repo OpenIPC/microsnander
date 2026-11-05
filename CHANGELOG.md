@@ -4,6 +4,17 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.25.0 — 2026-11-05
+
+- SigmaStar ISP (`-m sigmastar`): the SPI flash of a SigmaStar (MStar) board through the ISP
+  bridge of its SoC over I2C, without desoldering, to bring back a board with a broken
+  loader. The I2C master is that of the CH341A or the CH347 (CH347T in mode 1, CH347F),
+  chosen with `-P` or by itself; the SoC's UART goes to it (TX to SDA, RX to SCL, GND).
+  `-S` is the I2C clock in this mode (20K, 100K, 400K, 750K); `-q` lists the I2C addresses
+  that answer, alone or before the operation (`-m sigmastar -i -q`). Every operation and
+  SPI NOR and SPI NAND work as with a chip in the socket; not in the web mode or the app.
+  The CH341A and the CH347 drivers get I2C transactions.
+
 ## 1.24.0 — 2026-11-05
 
 - `-r`, `-w` and `-v` go in parts of whole blocks, about 64 KB, instead of keeping the whole

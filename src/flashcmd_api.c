@@ -25,7 +25,8 @@ static long warn(long flen)
 {
 	char w[320];
 
-	if (flen > 0 && ms_voltage_warning(programmer ? programmer->name : NULL, flash_chip_name, w, sizeof(w)))
+	if (flen > 0 && !(programmer && programmer->on_board) &&
+	    ms_voltage_warning(programmer ? programmer->name : NULL, flash_chip_name, w, sizeof(w)))
 		printf("Warning: %s\n", w);
 	return flen;
 }

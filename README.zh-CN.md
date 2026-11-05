@@ -48,6 +48,7 @@ sudo ./microsnander -w firmware.bin -v
 - [示例](#示例)
 - [Web 模式](#web-模式)
 - [Android 应用](#android-应用)
+- [SigmaStar ISP](#sigmastar-isp)
 - [支持的芯片](#支持的芯片)
 - [芯片电压](#芯片电压)
 - [数据不确定的芯片](#数据不确定的芯片)
@@ -170,7 +171,12 @@ microsnander [options]
                 (the first; -a for another) and put its data back
  -v             verify after write on chip
  -P <name>      programmer: ch341a, ch347, ezp, auto (default: the one connected)
- -S <speed>     SPI clock of the CH347: 60M, 30M (default), 15M, 7.5M, 3.75M, 1.875M
+ -S <speed>     SPI clock of the CH347: 60M, 30M (default), 15M, 7.5M, 3.75M, 1.875M;
+                with -m sigmastar the I2C clock: 20K, 100K (default), 400K, 750K
+ -m sigmastar   the flash of a SigmaStar board through the ISP of its SoC: the SoC's UART
+                (TX to SDA, RX to SCL, GND) on the I2C of the CH341A or the CH347
+ -q             list the addresses that answer on the I2C of the programmer (alone, or
+                before the operation: -m sigmastar -i -q)
  -W [addr:]port web mode: a page with Detect, Read, Erase, Write, Registers
  -K <password>  web mode: ask for this password (any user name)
  -o <dir>       web mode: where Read saves the dumps (default: the current one)
@@ -282,7 +288,7 @@ microsnander -P ch347 -W 8080 -o /srv/dumps
 - 只使用一个编程器，选择方式与不带 `-W` 时相同；连接了多个时请用 `-P`。
 - 每个操作开始时打开编程器、结束后关闭，因此两次操作之间可以重新插拔，或用普通方式运行 microsnander。
 - 每次只运行一个操作；操作进行中的请求会得到 `409`。操作进行时页面每秒查询两次状态。
-- `-W` 不接受自身的操作（`-i`、`-r`、`-w`、`-e`、`-u`、`-t`），也不接受 `-v`、`-S`、`-d`、`-I` 或 `-k`：
+- `-W` 不接受自身的操作（`-i`、`-r`、`-w`、`-e`、`-u`、`-t`），也不接受 `-q`、`-m`、`-v`、`-S`、`-d`、`-I` 或 `-k`：
   操作由页面完成，在开启 ECC 的情况下从地址 0 写入完整文件，并始终校验。`-K` 和 `-o` 只能与 `-W` 一起使用。
 - 客户端断开时服务继续运行；慢速客户端不会阻塞其他客户端（最多同时 16 个连接）。
 
@@ -341,6 +347,28 @@ root；在电视盒子上会出现在主屏幕，可用遥控器操作）。
   设备（通过其文件描述符和 usbfs 代码，不使用 libusb）。签名的 APK 在发布版中：[latest](https://github.com/OpenIPC/microsnander/releases/latest) 里的 `microsnander-android.apk`。
 
 构建：在安装了 Android SDK 和 NDK r27c 的环境中运行 `cd android && gradle assembleDebug`。
+
+## SigmaStar ISP
+
+`-m sigmastar` 无需拆焊，直接在板上通过 SoC 的 ISP 桥（I2C）访问 SigmaStar（MStar）板的 SPI 闪存，
+用于修复引导程序损坏的板子（[OpenIPC wiki：SigmaStar unbrick](https://github.com/OpenIPC/wiki/blob/master/en/sigmastar-unbrick.md)）。
+
+- 接线：SoC 的 UART 接编程器的 I2C，TX 接 SDA，RX 接 SCL，并连接 GND。板子自行供电；桥无响应时，
+  给板子重新上电通常有效。黑色 CH341A 板未改为 3.3 V 时，SDA 和 SCL 上为 5 V，而 SoC 的 UART 不适用该电压。
+- I2C 主机为 CH341A 或 CH347（CH347T 模式 1、CH347F），照常用 `-P` 选择或自动选择；EZP 编程器没有 I2C。
+- 此模式下 `-S` 为 I2C 时钟：`20K`、`100K`（默认）、`400K`、`750K`。
+- `-q` 列出有响应的 I2C 地址，用于检查接线（桥为 `0x49`，SoC 调试端口为 `0x59`，解锁前可能没有响应）：可单独使用，也可在操作之前，如 `-m sigmastar -i -q`。此后 CH347F 的引脚仍为 I2C：通过 SPI 操作芯片前请重新插拔。
+- 其余与插座中的芯片相同：`-i`、`-r`、`-w`、`-e`、`-v`、`-a`、`-l`，SPI NOR 和 SPI NAND。Web 模式和
+  Android 应用不支持此模式。
+
+```sh
+microsnander -m sigmastar -i -q                  # 0x49 必须有响应，然后是闪存
+microsnander -m sigmastar -r backup.bin          # 先备份
+microsnander -m sigmastar -a 0 -l 0x40000 -e     # 引导程序区域，然后
+microsnander -m sigmastar -w u-boot.bin -v       # 写入可用的引导程序
+```
+
+此模式较慢：数据通过 I2C 传输，每次事务约 20–25 字节。几百 KB 的引导程序需要几分钟；整片 16 MB 芯片要久得多。
 
 ## 支持的芯片
 

@@ -51,6 +51,7 @@ sudo ./microsnander -w firmware.bin -v
 - [Примеры](#примеры)
 - [Веб-режим](#веб-режим)
 - [Приложение для Android](#приложение-для-android)
+- [SigmaStar ISP](#sigmastar-isp)
 - [Поддерживаемые микросхемы](#поддерживаемые-микросхемы)
 - [Напряжение микросхем](#напряжение-микросхем)
 - [Микросхемы с неточными данными](#микросхемы-с-неточными-данными)
@@ -193,7 +194,12 @@ microsnander [options]
                 (the first; -a for another) and put its data back
  -v             verify after write on chip
  -P <name>      programmer: ch341a, ch347, ezp, auto (default: the one connected)
- -S <speed>     SPI clock of the CH347: 60M, 30M (default), 15M, 7.5M, 3.75M, 1.875M
+ -S <speed>     SPI clock of the CH347: 60M, 30M (default), 15M, 7.5M, 3.75M, 1.875M;
+                with -m sigmastar the I2C clock: 20K, 100K (default), 400K, 750K
+ -m sigmastar   the flash of a SigmaStar board through the ISP of its SoC: the SoC's UART
+                (TX to SDA, RX to SCL, GND) on the I2C of the CH341A or the CH347
+ -q             list the addresses that answer on the I2C of the programmer (alone, or
+                before the operation: -m sigmastar -i -q)
  -W [addr:]port web mode: a page with Detect, Read, Erase, Write, Registers
  -K <password>  web mode: ask for this password (any user name)
  -o <dir>       web mode: where Read saves the dumps (default: the current one)
@@ -328,8 +334,8 @@ microsnander -P ch347 -W 8080 -o /srv/dumps
   можно переподключить или работать с ним обычным запуском microsnander.
 - Операции идут по одной; запрос во время операции получает `409`. Пока операция идёт,
   страница спрашивает состояние два раза в секунду.
-- С `-W` не задаются свои операции (`-i`, `-r`, `-w`, `-e`, `-u`, `-t`) и ключи `-v`, `-S`, `-d`, `-I`,
-  `-k`: операции делает страница, пишет целые файлы с адреса 0 с включённым ECC и всегда
+- С `-W` не задаются свои операции (`-i`, `-r`, `-w`, `-e`, `-u`, `-t`) и ключи `-q`, `-m`, `-v`, `-S`,
+  `-d`, `-I`, `-k`: операции делает страница, пишет целые файлы с адреса 0 с включённым ECC и всегда
   проверяет запись. `-K` и `-o` — только вместе с `-W`.
 - Служба продолжает работать, когда клиент отключается; медленный клиент не держит остальных
   (до 16 соединений одновременно).
@@ -396,6 +402,35 @@ Android TV (Android 5.0 и новее, без root; на приставке он
   `microsnander-android.apk` в [latest](https://github.com/OpenIPC/microsnander/releases/latest).
 
 Сборка: `cd android && gradle assembleDebug` с Android SDK и NDK r27c.
+
+## SigmaStar ISP
+
+`-m sigmastar` работает с флешкой платы SigmaStar (MStar) прямо на плате, без выпаивания: через
+ISP-мост SoC по I2C. Так восстанавливают плату с испорченным загрузчиком
+([OpenIPC wiki: SigmaStar unbrick](https://github.com/OpenIPC/wiki/blob/master/en/sigmastar-unbrick.md)).
+
+- Подключение: UART SoC к I2C программатора, TX к SDA, RX к SCL, и GND. Плата питается сама;
+  если мост не отвечает, помогает перезапуск питания платы. Чёрная плата CH341A без доработки под
+  3,3 В подаёт на SDA и SCL 5 В, а UART SoC на это не рассчитан.
+- I2C — от CH341A или CH347 (CH347T в режиме 1, CH347F), программатор выбирается как обычно:
+  `-P` или сам; у программаторов EZP I2C нет.
+- `-S` в этом режиме — частота I2C: `20K`, `100K` (по умолчанию), `400K`, `750K`.
+- `-q` выводит адреса I2C, которые отвечают, — для проверки подключения (мост — `0x49`, порт
+  отладки SoC — `0x59`, он может молчать до разблокировки): отдельно или перед операцией, например
+  `-m sigmastar -i -q`. CH347F после этого остаётся на I2C: перед работой с микросхемой по SPI
+  переподключите его.
+- Остальное — как с микросхемой в панельке: `-i`, `-r`, `-w`, `-e`, `-v`, `-a`, `-l`, SPI NOR и
+  SPI NAND. В веб-режиме и в приложении для Android этого режима нет.
+
+```sh
+microsnander -m sigmastar -i -q                  # должен ответить 0x49, затем флешка
+microsnander -m sigmastar -r backup.bin          # сначала копия
+microsnander -m sigmastar -a 0 -l 0x40000 -e     # область загрузчика, затем
+microsnander -m sigmastar -w u-boot.bin -v       # рабочий загрузчик
+```
+
+Режим медленный: данные идут по I2C, примерно по 20–25 байт за транзакцию. Загрузчик в несколько
+сотен КБ — минуты; вся микросхема на 16 МБ — намного дольше.
 
 ## Поддерживаемые микросхемы
 

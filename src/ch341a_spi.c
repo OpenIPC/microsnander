@@ -301,6 +301,62 @@ int config_stream(unsigned int speed)
 	return ret;
 }
 
+/* ---- I2C, for the SigmaStar ISP ----
+   One stream command packet a transaction: START, the address byte, the data
+   or the reads, STOP. STM_OUT with a length sends bytes without answers;
+   STM_OUT without one sends one byte and answers its ACK (bit 7 set: NACK);
+   STM_IN with a length reads bytes with ACK, STM_IN alone one byte with NACK,
+   the last of a read. */
+
+int ch341a_i2c_speed(unsigned int speed)
+{
+	return config_stream(speed) < 0 ? -1 : 0;	/* the SPI does not run in this mode */
+}
+
+/* With a length: no ACK comes back, so a refused byte is not told here. The
+   next read and -v find it */
+int ch341a_i2c_write(unsigned char addr, const unsigned char *data, unsigned int len)
+{
+	uint8_t buf[CH341_PACKET_LENGTH];
+	unsigned int n = 0;
+
+	if (len > CH341A_I2C_MAX)
+		return -1;
+	buf[n++] = CH341A_CMD_I2C_STREAM;
+	buf[n++] = CH341A_CMD_I2C_STM_START;
+	buf[n++] = CH341A_CMD_I2C_STM_OUT | (len + 1);
+	buf[n++] = addr << 1;
+	memcpy(buf + n, data, len);
+	n += len;
+	buf[n++] = CH341A_CMD_I2C_STM_STOP;
+	buf[n++] = CH341A_CMD_I2C_STM_END;
+	return usb_transfer(__func__, n, 0, buf, NULL) < 0 ? -1 : 0;
+}
+
+int ch341a_i2c_read(unsigned char addr, unsigned char *data, unsigned int len)
+{
+	uint8_t buf[CH341_PACKET_LENGTH], in[CH341_PACKET_LENGTH];
+	unsigned int n = 0;
+
+	if (len > CH341A_I2C_MAX)
+		return -1;
+	buf[n++] = CH341A_CMD_I2C_STREAM;
+	buf[n++] = CH341A_CMD_I2C_STM_START;
+	buf[n++] = CH341A_CMD_I2C_STM_OUT;		/* the address, with its ACK */
+	buf[n++] = addr << 1 | 1;
+	if (len > 1)
+		buf[n++] = CH341A_CMD_I2C_STM_IN | (len - 1);
+	if (len)
+		buf[n++] = CH341A_CMD_I2C_STM_IN;
+	buf[n++] = CH341A_CMD_I2C_STM_STOP;
+	buf[n++] = CH341A_CMD_I2C_STM_END;
+	if (usb_transfer(__func__, n, len + 1, buf, in) < 0 || (in[0] & 0x80))
+		return -1;
+	if (len)
+		memcpy(data, in + 1, len);
+	return 0;
+}
+
 /* ch341 requires LSB first, swap the bit order before send and after receive */
 static uint8_t swap_byte(uint8_t x)
 {
