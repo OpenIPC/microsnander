@@ -366,6 +366,10 @@ int main(int argc, char* argv[])
 	if (op == 0 && scan)
 		op = 'q';			/* -q alone: only the bus */
 	if (op == 0) usage(1);
+	if (scan && op != 'q' && !sigmastar_on()) {	/* the bus stays in I2C after it */
+		printf("-q goes alone, or before an operation with -m sigmastar.\n\n");
+		return 1;
+	}
 
 	if (op == 'x' || (ECC_ignore && !ECC_fcheck) || (ECC_ignore && Skip_BAD_page) || (op == 'w' && ECC_ignore) ||
 	    (op == 't' && (!ECC_fcheck || ECC_ignore || Skip_BAD_page))) {	/* -t: one block, ECC on, no skipping */

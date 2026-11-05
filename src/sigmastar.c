@@ -152,10 +152,18 @@ const struct programmer *sigmastar_attach(const struct programmer *p)
 		       "and that the board is powered; a power cycle of the board can help.\n", ISP_ADDR);
 		return NULL;
 	}
+	/* The unlock goes to a debug port that does not answer the probe: this
+	   order is the one known to work on boards, keep it until a board says
+	   otherwise */
 	if (p->i2c_read(ISP_DEBUG, NULL, 0) && debug_port_to_isp())
 		printf("SigmaStar ISP: the debug port 0x%02x did not take the UART pins; going on.\n", ISP_DEBUG);
-	if (p->i2c_write(ISP_ADDR, start, sizeof(start)) && isp_cs(false))
-		return NULL;
+	/* MSTAR may be refused, as by a bridge that is on already: the end of a
+	   command brings that one back; no end after a MSTAR that is taken */
+	if (p->i2c_write(ISP_ADDR, start, sizeof(start))) {
+		printf("SigmaStar ISP: the bridge refused the start, ending the command and going on.\n");
+		if (isp_cs(false))
+			return NULL;
+	}
 	printf("SigmaStar ISP through the I2C of the %s at 0x%02x.\n", p->name, ISP_ADDR);
 	isp = *p;
 	isp.send = isp_send;

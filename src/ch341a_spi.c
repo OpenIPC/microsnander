@@ -313,6 +313,8 @@ int ch341a_i2c_speed(unsigned int speed)
 	return config_stream(speed) < 0 ? -1 : 0;	/* the SPI does not run in this mode */
 }
 
+/* With a length: no ACK comes back, so a refused byte is not told here. The
+   next read and -v find it */
 int ch341a_i2c_write(unsigned char addr, const unsigned char *data, unsigned int len)
 {
 	uint8_t buf[CH341_PACKET_LENGTH];

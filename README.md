@@ -408,12 +408,14 @@ bootloader ([OpenIPC wiki: SigmaStar unbrick](https://github.com/OpenIPC/wiki/bl
   with `-P` or by itself; the EZP programmers have no I2C.
 - `-S` is the I2C clock in this mode: `20K`, `100K` (default), `400K`, `750K`.
 - `-q` lists the I2C addresses that answer, to check the wiring (the bridge is at `0x49`, the
-  debug port of the SoC at `0x59`): alone, or before the operation, as `-m sigmastar -i -q`.
+  debug port of the SoC at `0x59`, which may stay silent until it is unlocked): alone, or before
+  the operation, as `-m sigmastar -i -q`. A CH347F keeps its pins on I2C afterwards: replug it
+  before working with a chip over SPI.
 - Everything else works as with a chip in the socket: `-i`, `-r`, `-w`, `-e`, `-v`, `-a`, `-l`,
   SPI NOR and SPI NAND. Not in the web mode or the Android app.
 
 ```sh
-microsnander -m sigmastar -i -q                  # 0x49 and 0x59 must answer, then the flash
+microsnander -m sigmastar -i -q                  # 0x49 must answer, then the flash
 microsnander -m sigmastar -r backup.bin          # back it up first
 microsnander -m sigmastar -a 0 -l 0x40000 -e     # the loader part, then
 microsnander -m sigmastar -w u-boot.bin -v       # a working loader

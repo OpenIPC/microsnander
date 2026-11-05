@@ -72,6 +72,7 @@ t 0 "-S before -m is the I2C clock"   $B -S 750K -m sigmastar -i
 t 1 "-m sigmastar -S 15M is an error" $B -m sigmastar -S 15M -i
 t 1 "-W with -m is an error"          $B -W 8080 -m sigmastar
 t 1 "-P ezp -q: no I2C"               $B -P ezp -q
+t 1 "-q -i without -m sigmastar"      $B -q -i
 $B -m sigmastar -i -q | grep -q '^40: .* 49 ' && $B -m sigmastar -i -q | grep -q 'Status\|SigmaStar ISP' && echo "ok   -q before -i: the bus, then the operation" || { echo "FAIL -q with -i"; fail=1; }
 $B -q | grep -q '^40: .* 49 ' && $B -q | grep -q '^50: .* 59 ' && $B -q | grep -q '^00: -- ' && echo "ok   -q lists the I2C addresses that answer" || { echo "FAIL -q"; fail=1; }
 $B -h | grep -q '^ -m sigmastar' && $B -h | grep -q '^ -q ' && echo "ok   -h lists -m and -q" || { echo "FAIL -h without -m/-q"; fail=1; }

@@ -357,12 +357,12 @@ root；在电视盒子上会出现在主屏幕，可用遥控器操作）。
   给板子重新上电通常有效。
 - I2C 主机为 CH341A 或 CH347（CH347T 模式 1、CH347F），照常用 `-P` 选择或自动选择；EZP 编程器没有 I2C。
 - 此模式下 `-S` 为 I2C 时钟：`20K`、`100K`（默认）、`400K`、`750K`。
-- `-q` 列出有响应的 I2C 地址，用于检查接线（桥为 `0x49`，SoC 调试端口为 `0x59`）：可单独使用，也可在操作之前，如 `-m sigmastar -i -q`。
+- `-q` 列出有响应的 I2C 地址，用于检查接线（桥为 `0x49`，SoC 调试端口为 `0x59`，解锁前可能没有响应）：可单独使用，也可在操作之前，如 `-m sigmastar -i -q`。此后 CH347F 的引脚仍为 I2C：通过 SPI 操作芯片前请重新插拔。
 - 其余与插座中的芯片相同：`-i`、`-r`、`-w`、`-e`、`-v`、`-a`、`-l`，SPI NOR 和 SPI NAND。Web 模式和
   Android 应用不支持此模式。
 
 ```sh
-microsnander -m sigmastar -i -q                  # 0x49 和 0x59 必须有响应，然后是闪存
+microsnander -m sigmastar -i -q                  # 0x49 必须有响应，然后是闪存
 microsnander -m sigmastar -r backup.bin          # 先备份
 microsnander -m sigmastar -a 0 -l 0x40000 -e     # 引导程序区域，然后
 microsnander -m sigmastar -w u-boot.bin -v       # 写入可用的引导程序

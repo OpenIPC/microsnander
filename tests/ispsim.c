@@ -19,6 +19,8 @@ static unsigned char log59[64];
 static unsigned int nlog59;
 static int answer59 = 1;			/* the register read at 0x59 after the UART setup */
 
+static int refuse_mstar, refuse_end, answers59;
+
 static int f_speed(unsigned int s) { return s > 3 ? -1 : 0; }
 
 static int f_write(unsigned char a, const unsigned char *b, unsigned int n)
@@ -33,11 +35,11 @@ static int f_write(unsigned char a, const unsigned char *b, unsigned int n)
 	}
 	if (a != 0x49)
 		return -1;
-	if (n == 5 && !memcmp(b, "MSTAR", 5)) { mstar++; return 0; }
+	if (n == 5 && !memcmp(b, "MSTAR", 5)) { if (refuse_mstar) return -1; mstar++; return 0; }
 	switch (b[0]) {
 	case 0x10: if (reading) bad = 2; memcpy(cmd + ncmd, b + 1, n - 1); ncmd += n - 1; return 0;
 	case 0x11: if (n != 1) bad = 3; reading = 1; return 0;
-	case 0x12: if (n != 1) bad = 4; ends++; ncmd = clocked = 0; reading = 0; return 0;
+	case 0x12: if (refuse_end) return -1; if (n != 1) bad = 4; ends++; ncmd = clocked = 0; reading = 0; return 0;
 	default: bad = 5; return -1;
 	}
 }
@@ -45,7 +47,7 @@ static int f_write(unsigned char a, const unsigned char *b, unsigned int n)
 static int f_read(unsigned char a, unsigned char *b, unsigned int n)
 {
 	if (a == 0x59) {
-		if (!n) return -1;			/* the probe: no answer */
+		if (!n) return answers59 ? 0 : -1;	/* the probe: no answer before the unlock */
 		b[0] = answer59;
 		return 0;
 	}
@@ -102,6 +104,19 @@ int main(void)
 	check(ok && ncmd == 260 && !memcmp(cmd, wr, 260) && ends == before, "a write of 260 bytes goes out whole, before the CS goes high");
 	p->cs(false);
 	check(ends == before + 1 && !bad, "  then one 0x12");
+
+	/* a refused MSTAR: the end of a command, and on; refused too: no bridge */
+	refuse_mstar = 1;
+	before = ends;
+	check(sigmastar_attach(&fake) && ends == before + 1, "a refused MSTAR: 0x12, and the bridge goes on");
+	refuse_end = 1;
+	check(!sigmastar_attach(&fake), "  the end refused too: no bridge");
+	refuse_mstar = refuse_end = 0;
+
+	/* a debug port that answers gets no unlock */
+	answers59 = 1;
+	before = writes59;
+	check(sigmastar_attach(&fake) && writes59 == before, "a debug port that answers is left alone");
 
 	return fail;
 }
