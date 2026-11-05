@@ -10,9 +10,10 @@
 [![Code size](https://img.shields.io/github/languages/code-size/OpenIPC/microsnander)](https://github.com/OpenIPC/microsnander)
 [![Platform](https://img.shields.io/badge/platform-Linux-brightgreen)](#系统要求)
 
-MicroSNANDer 是一个命令行编程器，配合廉价的 CH341A、CH347 和 EZP USB 编程器使用，用于 SPI NOR 和
-SPI NAND 闪存芯片。它可以读取、写入、擦除和校验摄像机、路由器及其他开发板的闪存，
-解除 SPI NOR 芯片的写保护，支持 291 款 SPI NOR 和 135 款 SPI NAND 芯片。
+MicroSNANDer 是一个 SPI NOR 和 SPI NAND 闪存芯片编程工具，配合廉价的 CH341A、CH347 和 EZP USB
+编程器（共六种型号）使用，包括内置网页的命令行程序和 Android 应用。它可以读取、写入、擦除和校验摄像机、
+路由器及其他开发板的闪存，解除 SPI NOR 芯片的写保护，支持 291 款 SPI NOR 和 135 款 SPI NAND 芯片。
+每个发布文件约 200–240 KB。
 
 它是 McMCC 的 [SNANDer](https://github.com/McMCCRU/SNANDer) 1.7.4 经过精简、增强、深度修改和优化的版本：
 仅支持 Linux，不支持 EEPROM，增加了 `-u`（解除保护）命令以及 OpenIPC
@@ -39,6 +40,7 @@ sudo ./microsnander -w firmware.bin -v
 ## 目录
 
 - [快速开始](#快速开始)
+- [为什么选择 MicroSNANDer](#为什么选择-microsnander)
 - [系统要求](#系统要求)
 - [编程器对比](#编程器对比)
 - [发布与固定链接](#发布与固定链接)
@@ -53,6 +55,27 @@ sudo ./microsnander -w firmware.bin -v
 - [致谢](#致谢)
 - [许可证](#许可证)
 - [支持](#支持)
+
+## 为什么选择 MicroSNANDer
+
+在桌面电脑上，编程器和芯片都在手边时，其他程序已经能很好地完成工作，其中许多还带图形界面。
+MicroSNANDer 面向的是它们覆盖不到的场合：
+
+- **一个小文件。** 约 200–240 KB 的发布文件包含全部内容：SPI NOR 和 SPI NAND、芯片列表、全部六种
+  编程器（CH341A、CH347T、CH347F、EZP2019、EZP2019+、EZP2023）的驱动以及网页。
+- **无需安装。** 系统中不需要编程器的内核驱动，也不需要 libc 和 libusb：Linux 二进制文件为静态链接，
+  通过内核的 USB 支持访问编程器。
+- **在手边的设备上运行。** 带 USB host 接口的 Linux 开发板（x86_64 或 32 位 ARM）即可：维修时，一台正常的设备可以为
+  同型号的故障设备烧写芯片，身边不需要 PC。
+- **无需拆焊。** 用夹子夹住芯片，即可直接在板上读写闪存。
+- **远程协助。** 使用 [Web 模式](#web-模式)时，现场人员连接编程器，异地的专家在浏览器中查看进度并
+  执行操作。这是同一个文件，因此在没有屏幕的开发板上也能工作。
+- **手机就是编程器。** [Android 应用](#android-应用) 在手机或电视盒子上支持所有这些编程器，
+  Android 5.0 及以上，无需 root。
+
+Windows 和 macOS 不受支持，今后也不会支持，但仍可以从这些系统进行操作：把编程器连接到另一台运行
+microsnander 的设备（路由器、电脑、摄像机、Linux 电视盒子），然后打开它的[网页](#web-模式)或通过 SSH
+登录。如果这不适合您，或者需要处理 MicroSNANDer 不支持的 EEPROM 芯片，请使用原生程序。
 
 ## 系统要求
 
@@ -74,7 +97,8 @@ sudo ./microsnander -w firmware.bin -v
   只连接一个编程器时 microsnander 直接使用它；连接多个时请用 `-P ch341a`、`-P ch347` 或 `-P ezp`
   选择。占用编程器的内核驱动（例如 `spi-ch341`）会在运行期间分离，结束后重新绑定。
 - x86_64 或 32 位 ARM（ARMv5TE 及以上）上的 Linux。发布的二进制文件为静态链接（musl），
-  不使用 libusb：microsnander 自己通过 Linux usbfs（`/dev/bus/usb`）访问编程器。无需安装任何东西。
+  不使用 libusb：microsnander 自己通过 Linux usbfs（`/dev/bus/usb`）访问编程器。无需安装任何东西：
+  不需要编程器的内核驱动，只需要内核的 USB host 支持和 `/dev/bus/usb` 中的设备节点。
 - USB 设备访问权限：以 root 运行，或用 udev 规则授权给某个用户组（之后重新插拔编程器）：
 
   ```sh
@@ -210,7 +234,8 @@ microsnander -d -r raw.bin
 ## Web 模式
 
 `-W [地址:]端口` 让 microsnander 作为服务运行：在浏览器中打开一个与其他 OpenIPC 工具风格一致的页面，
-为已连接的编程器提供 Detect、Read、Erase、Write 和 Registers 按钮。
+为已连接的编程器提供 Detect、Read、Erase、Write 和 Registers 按钮。它适用于没有屏幕的开发板和远程协助：
+现场人员连接编程器和芯片，异地的专家打开页面，查看进度并执行操作。
 
 <p align="center">
   <img src="screenshots/web-reading.png" alt="MicroSNANDer Web 读取中：指示灯、进度表盘、显示屏、黄铜按钮" width="45%">
@@ -264,6 +289,10 @@ microsnander -P ch347 -W 8080 -o /srv/dumps
   SSH 隧道。
 - 操作需要一个只有本页面才会发送的请求头，因此其他网站的页面无法发起擦除或写入。请求必须通过 IP
   地址、`localhost` 或本机主机名访问本机（不接受其他名称：防止 DNS rebinding）。
+- 通过互联网协助时请使用 SSH 隧道：在连接编程器的机器上运行 `microsnander -W 127.0.0.1:8080 -K secret`，
+  使端口不对网络开放，然后在专家一侧运行 `ssh -L 8080:127.0.0.1:8080 user@machine` 并打开
+  `http://127.0.0.1:8080/`。隧道是加密的。不使用隧道的普通端口转发则没有加密：密码和固件以明文经过互联网，而且只能通过 IP 地址访问，
+  因为域名（动态 DNS、隧道服务）会如上所述被拒绝。
 - `-o` 目录中只提供 Read 生成的转储文件，绝不提供指向其他文件的链接。
 
 作为 systemd 服务运行（用户需在上面 udev 规则中的 `plugdev` 组内）：

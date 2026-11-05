@@ -10,10 +10,11 @@
 [![Code size](https://img.shields.io/github/languages/code-size/OpenIPC/microsnander)](https://github.com/OpenIPC/microsnander)
 [![Platform](https://img.shields.io/badge/platform-Linux-brightgreen)](#requirements)
 
-MicroSNANDer is a command-line programmer for SPI NOR and SPI NAND flash chips
-with the cheap CH341A, CH347 and EZP USB programmers. It reads, writes, erases and verifies the
-flash of cameras, routers and other boards, removes the write protection of SPI
-NOR chips, and knows 291 SPI NOR and 135 SPI NAND chips.
+MicroSNANDer is a programmer for SPI NOR and SPI NAND flash chips with the cheap CH341A,
+CH347 and EZP USB programmers, six models in all: a command-line tool with a web page
+built in, and an Android app. It reads, writes, erases and verifies the flash of cameras,
+routers and other boards, removes the write protection of SPI NOR chips, and knows 291
+SPI NOR and 135 SPI NAND chips. Each release file is about 200–240 KB.
 
 It is a stripped-down, extended, deeply modified and optimized version of
 [SNANDer](https://github.com/McMCCRU/SNANDer) 1.7.4 by McMCC: Linux only, SPI NOR
@@ -42,6 +43,7 @@ sudo ./microsnander -w firmware.bin -v
 ## Contents
 
 - [Quick start](#quick-start)
+- [Why MicroSNANDer](#why-microsnander)
 - [Requirements](#requirements)
 - [Programmers compared](#programmers-compared)
 - [Releases and permanent links](#releases-and-permanent-links)
@@ -56,6 +58,33 @@ sudo ./microsnander -w firmware.bin -v
 - [Credits](#credits)
 - [License](#license)
 - [Support](#support)
+
+## Why MicroSNANDer
+
+On a desktop, with a programmer and a chip at hand, other programs do the job well, many of
+them with a graphical interface. MicroSNANDer is made for the places they do not reach:
+
+- **One small file.** A release file of about 200–240 KB holds everything: SPI NOR and SPI
+  NAND, the chip list, the drivers of all six programmers (CH341A, CH347T, CH347F, EZP2019,
+  EZP2019+, EZP2023) and the web page.
+- **Nothing to install.** No kernel driver for the programmer, no libc and no libusb on the
+  system: the Linux binaries are static and reach the programmer through the USB support of
+  the kernel.
+- **Runs on the device at hand.** A Linux board with a USB host port is enough, x86_64 or
+  32-bit ARM: repairing a device, a working one of the same kind can flash the chip of the
+  broken one, with no PC nearby.
+- **No desoldering.** With a clip on the chip, the flash of a board is read and written in
+  place.
+- **Help from a distance.** With [web mode](#web-mode) the person at the bench connects the
+  programmer, and a specialist elsewhere sees the progress and runs the operations from a
+  browser. It is the same file, so it works on a board with no screen.
+- **A phone is a programmer.** The [Android app](#android-app) works with all of them on a
+  phone or a TV box, Android 5.0 and later, without root.
+
+Windows and macOS are not supported and will not be, but you can still work from them: plug
+the programmer into another device that runs microsnander (a router, a computer, a camera, a
+TV box on Linux) and open its [web page](#web-mode) or log in to it over SSH. If that does not
+suit you, or for EEPROM chips, which MicroSNANDer does not handle, use a native program.
 
 ## Requirements
 
@@ -85,7 +114,8 @@ sudo ./microsnander -w firmware.bin -v
   example `spi-ch341`) is detached for the run and attached back after it.
 - Linux on x86_64 or 32-bit ARM (ARMv5TE and later). The release binaries are
   static (musl), without libusb: microsnander talks to the programmers through the Linux
-  usbfs (`/dev/bus/usb`) itself. Nothing to install.
+  usbfs (`/dev/bus/usb`) itself. Nothing to install: no kernel driver for the programmer
+  is needed, only USB host support in the kernel and the device nodes in `/dev/bus/usb`.
 - Access to the USB device: run as root, or allow it to a group with a udev rule
   (then replug the programmer):
 
@@ -232,7 +262,9 @@ microsnander -d -r raw.bin
 
 `-W [address:]port` runs microsnander as a service: a page in the browser, in the style of
 the other OpenIPC tools, with Detect, Read, Erase, Write and Registers for the programmer that
-is connected.
+is connected. It is for a board with no screen, and for help from a distance: the person at the
+bench connects the programmer and the chip, and a specialist elsewhere opens the page, sees the
+progress and runs the operations.
 
 <p align="center">
   <img src="screenshots/web-reading.png" alt="MicroSNANDer Web while reading: lamps, progress gauge, display, brass buttons" width="45%">
@@ -296,6 +328,12 @@ Access:
 - Operations need a header that only the page sends, so a page of another site cannot start an
   erase or a write. A request has to name this machine by its IP address, `localhost` or its
   host name (no other names: DNS rebinding).
+- For help over the internet use an SSH tunnel: `microsnander -W 127.0.0.1:8080 -K secret` on the
+  machine with the programmer, so that the port stays closed to the network, then
+  `ssh -L 8080:127.0.0.1:8080 user@machine` and `http://127.0.0.1:8080/` on the specialist's side.
+  The tunnel is encrypted. A plain forwarded port without it is not: the password and the firmware
+  cross the internet in the clear, and it works by the IP address only, because a domain name
+  (dynamic DNS, a tunnel service) is refused, as above.
 - Only dumps made by Read are served from the `-o` directory, never links to other files.
 
 As a systemd service (the user in the `plugdev` group of the udev rule above):
