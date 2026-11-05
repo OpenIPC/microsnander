@@ -137,6 +137,7 @@ t 1 "-r fails over an earlier dump"   MS_FAIL=read $B -r keep.bin
 [ "$(cat keep.bin)" = earlier ] && [ "$(ls keep.bin.* 2>/dev/null)" = "" ] && echo "ok   the earlier dump stays, no temporary file" || { echo "FAIL earlier dump or a temporary file"; fail=1; }
 t 0 "-r over an earlier dump"         $B -r keep.bin
 cmp -s keep.bin img.bin && [ "$(stat -c %a keep.bin)" = 640 ] && echo "ok   the dump replaces it, with its mode" || { echo "FAIL dump over an earlier one"; fail=1; }
+(umask 027; rm -f mode.bin; $B -r mode.bin >/dev/null); [ "$(stat -c %a mode.bin)" = 640 ] && echo "ok   a new dump gets the mode of the umask" || { echo "FAIL mode of a new dump"; fail=1; }
 printf 'earlier' > hard.bin; ln hard.bin alias.bin
 t 0 "-r over a file with two names"   $B -r hard.bin
 cmp -s alias.bin img.bin && echo "ok   the other name has the dump too" || { echo "FAIL other name keeps the old data"; fail=1; }

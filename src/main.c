@@ -112,16 +112,17 @@ static void parts_begin(void)
 	timer_quiet = part_size != 0;
 }
 
+static time_t parts_shown;		/* when the progress line was printed; 0: none is open */
+
 static void parts_progress(const char *what, long long done, long long len)
 {
-	if (!part_size)
+	time_t now = time(0);
+
+	if (!part_size || now == parts_shown)
 		return;
-	timer_quiet = 0;
-	if (timer_progress()) {
-		printf("\b%s %lld%% [%lld] of [%lld] bytes      \r", what, 100 * done / len, done, len);
-		fflush(stdout);
-	}
-	timer_quiet = 1;
+	parts_shown = now;
+	printf("\b%s %lld%% [%lld] of [%lld] bytes      \r", what, 100 * done / len, done, len);
+	fflush(stdout);
 }
 
 /* what: the last line, NULL after a failure, which has its own message */
@@ -129,6 +130,9 @@ static void parts_end(const char *what, long long done, long long len)
 {
 	if (part_size && what)
 		printf("%s 100%% [%lld] of [%lld] bytes      \n", what, done, len);
+	else if (parts_shown)
+		printf("\n");			/* the failure gets a line of its own */
+	parts_shown = 0;
 	timer_quiet = 0;
 	if (part_size)
 		timer_end();
@@ -140,7 +144,6 @@ static void parts_end(const char *what, long long done, long long len)
 static char *dump_temp(const char *fname, FILE **fp)
 {
 	char *tmp = malloc(strlen(fname) + 8);
-	mode_t mask;
 	int fd;
 
 	if (!tmp)
@@ -150,9 +153,8 @@ static char *dump_temp(const char *fname, FILE **fp)
 		free(tmp);
 		return NULL;
 	}
-	mask = umask(0);
-	umask(mask);
-	if (fchmod(fd, 0666 & ~mask) || !(*fp = fdopen(fd, "w+b"))) {
+	/* it stays private (mkstemp: 0600) until it is the dump */
+	if (!(*fp = fdopen(fd, "w+b"))) {
 		close(fd);
 		unlink(tmp);
 		free(tmp);
@@ -524,7 +526,7 @@ int main(int argc, char* argv[])
 	if (op == 'r') {
 		char *tmp = NULL;
 		FILE *old = NULL;
-		int ok, have = !lstat(fname, &st);
+		int ok, kept = 0, have = !lstat(fname, &st);
 
 		printf("READ:\n");
 		/* a link, a FIFO or a device is written as it is */
@@ -570,13 +572,20 @@ int main(int argc, char* argv[])
 		ok = done == len;
 		/* fflush and fclose: their results count as much as that of fwrite() */
 		if (old) {
-			if (ok && (fflush(fp) || dump_copy(fp, old, buf, part_size ? part_size : len))) {
-				printf("Error writing file [%s]\n", fname);
+			if (ok && !fflush(fp)) {
+				int bad = dump_copy(fp, old, buf, part_size ? part_size : len);
+
+				if (fclose(old) != 0 || bad) {
+					/* the earlier dump is gone by now: this one must stay */
+					printf("Error writing file [%s], the dump is in %s\n", fname, tmp);
+					kept = 1;
+					ok = 0;
+				}
+			} else {
+				if (ok)
+					printf("Error writing file [%s]\n", fname);
 				ok = 0;
-			}
-			if (fclose(old) != 0 && ok) {
-				printf("Error writing file [%s]\n", fname);
-				ok = 0;
+				fclose(old);
 			}
 		}
 		if (fclose(fp) != 0 && ok) {
@@ -584,11 +593,16 @@ int main(int argc, char* argv[])
 			ok = 0;
 		}
 		if (tmp) {
-			if (!old && ok && rename(tmp, fname)) {
-				printf("Error writing file [%s]\n", fname);
-				ok = 0;
+			if (!old && ok) {
+				mode_t mask = umask(0);
+
+				umask(mask);
+				if (chmod(tmp, 0666 & ~mask) || rename(tmp, fname)) {
+					printf("Error writing file [%s]\n", fname);
+					ok = 0;
+				}
 			}
-			if (old || !ok)
+			if ((old || !ok) && !kept)
 				unlink(tmp);
 			free(tmp);
 		}
