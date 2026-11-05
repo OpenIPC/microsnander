@@ -201,6 +201,12 @@ operation covers the whole chip. Addresses and lengths are decimal or hex with
 `0x`. Erase works on whole blocks: the length must be a multiple of the block size
 the chip reports.
 
+`-r`, `-w` and `-v` go through the chip in parts of about 64 KB, so a board with little memory
+reads and writes a chip of any size; the file still has to fit its disk, next to an earlier
+dump of that name, which `-r` replaces only at the end. The range is held in
+memory as one piece with `-k`, `-d`, the EZP programmers and a file that is no regular file: on
+a small board use `-a` and `-l` with them.
+
 SPI NAND chips are read and written with their internal ECC by default: the file
 holds the data pages only. With `-d` the ECC is off and every page is read and
 written with its OOB (spare) area, for a raw dump.
