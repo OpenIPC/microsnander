@@ -15,7 +15,7 @@ USB-программаторов CH341A, CH347 и EZP, всего шесть м�
 встроенной веб-страницей и приложение для Android. Он читает, записывает, стирает и проверяет
 флеш камер, роутеров и других плат, снимает защиту от записи с микросхем SPI NOR и
 знает 291 микросхему SPI NOR и 135 микросхем SPI NAND. Каждый файл релиза занимает около
-200–240 КБ.
+200–260 КБ.
 
 Это урезанная, дополненная, глубоко модифицированная и оптимизированная версия
 [SNANDer](https://github.com/McMCCRU/SNANDer) 1.7.4 от McMCC: только Linux, без поддержки EEPROM, с командой
@@ -28,7 +28,7 @@ OpenIPC. Релизные файлы статические и без завис
 ## Быстрый старт
 
 ```sh
-# 1. Скачать статический файл (для arm: microsnander-linux-arm)
+# 1. Скачать статический файл (для arm: microsnander-linux-arm, для MIPS: microsnander-linux-mipsel)
 curl -fLo microsnander https://github.com/OpenIPC/microsnander/releases/latest/download/microsnander-linux-x86_64
 chmod +x microsnander
 
@@ -65,14 +65,14 @@ sudo ./microsnander -w firmware.bin -v
 справляются другие программы, многие из них с графическим интерфейсом. MicroSNANDer сделан для
 тех мест, куда они не дотягиваются:
 
-- **Один маленький файл.** В файле релиза на 200–240 КБ есть всё: SPI NOR и SPI NAND, список
+- **Один маленький файл.** В файле релиза на 200–260 КБ есть всё: SPI NOR и SPI NAND, список
   микросхем, драйверы всех шести программаторов (CH341A, CH347T, CH347F, EZP2019, EZP2019+,
   EZP2023) и веб-страница.
 - **Ставить ничего не нужно.** В системе не нужны ни драйвер ядра для программатора, ни libc,
   ни libusb: файлы для Linux статические и работают с программатором через поддержку USB в
   ядре.
-- **Работает на том устройстве, что есть.** Достаточно платы на Linux с USB host, x86_64 или
-  32-битный ARM: при ремонте исправное устройство может прошить микросхему такого же сломанного,
+- **Работает на том устройстве, что есть.** Достаточно платы на Linux с USB host: x86_64,
+  32-битный ARM или MIPS little-endian. При ремонте исправное устройство может прошить микросхему такого же сломанного,
   без ПК рядом.
 - **Без выпаивания.** С прищепкой на микросхеме флеш читается и записывается прямо на плате.
 - **Помощь на расстоянии.** В [веб-режиме](#веб-режим) программатор подключает человек на
@@ -115,7 +115,8 @@ Windows и macOS не поддерживаются и поддерживатьс
   выберите нужный ключом `-P ch341a`, `-P ch347` или `-P ezp`. Драйвер ядра, занявший
   программатор (например, `spi-ch341`), на время работы отключается и потом
   возвращается.
-- Linux на x86_64 или 32-битном ARM (ARMv5TE и новее). Релизные файлы статические
+- Linux на x86_64, 32-битном ARM (ARMv5TE и новее) или MIPS little-endian (MIPS32r2, с FPU
+  или без него: роутеры). Релизные файлы статические
   (musl), без libusb: с программаторами microsnander работает сам, через usbfs Linux
   (`/dev/bus/usb`). Ставить ничего не нужно: драйвер ядра для программатора не требуется,
   только поддержка USB host в ядре и файлы устройств в `/dev/bus/usb`.
@@ -160,11 +161,12 @@ CI пересобирает его при каждом push в `main`, когд�
 стоит версия (`Microsnander X.Y.Z`), релизов по версиям нет. В именах файлов нет
 версии, поэтому эти ссылки всегда ведут на свежую сборку:
 
-| Файл                                                                                                                      | Для чего                                                                                   |
-|---------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------|
-| [`microsnander-linux-x86_64`](https://github.com/OpenIPC/microsnander/releases/latest/download/microsnander-linux-x86_64) | ПК и серверы                                                                               |
-| [`microsnander-linux-arm`](https://github.com/OpenIPC/microsnander/releases/latest/download/microsnander-linux-arm)       | 32-битный ARM: камеры, Raspberry Pi и другие платы (soft-float, работает с FPU и без него) |
-| [`microsnander-android.apk`](https://github.com/OpenIPC/microsnander/releases/latest/download/microsnander-android.apk)   | Android 5.0 и новее: телефоны и приставки с USB host, без root                             |
+| Файл                                                                                                                      | Для чего                                                                                              |
+|---------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------|
+| [`microsnander-linux-x86_64`](https://github.com/OpenIPC/microsnander/releases/latest/download/microsnander-linux-x86_64) | ПК и серверы                                                                                          |
+| [`microsnander-linux-arm`](https://github.com/OpenIPC/microsnander/releases/latest/download/microsnander-linux-arm)       | 32-битный ARM: камеры, Raspberry Pi и другие платы (soft-float, работает с FPU и без него)            |
+| [`microsnander-linux-mipsel`](https://github.com/OpenIPC/microsnander/releases/latest/download/microsnander-linux-mipsel) | MIPS с прямым порядком байтов (little-endian, MIPS32r2, soft-float): роутеры MediaTek, камеры Ingenic |
+| [`microsnander-android.apk`](https://github.com/OpenIPC/microsnander/releases/latest/download/microsnander-android.apk)   | Android 5.0 и новее: телефоны и приставки с USB host, без root                                        |
 
 Страница релиза: `https://github.com/OpenIPC/microsnander/releases/latest`
 
@@ -466,12 +468,13 @@ make -C src
 удалена.
 
 Статические релизные файлы собирает `ci/build-musl.sh` (Docker или любой Linux
-x86_64 с `curl`, `make` и, для arm, `qemu-user`). Скрипт скачивает тулчейн musl и
+x86_64 с `curl`, `make` и, для arm и mipsel, `qemu-user`). Скрипт скачивает тулчейн musl и
 проверяет его по SHA256:
 
 ```sh
 ci/build-musl.sh x86_64 dist    # dist/microsnander-linux-x86_64
 ci/build-musl.sh arm dist       # dist/microsnander-linux-arm
+ci/build-musl.sh mipsel dist    # dist/microsnander-linux-mipsel
 ```
 
 ## Благодарности
