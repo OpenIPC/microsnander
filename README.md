@@ -81,8 +81,10 @@ them with a graphical interface. MicroSNANDer is made for the places they do not
 - **A phone is a programmer.** The [Android app](#android-app) works with all of them on a
   phone or a TV box, Android 5.0 and later, without root.
 
-For EEPROM chips, or on Windows and macOS, use another program: MicroSNANDer is for SPI NOR
-and SPI NAND on Linux and Android.
+Windows and macOS are not supported and will not be, but you can still work from them: plug
+the programmer into another device that runs microsnander (a router, a computer, a camera, a
+TV box on Linux) and open its [web page](#web-mode) or log in to it over SSH. If that does not
+suit you, or for EEPROM chips, which MicroSNANDer does not handle, use a native program.
 
 ## Requirements
 

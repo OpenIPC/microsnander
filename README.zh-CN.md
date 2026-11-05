@@ -73,8 +73,9 @@ MicroSNANDer 面向的是它们覆盖不到的场合：
 - **手机就是编程器。** [Android 应用](#android-应用) 在手机或电视盒子上支持所有这些编程器，
   Android 5.0 及以上，无需 root。
 
-对于 EEPROM 芯片，或在 Windows 和 macOS 上，请使用其他程序：MicroSNANDer 面向 Linux 和 Android 上的
-SPI NOR 和 SPI NAND。
+Windows 和 macOS 不受支持，今后也不会支持，但仍可以从这些系统进行操作：把编程器连接到另一台运行
+microsnander 的设备（路由器、电脑、摄像机、Linux 电视盒子），然后打开它的[网页](#web-模式)或通过 SSH
+登录。如果这不适合您，或者需要处理 MicroSNANDer 不支持的 EEPROM 芯片，请使用原生程序。
 
 ## 系统要求
 
