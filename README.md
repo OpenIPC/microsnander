@@ -202,7 +202,8 @@ operation covers the whole chip. Addresses and lengths are decimal or hex with
 the chip reports.
 
 `-r`, `-w` and `-v` go through the chip in parts of about 64 KB, so a board with little memory
-reads and writes a chip of any size; the file still has to fit its disk. The range is held in
+reads and writes a chip of any size; the file still has to fit its disk, next to an earlier
+dump of that name, which `-r` replaces only at the end. The range is held in
 memory as one piece with `-k`, `-d`, the EZP programmers and a file that is no regular file: on
 a small board use `-a` and `-l` with them.
 

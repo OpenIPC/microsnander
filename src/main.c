@@ -134,6 +134,37 @@ static void parts_end(const char *what, long long done, long long len)
 		timer_end();
 }
 
+/* A dump goes to a new file next to fname and takes that name at the end: half a
+   dump looks like a dump, and a read that fails leaves an earlier dump as it was.
+   mode: that of the earlier file, -1: as a new file gets. NULL: no such file here. */
+static char *dump_temp(const char *fname, int mode, FILE **fp)
+{
+	char *tmp = malloc(strlen(fname) + 8);
+	int fd;
+
+	if (!tmp)
+		return NULL;
+	sprintf(tmp, "%s.XXXXXX", fname);
+	if ((fd = mkstemp(tmp)) < 0) {
+		free(tmp);
+		return NULL;
+	}
+	if (mode < 0) {
+		mode_t mask = umask(0);
+
+		umask(mask);
+		mode = 0666 & ~mask;
+	}
+	if (fchmod(fd, mode) || !(*fp = fdopen(fd, "wb"))) {
+		close(fd);
+		unlink(tmp);
+		free(tmp);
+		*fp = NULL;
+		return NULL;
+	}
+	return tmp;
+}
+
 /* Read the range back and compare it with the file, which holds exactly the bytes
    written (its first len bytes), in small chunks: 0 when they are the same */
 static int verify(unsigned char *buf, const char *fname, long long addr, long long len)
@@ -380,7 +411,8 @@ int main(int argc, char* argv[])
 		printf("Couldn't open file %s for reading.\n", fname);
 		goto out;
 	}
-	regular = !fp || (!fstat(fileno(fp), &st) && S_ISREG(st.st_mode));
+	/* size 0 says nothing: /proc and /sys have regular files of that size with data */
+	regular = !fp || (!fstat(fileno(fp), &st) && S_ISREG(st.st_mode) && st.st_size > 0);
 	/* A range goes in parts of whole blocks, so a board with little memory takes a
 	   chip of any size. As one piece: -k (the pages after a skipped one move), a
 	   raw dump (its pages are not whole blocks of data), the EZP (it checks the
@@ -428,12 +460,23 @@ int main(int argc, char* argv[])
 		parts_begin();
 		for (done = 0; done < len; done += k) {
 			k = part_len(addr + done, len - done);
-			if (regular && fread(buf, 1, k, fp) != (size_t)k) {
-				parts_end(NULL, 0, 0);
-				printf("Error reading file [%s]\n", fname);
-				fclose(fp);
-				free(buf);
-				goto out;
+			if (regular) {
+				size_t got = fread(buf, 1, k, fp);
+
+				if (ferror(fp)) {
+					parts_end(NULL, 0, 0);
+					printf("Error reading file [%s]\n", fname);
+					fclose(fp);
+					free(buf);
+					goto out;
+				}
+				/* the size of a file in /sys is only an upper limit */
+				if ((long long)got < k) {
+					k = got;
+					len = done + k;
+					if (!k)
+						break;
+				}
 			}
 			ret = prog.flash_write(buf, addr + done, k);
 			/* the drivers return the number of bytes written: less than k is a failure */
@@ -449,8 +492,13 @@ int main(int argc, char* argv[])
 			}
 			parts_progress("Written", done + k, len);
 		}
-		parts_end("Written", len, len);
+		parts_end(len ? "Written" : NULL, len, len);
 		fclose(fp);
+		if (!len) {
+			printf("File %s is empty.\n", fname);
+			free(buf);
+			goto out;
+		}
 		printf("Status: OK\n");
 		if (vr) {
 			printf("VERIFY:\n");
@@ -462,14 +510,20 @@ int main(int argc, char* argv[])
 	}
 
 	if (op == 'r') {
+		char *tmp = NULL;
+		int ok, have = !lstat(fname, &st);
+
 		printf("READ:\n");
-		fp = fopen(fname, "wb");
+		/* a link, a FIFO or a device is written as it is */
+		if (!have || S_ISREG(st.st_mode))
+			tmp = dump_temp(fname, have ? (int)(st.st_mode & 07777) : -1, &fp);
+		if (!tmp)
+			fp = fopen(fname, "wb");
 		if (!fp) {
 			printf("Couldn't open file %s for writing.\n", fname);
 			free(buf);
 			goto out;
 		}
-		regular = !fstat(fileno(fp), &st) && S_ISREG(st.st_mode);
 		printf("Read addr = 0x%016llX, len = 0x%016llX\n", addr, len);
 		parts_begin();
 		for (done = 0; done < len; done += k) {
@@ -490,18 +544,24 @@ int main(int argc, char* argv[])
 		}
 		if (done == len)
 			parts_end("Read", len, len);
+		ok = done == len;
 		/* fclose() flushes: its result counts as much as that of fwrite() */
-		if (fclose(fp) != 0 && done == len) {
+		if (fclose(fp) != 0 && ok) {
 			printf("Error writing file [%s]\n", fname);
-			done = -1;
+			ok = 0;
+		}
+		if (tmp) {
+			if (ok && rename(tmp, fname)) {
+				printf("Error writing file [%s]\n", fname);
+				ok = 0;
+			}
+			if (!ok)
+				unlink(tmp);
+			free(tmp);
 		}
 		free(buf);
-		if (done != len) {
-			/* half a dump looks like a dump */
-			if (regular)
-				remove(fname);
+		if (!ok)
 			goto out;
-		}
 		printf("Status: OK\n");
 		rc = 0;
 	}
