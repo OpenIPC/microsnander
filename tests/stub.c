@@ -1,4 +1,5 @@
 /* tests/stub.c — test double for main.c: the programmer and a 64 KiB chip in chip.img.
+   MS_BIG=1 makes it 1 MiB, MS_LARGEST=1 prints the longest read or write,
    MS_CHIP=nor|nand|none, MS_CORRUPT=<offset> flips a byte on write,
    MS_FAIL=erase|read|shortread|write|partial|unprotect makes that operation fail. */
 #include <stdio.h>
@@ -7,10 +8,12 @@
 #include "flashcmd_api.h"
 const char *flash_chip_name = "W25Q80";
 int ECC_fcheck = 1, ECC_ignore = 0, Skip_BAD_page = 0; unsigned long long Skip_BAD_end; unsigned char _ondie_ecc_flag = 1; unsigned int bsize = 4096;
-static unsigned char chip[65536];
+static unsigned char chip[1 << 20];	/* MS_BIG=1: all of it; else 64 KiB */
+static unsigned long largest;		/* MS_LARGEST=1: the longest read or write is printed */
+static void note(unsigned long l) { if (l > largest) largest = l; }
 static const char *env(const char *n) { const char *v = getenv(n); return v ? v : ""; }
-static int r(unsigned char *b, unsigned long f, unsigned long l) { if (!strcmp(env("MS_FAIL"),"read")) return -1; if (!strcmp(env("MS_FAIL"),"shortread")) { memcpy(b, chip + f, l / 2); return l / 2; } memcpy(b, chip + f, l); return l; }
-static int w(unsigned char *b, unsigned long t, unsigned long l) { if (*env("MS_PROTECT")) return l; if (!strcmp(env("MS_FAIL"),"write")) return -1; if (!strcmp(env("MS_FAIL"),"partial")) { memcpy(chip + t, b, l / 2); return l / 2; } memcpy(chip + t, b, l); if (*env("MS_CORRUPT")) chip[t + atol(env("MS_CORRUPT"))] ^= 0x5a; return l; }
+static int r(unsigned char *b, unsigned long f, unsigned long l) { note(l); if (!strcmp(env("MS_FAIL"),"read")) return -1; if (!strcmp(env("MS_FAIL"),"shortread")) { memcpy(b, chip + f, l / 2); return l / 2; } memcpy(b, chip + f, l); return l; }
+static int w(unsigned char *b, unsigned long t, unsigned long l) { note(l); if (*env("MS_PROTECT")) return l; if (!strcmp(env("MS_FAIL"),"write")) return -1; if (!strcmp(env("MS_FAIL"),"partial")) { memcpy(chip + t, b, l / 2); return l / 2; } memcpy(chip + t, b, l); if (*env("MS_CORRUPT")) { unsigned long x = atol(env("MS_CORRUPT")); if (x >= t && x < t + l) chip[x] ^= 0x5a; } return l; }
 static int e(unsigned long o, unsigned long l) { if (*env("MS_PROTECT")) return 0; if (!strcmp(env("MS_FAIL"),"erase")) return -2; memset(chip + o, 0xff, l); return 0; }
 static int u(void) { return strcmp(env("MS_FAIL"),"unprotect") ? 0 : -3; }
 static int q(void) { printf("clear QE\n"); return strcmp(env("MS_FAIL"),"qe") ? 0 : -2; }
@@ -33,10 +36,10 @@ int programmer_select(const char *n) {
 const char *programmer_names(void) { return "ch341a, ch347, ezp, auto"; }
 int ch347_set_speed(const char *s) { return strcasecmp(s, "60M") && strcasecmp(s, "30M") && strcasecmp(s, "15M") && strcasecmp(s, "7.5M") && strcasecmp(s, "3.75M") && strcasecmp(s, "1.875M") ? -1 : 0; }
 const char *ch347_speed_list(void) { return "60M, 30M, 15M, 7.5M, 3.75M, 1.875M"; }
-int programmer_init(bool need_clock) { if (need_clock && !chosen->clock) { printf("-S: fixed clock\n"); return -2; } programmer = chosen; if (*env("MS_PROGRAMMER")) printf("programmer: %s\n", programmer->key); FILE *f = fopen("chip.img", "rb"); if (f) { if (fread(chip, 1, sizeof(chip), f) != sizeof(chip)) memset(chip, 0, sizeof(chip)); fclose(f); } return 0; }
+int programmer_init(bool need_clock) { if (need_clock && !chosen->clock) { printf("-S: fixed clock\n"); return -2; } programmer = chosen; if (*env("MS_PROGRAMMER")) printf("programmer: %s\n", programmer->key); size_t n = *env("MS_BIG") ? sizeof(chip) : 65536; FILE *f = fopen("chip.img", "rb"); if (f) { if (fread(chip, 1, n, f) != n) memset(chip, 0, sizeof(chip)); fclose(f); } return 0; }
 int web_serve(const char *l, const char *k, const char *d, unsigned long long a, unsigned long long n)
 { printf("web: %s key=%s dir=%s addr=0x%llx len=0x%llx\n", l, k ? k : "-", d ? d : "-", a, n); return 0; }
-int programmer_shutdown(void) { FILE *f = fopen("chip.img", "wb"); if (!f || fwrite(chip, 1, sizeof(chip), f) != sizeof(chip)) return -1; fclose(f); return 0; }
+int programmer_shutdown(void) { if (*env("MS_LARGEST")) printf("largest 0x%lx\n", largest); size_t n = *env("MS_BIG") ? sizeof(chip) : 65536; FILE *f = fopen("chip.img", "wb"); if (!f || fwrite(chip, 1, n, f) != n) return -1; fclose(f); return 0; }
 void support_flash_list(void) {}
 long flash_cmd_init(struct flash_cmd *c) {
 	if (!strcmp(env("MS_CHIP"), "none")) return -1;
@@ -45,7 +48,7 @@ long flash_cmd_init(struct flash_cmd *c) {
 	c->kind = !strcmp(env("MS_CHIP"), "nand") ? FLASH_NAND : FLASH_NOR;
 	c->lock = *env("MS_LOCK") ? (int)strtol(env("MS_LOCK"), NULL, 16) : -1;
 	if (programmer && !strcmp(programmer->key, "ezp")) c->kind = FLASH_FIRMWARE;
-	return sizeof(chip);
+	return *env("MS_BIG") ? sizeof(chip) : 65536;
 }
 
 /* MS_SR=1c0000: the status registers SR1 SR2 SR3 */

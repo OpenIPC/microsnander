@@ -19,7 +19,7 @@ set -u
 T=$(cd "$(dirname "$0")" && pwd)
 W=$(mktemp -d)
 trap 'rm -rf "$W"' EXIT
-${CC:-cc} -std=gnu99 -Wall -Werror -I"$T/../src" -o "$W/ms" "$T/../src/main.c" "$T/../src/sigmastar.c" "$T/../src/selftest.c" "$T/stub.c" || exit 1
+${CC:-cc} -std=gnu99 -Wall -Werror -I"$T/../src" -o "$W/ms" "$T/../src/main.c" "$T/../src/sigmastar.c" "$T/../src/selftest.c" "$T/../src/timer.c" "$T/stub.c" || exit 1
 ${CC:-cc} -std=gnu99 -Wall -Werror -O1 -DSPI_NAND_OIP_TIMEOUT_MS=50 -o "$W/nandsim" "$T/nandsim.c" "$T/../src/timer.c" || exit 1
 ${CC:-cc} -std=gnu99 -Wall -Werror -O1 -I"$T/../src" ${LIBUSB_CFLAGS:-} -o "$W/ch341sim" "$T/ch341sim.c" || exit 1
 ${CC:-cc} -std=gnu99 -Wall -Werror -O1 -o "$W/norsim" "$T/norsim.c" "$T/../src/timer.c" || exit 1
@@ -145,6 +145,48 @@ cmp -s out.bin img.bin && echo "ok   -r gives the written image" || { echo "FAIL
 t 1 "-r short read"                  MS_FAIL=shortread $B -r out3.bin
 t 1 "-r read fails"                   MS_FAIL=read $B -r out2.bin
 t 1 "-r unwritable file"              $B -r /nonexistent/dir/out.bin
+[ ! -e out2.bin ] && echo "ok   a read that failed leaves no half dump" || { echo "FAIL half dump left"; fail=1; }
+printf 'earlier' > keep.bin; chmod 640 keep.bin
+t 1 "-r fails over an earlier dump"   MS_FAIL=read $B -r keep.bin
+[ "$(cat keep.bin)" = earlier ] && [ "$(ls keep.bin.* 2>/dev/null)" = "" ] && echo "ok   the earlier dump stays, no temporary file" || { echo "FAIL earlier dump or a temporary file"; fail=1; }
+t 0 "-r over an earlier dump"         $B -r keep.bin
+cmp -s keep.bin img.bin && [ "$(stat -c %a keep.bin)" = 640 ] && echo "ok   the dump replaces it, with its mode" || { echo "FAIL dump over an earlier one"; fail=1; }
+(umask 027; rm -f mode.bin; $B -r mode.bin >/dev/null); [ "$(stat -c %a mode.bin)" = 640 ] && echo "ok   a new dump gets the mode of the umask" || { echo "FAIL mode of a new dump"; fail=1; }
+printf 'earlier' > hard.bin; ln hard.bin alias.bin
+t 0 "-r over a file with two names"   $B -r hard.bin
+cmp -s alias.bin img.bin && echo "ok   the other name has the dump too" || { echo "FAIL other name keeps the old data"; fail=1; }
+printf 'earlier' > ro.bin; chmod 440 ro.bin
+printf 'earlier' > wo.bin; chmod 200 wo.bin
+t 0 "-r over a write-only dump"       $B -r wo.bin
+if [ "$(id -u)" != 0 ]; then
+	t 1 "-r over a read-only dump"    $B -r ro.bin
+	[ "$(cat ro.bin)" = earlier ] && echo "ok   a read-only dump stays" || { echo "FAIL read-only dump replaced"; fail=1; }
+fi
+ln -s keep.bin link.bin; t 0 "-r into a link" $B -r link.bin
+[ -L link.bin ] && echo "ok   a link stays a link" || { echo "FAIL link replaced"; fail=1; }
+t 0 "-w of a file of size 0 with data" $B -w /proc/self/status -l 8
+# a range goes in parts of whole blocks, 64 KiB here; in one piece where parts would not do
+dd if=/dev/urandom of=big.bin bs=1024 count=1024 2>/dev/null
+big() {
+	want=$1; shift
+	o=$(MS_BIG=1 MS_LARGEST=1 "$@"); e=$?
+	[ $e = 0 ] && printf '%s\n' "$o" | grep -q "^largest $want\$" && echo "ok   longest transfer $want: ${*#*ms}" ||
+		{ echo "FAIL longest transfer not $want or exit $e: $*"; fail=1; }
+}
+big 0x10000 $B -w big.bin -v
+big 0x10000 $B -r bigout.bin
+cmp -s big.bin bigout.bin && echo "ok   1 MiB in parts: same data" || { echo "FAIL 1 MiB in parts"; fail=1; }
+[ "$(MS_BIG=1 $B -r bigout.bin | grep -c Elapsed)" = 1 ] && echo "ok   one time for all the parts" || { echo "FAIL time printed by parts"; fail=1; }
+MS_BIG=1 $B -r bigout.bin | grep -q 'Read 100% \[1048576\] of \[1048576\]' && echo "ok   one progress for all the parts" || { echo "FAIL progress of the parts"; fail=1; }
+big 0xf000 $B -r part.bin -a 0x1000 -l 0xf000
+big 0x10000 $B -r part.bin -a 0x1000 -l 0x20000
+dd if=big.bin of=want.bin bs=4096 skip=1 count=32 2>/dev/null
+cmp -s part.bin want.bin && echo "ok   a range that starts inside a block" || { echo "FAIL range inside a block"; fail=1; }
+MS_BIG=1 MS_CORRUPT=524293 $B -w big.bin -v | grep -q 'first difference at 0x0000000000080005' && echo "ok   the difference in a later part" || { echo "FAIL address of a difference in a later part"; fail=1; }
+big 0x100000 $B -k -r bigout.bin
+big 0x100000 $B -d -r bigout.bin
+big 0x100000 $B -P ezp -r bigout.bin
+cat big.bin | big 0x100000 $B -w /dev/stdin
 ./nandsim > nandsim.log 2>&1 || fail=1
 grep -a '^ok\|^FAIL' nandsim.log
 ./ch341sim > ch341sim.log 2>&1 || fail=1

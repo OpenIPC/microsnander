@@ -2,8 +2,8 @@
 # build.yml — CI for microsnander: a native build on the usbfs code, and one
 # against the system libusb (make LIBUSB=1); any compiler warning fails the job; its
 # tests (tests/run.sh), plus the
-# static musl builds the release ships (ci/build-musl.sh): x86_64 and 32-bit
-# ARM for cameras and boards, each started and checked for the version that
+# static musl builds the release ships (ci/build-musl.sh): x86_64, 32-bit ARM
+# for cameras and boards, MIPS of both byte orders for routers, each started and checked for the version that
 # src/main.c defines; and the Android app (android/), a debug APK.
 # On pull requests, version.yml runs .github/check-version.sh: a change to
 # the code or the build (this workflow included) comes with a new _VER and
@@ -86,7 +86,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [x86_64, arm]
+        target: [x86_64, arm, mipsel, mips]
     env:
       TOOLCHAIN_CACHE: ${{ github.workspace }}/.toolchains
     steps:
@@ -272,9 +272,9 @@ jobs:
           ver=$(sed -n 's/^#define[[:space:]]*_VER[[:space:]]*"\([^"]*\)".*/\1/p' src/main.c)
           [ -n "$ver" ] || { echo "::error::no _VER in src/main.c"; exit 1; }
           ls -l dist
-          want=2
+          want=4
           if [ "$SIGNED" = true ]; then
-            want=3
+            want=5
             # the project's certificate, or users of an earlier release cannot update
             # the signer of an APK: the newest build-tools whose apksigner runs here
             signer_of() {
@@ -301,6 +301,10 @@ jobs:
           [ "$(ls dist | wc -l)" = "$want" ] || { echo "::error::expected $want files in the release"; exit 1; }
           file dist/microsnander-linux-arm | grep -q 'ARM.*statically linked' ||
             { echo "::error::microsnander-linux-arm is not a static ARM binary"; exit 1; }
+          file dist/microsnander-linux-mipsel | grep -q 'LSB.*MIPS.*statically linked' ||
+            { echo "::error::microsnander-linux-mipsel is not a static little-endian MIPS binary"; exit 1; }
+          file dist/microsnander-linux-mips | grep -q 'MSB.*MIPS.*statically linked' ||
+            { echo "::error::microsnander-linux-mips is not a static big-endian MIPS binary"; exit 1; }
           chmod 755 dist/microsnander-linux-*
           ./dist/microsnander-linux-x86_64 -h | grep -q " v\.$ver\$" ||
             { echo "::error::the binary does not print v.$ver"; exit 1; }
@@ -341,6 +345,8 @@ jobs:
 
           - \`microsnander-linux-x86_64\` — PCs and servers
           - \`microsnander-linux-arm\` — 32-bit ARM (ARMv5TE and later, soft-float): cameras, Raspberry Pi and other boards
+          - \`microsnander-linux-mipsel\` — little-endian MIPS (MIPS32r2, soft-float): MediaTek routers, Ingenic cameras
+          - \`microsnander-linux-mips\` — big-endian MIPS (MIPS32r2, soft-float): Atheros and Qualcomm routers
           NOTES
           if [ -e dist/microsnander-android.apk ]; then
             echo "- \`microsnander-android.apk\` — Android 5.0 and later, phones and TV boxes (USB host, no root)" >> notes.md

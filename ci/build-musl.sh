@@ -7,13 +7,18 @@
 # target: x86_64   Bootlin x86-64 musl toolchain — PCs and servers
 #         arm      OpenIPC toolchain (hisilicon-hi3516cv100, arm musleabi, ARMv5TE
 #                  soft-float) — runs on every 32-bit ARM camera and board
+#         mipsel   OpenWrt toolchain (ramips/mt7621, musl, soft-float) — runs on every
+#                  little-endian MIPS32r2 core with or without an FPU: MediaTek routers,
+#                  Ingenic cameras
+#         mips     OpenWrt toolchain (ath79/generic, musl, soft-float) — the same for
+#                  big-endian cores: Atheros and Qualcomm routers
 #
 # Produces <outdir>/microsnander-linux-<target>: static, stripped, no version in the
 # name, so the release links never change. The programmers are reached through the
 # Linux usbfs (/dev/bus/usb) by src/usbfs.c, without libusb, so the binary has no
 # dependencies and runs whatever the libc of the system. Any compiler
 # warning in microsnander fails the build. The binary must start and print the
-# version that src/main.c defines (under qemu-user for arm).
+# version that src/main.c defines (under qemu-user for arm and MIPS).
 #
 # Toolchains are downloaded once into $TOOLCHAIN_CACHE and checked by SHA256 before
 # their compiler is run; the OpenIPC toolchain is a rolling release asset, checked
@@ -30,6 +35,8 @@ case "$CACHE" in /*) ;; *) CACHE=$PWD/$CACHE ;; esac
 
 OPENIPC=https://github.com/OpenIPC/firmware/releases/download/toolchain
 BOOTLIN=https://toolchains.bootlin.com/downloads/releases/toolchains
+OPENWRT=https://downloads.openwrt.org/releases/23.05.5/targets
+SUBDIR=     # toolchain directory inside the archive, if not its top level
 case "$ARCH" in
     x86_64)
         DIRNAME=x86-64--musl--stable-2026.08-1
@@ -41,7 +48,19 @@ case "$ARCH" in
         URL=$OPENIPC/toolchain.hisilicon-hi3516cv100.tgz
         SHA=github
         RUN=qemu-arm ;;
-    *) echo "usage: $0 <x86_64|arm> [outdir]" >&2; exit 2 ;;
+    mipsel)
+        DIRNAME=openwrt-toolchain-23.05.5-ramips-mt7621_gcc-12.3.0_musl.Linux-x86_64
+        URL=$OPENWRT/ramips/mt7621/$DIRNAME.tar.xz
+        SHA=bb08478a46869009a2a8b85f88e266cc6b6d3ccefc34de61907ead2a986e08c9
+        SUBDIR=/toolchain-mipsel_24kc_gcc-12.3.0_musl
+        RUN=qemu-mipsel ;;
+    mips)
+        DIRNAME=openwrt-toolchain-23.05.5-ath79-generic_gcc-12.3.0_musl.Linux-x86_64
+        URL=$OPENWRT/ath79/generic/$DIRNAME.tar.xz
+        SHA=6cf197b2705307057548e65158396ca4d26b343f557bf81c97fd5643978cc991
+        SUBDIR=/toolchain-mips_24kc_gcc-12.3.0_musl
+        RUN=qemu-mips ;;
+    *) echo "usage: $0 <x86_64|arm|mipsel|mips> [outdir]" >&2; exit 2 ;;
 esac
 
 # Download first (with retries), then check, then extract: a truncated stream piped
@@ -52,7 +71,7 @@ fetch() {   # url sha256 file
         { echo "SHA256 mismatch for $1" >&2; rm -f "$3"; exit 1; }
 }
 
-DIR=$CACHE/$DIRNAME
+DIR=$CACHE/$DIRNAME$SUBDIR
 if [ ! -d "$DIR/bin" ]; then
     mkdir -p "$CACHE"
     echo "downloading $URL"
@@ -74,6 +93,7 @@ fi
 # An empty CROSS would build with the host compiler: a glibc binary
 GCC=$(ls "$DIR"/bin/*-linux-musl*-gcc 2>/dev/null | head -1)
 [ -n "$GCC" ] || { echo "no musl gcc in $DIR/bin: remove $DIR and run again" >&2; exit 1; }
+export STAGING_DIR="$DIR"     # OpenWrt's gcc wrapper warns without it
 CROSS=${GCC%gcc}
 HOST=$(basename "${CROSS%-}")
 # configure looks for <host>-ar, <host>-ranlib, <host>-strip in PATH

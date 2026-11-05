@@ -23,6 +23,8 @@
 #include <string.h>
 #include <getopt.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <sys/stat.h>
 #include <time.h>
 #include <stdio.h>
 
@@ -32,12 +34,13 @@
 #include "sigmastar.h"
 #include "selftest.h"
 #include "web.h"
+#include "timer.h"
 #include "spi_nand_flash.h"
 
 struct flash_cmd prog;
 extern unsigned int bsize;
 
-#define _VER	"1.22.0"
+#define _VER	"1.25.0"
 
 const char *ms_version = _VER;
 
@@ -96,6 +99,144 @@ void usage(int code)
 	exit(code);
 }
 
+#define PART_MIN	(64 * 1024)
+
+static long long part_size;		/* 0: the whole range in one piece */
+
+/* the next part from at: up to the next multiple of part_size, so that all the
+   parts but the first start on a block */
+static long long part_len(long long at, long long left)
+{
+	long long k = part_size ? part_size - at % part_size : left;
+
+	return k < left ? k : left;
+}
+
+/* In parts the drivers would each print a progress and a time of their own */
+static void parts_begin(void)
+{
+	timer_start();
+	timer_quiet = part_size != 0;
+}
+
+static time_t parts_shown;		/* when the progress line was printed; 0: none is open */
+
+static void parts_progress(const char *what, long long done, long long len)
+{
+	time_t now = time(0);
+
+	if (!part_size || now == parts_shown)
+		return;
+	parts_shown = now;
+	printf("\b%s %lld%% [%lld] of [%lld] bytes      \r", what, 100 * done / len, done, len);
+	fflush(stdout);
+}
+
+/* what: the last line, NULL after a failure, which has its own message */
+static void parts_end(const char *what, long long done, long long len)
+{
+	if (part_size && what)
+		printf("%s 100%% [%lld] of [%lld] bytes      \n", what, done, len);
+	else if (parts_shown)
+		printf("\n");			/* the failure gets a line of its own */
+	parts_shown = 0;
+	timer_quiet = 0;
+	if (part_size)
+		timer_end();
+}
+
+/* A dump goes to a new file next to fname and into place at the end: half a dump
+   looks like a dump, and a read that fails leaves an earlier dump as it was.
+   NULL: no such file here. */
+static char *dump_temp(const char *fname, FILE **fp)
+{
+	char *tmp = malloc(strlen(fname) + 8);
+	int fd;
+
+	if (!tmp)
+		return NULL;
+	sprintf(tmp, "%s.XXXXXX", fname);
+	if ((fd = mkstemp(tmp)) < 0) {
+		free(tmp);
+		return NULL;
+	}
+	/* it stays private (mkstemp: 0600) until it is the dump */
+	if (!(*fp = fdopen(fd, "w+b"))) {
+		close(fd);
+		unlink(tmp);
+		free(tmp);
+		*fp = NULL;
+		return NULL;
+	}
+	return tmp;
+}
+
+/* The finished dump into the earlier file: the same file, with its owner, its
+   permissions and its other names. buf: a work area of n bytes. */
+static int dump_copy(FILE *from, FILE *to, unsigned char *buf, size_t n)
+{
+	size_t got;
+
+	rewind(from);
+	if (ftruncate(fileno(to), 0))
+		return -1;
+	while ((got = fread(buf, 1, n, from)) > 0)
+		if (fwrite(buf, 1, got, to) != got)
+			return -1;
+	return ferror(from) ? -1 : 0;
+}
+
+/* Read the range back and compare it with the file, which holds exactly the bytes
+   written (its first len bytes), in small chunks: 0 when they are the same */
+static int verify(unsigned char *buf, const char *fname, long long addr, long long len)
+{
+	static unsigned char cmp[65536];
+	long long done, k, off;
+	size_t n, i;
+	int ret;
+	FILE *fp = fopen(fname, "rb");
+
+	if (!fp) {
+		printf("Couldn't open file %s for reading.\n", fname);
+		return 1;
+	}
+	printf("Read addr = 0x%016llX, len = 0x%016llX\n", addr, len);
+	parts_begin();
+	for (done = 0; done < len; done += k) {
+		k = part_len(addr + done, len - done);
+		memset(buf, 0, k);
+		ret = prog.flash_read(buf, addr + done, k);
+		if (ret != k) {
+			parts_end(NULL, 0, 0);
+			printf("Status: BAD(%d)\n", ret);
+			fclose(fp);
+			return 1;
+		}
+		for (off = 0; off < k; off += n) {
+			n = k - off < (long long)sizeof(cmp) ? (size_t)(k - off) : sizeof(cmp);
+			if (fread(cmp, 1, n, fp) != n) {	/* the file changed: not a chip difference */
+				parts_end(NULL, 0, 0);
+				printf("Error reading file [%s]\n", fname);
+				fclose(fp);
+				return 1;
+			}
+			for (i = 0; i < n; i++)
+				if (cmp[i] != buf[off + i]) {
+					parts_end(NULL, 0, 0);
+					printf("Status: BAD, first difference at 0x%016llX: wrote 0x%02X, read 0x%02X\n",
+					       addr + done + off + i, cmp[i], buf[off + i]);
+					fclose(fp);
+					return 1;
+				}
+		}
+		parts_progress("Read", done + k, len);
+	}
+	parts_end("Read", len, len);
+	printf("Status: OK\n");
+	fclose(fp);
+	return 0;
+}
+
 int main(int argc, char* argv[])
 {
 	int c, vr = 0, ret = 0, rc = 1, speed_set = 0;
@@ -103,9 +244,11 @@ int main(int argc, char* argv[])
 	int scan = 0;
 	char *fname = NULL, op = 0, *web = NULL, *web_key = NULL, *web_dir = NULL;
 	unsigned char *buf;
-	int long long len = 0, addr = 0, flen = 0, wlen = 0;
+	int long long len = 0, addr = 0, flen = 0, wlen = 0, done = 0, k = 0;
+	int regular;
+	struct stat st;
 	int unlock = 0;		/* how many -u: 2 also clears QE */
-	FILE *fp;
+	FILE *fp = NULL;
 
 	title();
 
@@ -318,30 +461,47 @@ int main(int argc, char* argv[])
 		len = flen;
 	/* -k moves data to later pages, but only inside -a/-l (without -l: to the chip end) */
 	Skip_BAD_end = addr + len;
-	buf = (unsigned char *)malloc(len + 1);
+
+	if (op == 'w' && !(fp = fopen(fname, "rb"))) {
+		printf("WRITE:\n");
+		printf("Couldn't open file %s for reading.\n", fname);
+		goto out;
+	}
+	/* size 0 says nothing: /proc and /sys have regular files of that size with data */
+	regular = !fp || (!fstat(fileno(fp), &st) && S_ISREG(st.st_mode) && st.st_size > 0);
+	/* A range goes in parts of whole blocks, so a board with little memory takes a
+	   chip of any size. As one piece: -k (the pages after a skipped one move), a
+	   raw dump (its pages are not whole blocks of data), the EZP (it checks the
+	   whole range before it writes anything) and a file that is no regular file
+	   (a pipe has one pass, and its length is known only at its end). */
+	if (regular && !Skip_BAD_page && ECC_fcheck && prog.kind != FLASH_FIRMWARE && bsize) {
+		part_size = bsize;
+		while (part_size < PART_MIN)
+			part_size += bsize;
+	}
+	buf = (unsigned char *)malloc((part_size ? part_size : len) + 1);
 	if (!buf) {
 		printf("Malloc failed for read buffer.\n");
+		if (fp)
+			fclose(fp);
 		goto out;
 	}
 
 	if (op == 'w') {
 		printf("WRITE:\n");
-		fp = fopen(fname, "rb");
-		if (!fp) {
-			printf("Couldn't open file %s for reading.\n", fname);
-			free(buf);
-			goto out;
-		}
-		wlen = fread(buf, 1, len, fp);
+		if (regular)
+			wlen = st.st_size < len ? st.st_size : len;
+		else
+			wlen = fread(buf, 1, len, fp);
 		if (ferror(fp)) {
 			printf("Error reading file [%s]\n", fname);
 			fclose(fp);
 			free(buf);
 			goto out;
 		}
-		fclose(fp);
 		if (wlen <= 0) {
 			printf("File %s is empty.\n", fname);
+			fclose(fp);
 			free(buf);
 			goto out;
 		}
@@ -353,60 +513,55 @@ int main(int argc, char* argv[])
 			len = wlen;
 		}
 		printf("Write addr = 0x%016llX, len = 0x%016llX\n", addr, len);
-		ret = prog.flash_write(buf, addr, len);
-		/* the drivers return the number of bytes written: less than len is a failure */
-		if (ret != len) {
-			if (ret < 0)
-				printf("Status: BAD(%d)\n", ret);
-			else
-				printf("Status: BAD, wrote 0x%X of 0x%llX bytes\n", ret, len);
+		parts_begin();
+		for (done = 0; done < len; done += k) {
+			k = part_len(addr + done, len - done);
+			if (regular) {
+				size_t got = fread(buf, 1, k, fp);
+
+				if (ferror(fp)) {
+					parts_end(NULL, 0, 0);
+					printf("Error reading file [%s]\n", fname);
+					fclose(fp);
+					free(buf);
+					goto out;
+				}
+				/* the size of a file in /sys is only an upper limit */
+				if ((long long)got < k) {
+					parts_end(NULL, 0, 0);
+					printf("File %s ends early, writing 0x%llX of 0x%llX bytes.\n", fname, done + (long long)got, len);
+					parts_begin();
+					k = got;
+					len = done + k;
+					if (!k)
+						break;
+				}
+			}
+			ret = prog.flash_write(buf, addr + done, k);
+			/* the drivers return the number of bytes written: less than k is a failure */
+			if (ret != k) {
+				parts_end(NULL, 0, 0);
+				if (ret < 0)
+					printf("Status: BAD(%d)\n", ret);
+				else
+					printf("Status: BAD, wrote 0x%llX of 0x%llX bytes\n", done + ret, len);
+				fclose(fp);
+				free(buf);
+				goto out;
+			}
+			parts_progress("Written", done + k, len);
+		}
+		parts_end(len ? "Written" : NULL, len, len);
+		fclose(fp);
+		if (!len) {
+			printf("File %s is empty.\n", fname);
 			free(buf);
 			goto out;
 		}
 		printf("Status: OK\n");
 		if (vr) {
-			/* Read the range back into buf and compare it with the file, which
-			   holds exactly the bytes written (its first len bytes): one buffer
-			   as large as the image, the file in small chunks. */
-			static unsigned char cmp[65536];
-			long long off = 0;
-			size_t n = 0, k = 0;
-
 			printf("VERIFY:\n");
-			fp = fopen(fname, "rb");
-			if (!fp) {
-				printf("Couldn't open file %s for reading.\n", fname);
-				free(buf);
-				goto out;
-			}
-			memset(buf, 0, len);
-			printf("Read addr = 0x%016llX, len = 0x%016llX\n", addr, len);
-			ret = prog.flash_read(buf, addr, len);
-			if (ret != len) {
-				printf("Status: BAD(%d)\n", ret);
-			} else {
-				while (off < len) {
-					n = len - off < (long long)sizeof(cmp) ? (size_t)(len - off) : sizeof(cmp);
-					if (fread(cmp, 1, n, fp) != n) {
-						k = n;	/* the file changed: not a chip difference */
-						break;
-					}
-					for (k = 0; k < n && cmp[k] == buf[off + k]; k++)
-						;
-					if (k < n)
-						break;
-					off += n;
-				}
-				if (off == len) {
-					printf("Status: OK\n");
-					rc = 0;
-				} else if (k < n)
-					printf("Status: BAD, first difference at 0x%016llX: wrote 0x%02X, read 0x%02X\n",
-						addr + off + k, cmp[k], buf[off + k]);
-				else
-					printf("Error reading file [%s]\n", fname);
-			}
-			fclose(fp);
+			rc = verify(buf, fname, addr, len);
 		} else
 			rc = 0;
 		free(buf);
@@ -414,28 +569,95 @@ int main(int argc, char* argv[])
 	}
 
 	if (op == 'r') {
+		char *tmp = NULL;
+		FILE *old = NULL;
+		int ok, kept = 0, have = !lstat(fname, &st);
+
 		printf("READ:\n");
-		printf("Read addr = 0x%016llX, len = 0x%016llX\n", addr, len);
-		ret = prog.flash_read(buf, addr, len);
-		if (ret != len) {
-			printf("Status: BAD(%d)\n", ret);
-			free(buf);
-			goto out;
+		/* a link, a FIFO or a device is written as it is */
+		if (!have || S_ISREG(st.st_mode)) {
+			int fd = have ? open(fname, O_WRONLY) : -1;	/* not truncated */
+
+			if (have && (fd < 0 || !(old = fdopen(fd, "wb")))) {
+				printf("Couldn't open file %s for writing.\n", fname);
+				if (fd >= 0)
+					close(fd);
+				free(buf);
+				goto out;
+			}
+			tmp = dump_temp(fname, &fp);
 		}
-		fp = fopen(fname, "wb");
+		if (!tmp) {
+			if (old)
+				fclose(old);
+			old = NULL;
+			fp = fopen(fname, "wb");
+		}
 		if (!fp) {
 			printf("Couldn't open file %s for writing.\n", fname);
 			free(buf);
 			goto out;
 		}
-		/* fclose() flushes: its result counts as much as that of fwrite() */
-		int werr = fwrite(buf, 1, len, fp) != (size_t)len;
-		if (fclose(fp) != 0 || werr) {
+		printf("Read addr = 0x%016llX, len = 0x%016llX\n", addr, len);
+		parts_begin();
+		for (done = 0; done < len; done += k) {
+			k = part_len(addr + done, len - done);
+			ret = prog.flash_read(buf, addr + done, k);
+			if (ret != k) {
+				parts_end(NULL, 0, 0);
+				printf("Status: BAD(%d)\n", ret);
+				break;
+			}
+			if (fwrite(buf, 1, k, fp) != (size_t)k) {
+				parts_end(NULL, 0, 0);
+				printf("Error writing file [%s]\n", fname);
+				ret = -1;
+				break;
+			}
+			parts_progress("Read", done + k, len);
+		}
+		if (done == len)
+			parts_end("Read", len, len);
+		ok = done == len;
+		/* fflush and fclose: their results count as much as that of fwrite() */
+		if (old) {
+			if (ok && !fflush(fp)) {
+				int bad = dump_copy(fp, old, buf, part_size ? part_size : len);
+
+				if (fclose(old) != 0 || bad) {
+					/* the earlier dump is gone by now: this one must stay */
+					printf("Error writing file [%s], the dump is in %s\n", fname, tmp);
+					kept = 1;
+					ok = 0;
+				}
+			} else {
+				if (ok)
+					printf("Error writing file [%s]\n", fname);
+				ok = 0;
+				fclose(old);
+			}
+		}
+		if (fclose(fp) != 0 && ok) {
 			printf("Error writing file [%s]\n", fname);
-			free(buf);
-			goto out;
+			ok = 0;
+		}
+		if (tmp) {
+			if (!old && ok) {
+				mode_t mask = umask(0);
+
+				umask(mask);
+				if (chmod(tmp, 0666 & ~mask) || rename(tmp, fname)) {
+					printf("Error writing file [%s]\n", fname);
+					ok = 0;
+				}
+			}
+			if ((old || !ok) && !kept)
+				unlink(tmp);
+			free(tmp);
 		}
 		free(buf);
+		if (!ok)
+			goto out;
 		printf("Status: OK\n");
 		rc = 0;
 	}

@@ -4,7 +4,7 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
-## 1.22.0 — 2026-11-04
+## 1.25.0 — 2026-11-05
 
 - SigmaStar ISP (`-m sigmastar`): the SPI flash of a SigmaStar (MStar) board through the ISP
   bridge of its SoC over I2C, without desoldering, to bring back a board with a broken
@@ -14,6 +14,31 @@ from every push to `main`; this file is the change history.
   that answer, alone or before the operation (`-m sigmastar -i -q`). Every operation and
   SPI NOR and SPI NAND work as with a chip in the socket; not in the web mode or the app.
   The CH341A and the CH347 drivers get I2C transactions.
+
+## 1.24.0 — 2026-11-05
+
+- `-r`, `-w` and `-v` go in parts of whole blocks, about 64 KB, instead of keeping the whole
+  range in memory, so a board with little memory reads and writes a chip of any size. A file
+  that does not fit the memory no longer ends in `Malloc failed`. In one piece as before, with
+  the memory that takes: `-k`, `-d`, the EZP programmers and a file that is no regular file.
+- `-r` writes to a new file next to the dump and puts it in place at the end: a bad path or a
+  read-only dump fails before the read, a read that fails leaves no half dump and an earlier
+  dump as it was. An earlier dump stays the same file, with its owner and permissions. While
+  it runs, the disk holds both. A symbolic link, a FIFO or a device is written directly, and so
+  is a dump in a directory that takes no new file.
+
+## 1.23.0 — 2026-11-05
+
+- Release file `microsnander-linux-mips`: a static binary for big-endian MIPS (MIPS32r2,
+  soft-float), for Atheros and Qualcomm routers. `ci/build-musl.sh mips` builds it.
+
+## 1.22.0 — 2026-11-05
+
+- Release file `microsnander-linux-mipsel`: a static binary for little-endian MIPS (MIPS32r2,
+  soft-float), for MediaTek routers and Ingenic cameras. `ci/build-musl.sh mipsel` builds it.
+- Web mode: the threads are joined, not detached. In the static mipsel build a detached thread
+  could fault as it ended, and the service went down, for example after a request without the
+  password of `-K`.
 
 ## 1.21.2 — 2026-11-04
 
