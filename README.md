@@ -14,7 +14,7 @@ MicroSNANDer is a programmer for SPI NOR and SPI NAND flash chips with the cheap
 CH347 and EZP USB programmers, six models in all: a command-line tool with a web page
 built in, and an Android app. It reads, writes, erases and verifies the flash of cameras,
 routers and other boards, removes the write protection of SPI NOR chips, and knows 291
-SPI NOR and 135 SPI NAND chips. Each release file is about 200–260 KB.
+SPI NOR and 135 SPI NAND chips. Each release file is about 200–270 KB.
 
 It is a stripped-down, extended, deeply modified and optimized version of
 [SNANDer](https://github.com/McMCCRU/SNANDer) 1.7.4 by McMCC: Linux only, SPI NOR
@@ -65,7 +65,7 @@ sudo ./microsnander -w firmware.bin -v
 On a desktop, with a programmer and a chip at hand, other programs do the job well, many of
 them with a graphical interface. MicroSNANDer is made for the places they do not reach:
 
-- **One small file.** A release file of about 200–260 KB holds everything: SPI NOR and SPI
+- **One small file.** A release file of about 200–270 KB holds everything: SPI NOR and SPI
   NAND, the chip list, the drivers of all six programmers (CH341A, CH347T, CH347F, EZP2019,
   EZP2019+, EZP2023) and the web page.
 - **Nothing to install.** No kernel driver for the programmer, no libc and no libusb on the

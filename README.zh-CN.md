@@ -13,7 +13,7 @@
 MicroSNANDer 是一个 SPI NOR 和 SPI NAND 闪存芯片编程工具，配合廉价的 CH341A、CH347 和 EZP USB
 编程器（共六种型号）使用，包括内置网页的命令行程序和 Android 应用。它可以读取、写入、擦除和校验摄像机、
 路由器及其他开发板的闪存，解除 SPI NOR 芯片的写保护，支持 291 款 SPI NOR 和 135 款 SPI NAND 芯片。
-每个发布文件约 200–260 KB。
+每个发布文件约 200–270 KB。
 
 它是 McMCC 的 [SNANDer](https://github.com/McMCCRU/SNANDer) 1.7.4 经过精简、增强、深度修改和优化的版本：
 仅支持 Linux，不支持 EEPROM，增加了 `-u`（解除保护）命令以及 OpenIPC
@@ -62,7 +62,7 @@ sudo ./microsnander -w firmware.bin -v
 在桌面电脑上，编程器和芯片都在手边时，其他程序已经能很好地完成工作，其中许多还带图形界面。
 MicroSNANDer 面向的是它们覆盖不到的场合：
 
-- **一个小文件。** 约 200–260 KB 的发布文件包含全部内容：SPI NOR 和 SPI NAND、芯片列表、全部六种
+- **一个小文件。** 约 200–270 KB 的发布文件包含全部内容：SPI NOR 和 SPI NAND、芯片列表、全部六种
   编程器（CH341A、CH347T、CH347F、EZP2019、EZP2019+、EZP2023）的驱动以及网页。
 - **无需安装。** 系统中不需要编程器的内核驱动，也不需要 libc 和 libusb：Linux 二进制文件为静态链接，
   通过内核的 USB 支持访问编程器。
