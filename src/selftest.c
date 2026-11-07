@@ -120,6 +120,8 @@ static int protection(const struct selftest *t, char *why, size_t n)
 	return on;
 }
 
+#define STOPPED "Self-test: stopped by Ctrl+C; the block gets its data back.\n"
+
 int selftest(const struct selftest *t)
 {
 	unsigned long n = t->block;
@@ -157,7 +159,8 @@ int selftest(const struct selftest *t)
 		goto out;
 	}
 	if (t->cmd->flash_read(orig, a, n) != (int)n || t->cmd->flash_read(buf, a, n) != (int)n) {
-		report(t, "Self-test: FAILED, the block does not read.\n");
+		report(t, ms_stop ? "Self-test: stopped by Ctrl+C; nothing was changed.\n" :
+			  "Self-test: FAILED, the block does not read.\n");
 		goto out;
 	}
 	if (memcmp(orig, buf, n)) {
@@ -181,7 +184,7 @@ int selftest(const struct selftest *t)
 	long d = got ? first_not_ff(buf, n) : 0;
 
 	if (ms_stop) {
-		report(t, "Self-test: stopped by Ctrl+C; the block gets its data back.\n");
+		report(t, STOPPED);
 		goto restore;
 	}
 	if (e || !got || d >= 0) {
@@ -207,13 +210,12 @@ int selftest(const struct selftest *t)
 		pat[i] = pattern(a + i);
 	t0 = now();
 	if (t->cmd->flash_write(pat, a, n) != (int)n) {
-		report(t, ms_stop ? "Self-test: stopped by Ctrl+C; the block gets its data back.\n" :
-			  "Self-test: FAILED, the write command fails.\n");
+		report(t, ms_stop ? STOPPED : "Self-test: FAILED, the write command fails.\n");
 		goto restore;
 	}
 	t_write = now() - t0;
 	if (t->cmd->flash_read(buf, a, n) != (int)n) {
-		report(t, "Self-test: FAILED, the written block does not read back.\n");
+		report(t, ms_stop ? STOPPED : "Self-test: FAILED, the written block does not read back.\n");
 		goto restore;
 	}
 	d = first_diff(buf, pat, n);
@@ -237,7 +239,7 @@ restore:
 		bad = t->cmd->flash_erase(a, n) ||
 		      (!blank && t->cmd->flash_write(orig, a, n) != (int)n) ||
 		      t->cmd->flash_read(buf, a, n) != (int)n || memcmp(buf, orig, n);
-		ms_stop = stop;
+		ms_stop = stop || ms_stop;	/* a Ctrl+C during the restore counts too */
 		if (bad) {
 			char base[120], *name;
 			FILE *f = NULL;
@@ -269,6 +271,10 @@ restore:
 			ret = 1;
 			goto out;
 		}
+	}
+	if (ret == 0 && ms_stop) {		/* stopped after the test passed: not a finished run */
+		report(t, STOPPED);
+		ret = 1;
 	}
 	if (ret == 0) {
 		char te[16], tw[16];

@@ -45,6 +45,7 @@ static int four[2], die;		/* 4-byte address mode of each die; the selected die (
 static long stop_reads;			/* Ctrl+C after this many bytes read */
 static long stop_pages;			/* Ctrl+C after this many pages programmed */
 static int stop_chip_erase;		/* Ctrl+C during a chip erase */
+static int die_reads = -1;		/* the die of the last read of status register 3 */
 static unsigned char cmd[300];
 static int ncmd, nread;
 static int wel, aai, locked;
@@ -94,7 +95,7 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Read_NByte(u8 *d, u32 len, SPI_CONTROLLER_SP
 		case OPCODE_RDID: d[i] = nread < 5 ? id[nread] : 0; break;
 		case OPCODE_RDSR: d[i] = sr | (wel ? SR_WEL : 0) | (aai ? 0x40 : 0) | (busy ? SR_WIP : 0); if (busy) busy--; break;
 		case OPCODE_RDSR2: d[i] = kind == NO_SR23 || kind == QE_SR1 ? 0xff : sr2; sr2_reads++; break;
-		case OPCODE_RDSR3: d[i] = kind == NO_SR23 ? 0xff : kind == QE_SR1 ? 0x07 : 0; break;	/* another register on Macronix */
+		case OPCODE_RDSR3: die_reads = die; d[i] = kind == NO_SR23 ? 0xff : kind == QE_SR1 ? 0x07 : 0; break;	/* another register on Macronix */
 		case OPCODE_READ:
 			d[i] = mem[at(addr() + nread)];
 			if (stop_reads > 0 && !--stop_reads) ms_stop = 1;
@@ -498,6 +499,15 @@ int main(void)
 		      "  Ctrl+C during the erase of die 0: die 1 is not erased, the erase fails");
 		stop_chip_erase = 0;
 		ms_stop = 0;
+		{
+			unsigned char sr[3];
+			int seen;
+
+			die_reads = -1;
+			check(snor_read_status_at(b + 4096, sr) == 0 && die == 0, "  the status of a block of die 1: read there, die 0 again after");
+			seen = die_reads;
+			check(seen == 1, "  the registers came from die 1");
+		}
 		check(snor_unprotect() == 0 && die == 0, "  -u goes over both dies");
 		die = 1;
 		check(snor_init() == 64 << 20 && die == 0, "  a die left selected by a stopped run: die 0 again at the start");

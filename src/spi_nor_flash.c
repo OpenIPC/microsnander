@@ -542,8 +542,10 @@ static int snor_erase_sector(unsigned long offset)
 	if (snor_wait_ready(950))
 		return -1;
 
-	if (spi_chip_info->addr4b && snor_4byte_mode(1))
+	if (spi_chip_info->addr4b && snor_4byte_mode(1)) {
+		snor_4byte_mode(0);	/* B7 may have gone through */
 		return -1;
+	}
 
 	/* Send write enable, then erase commands. */
 	snor_write_enable();
@@ -1034,14 +1036,24 @@ const char *snor_lookup(const unsigned char id[3], unsigned long *size, unsigned
 	return NULL;
 }
 
-/* Status registers 1, 2 and 3 of the chip found by snor_init() */
+/* Status registers 1, 2 and 3 of the chip found by snor_init(); on a chip of
+   several dies, those of the die that holds addr (each die has its own) */
+int snor_read_status_at(unsigned long addr, unsigned char sr[3])
+{
+	int ret = 0;
+
+	if (snor_select_die(spi_chip_info->dies > 1 ? addr / snor_die_size() : 0) < 0 ||
+	    snor_read_sr(OPCODE_RDSR, &sr[0]) < 0 || snor_read_sr(OPCODE_RDSR2, &sr[1]) < 0 ||
+	    snor_read_sr(OPCODE_RDSR3, &sr[2]) < 0)
+		ret = -1;
+	if (snor_select_die(0) < 0)
+		ret = -1;
+	return ret;
+}
+
 int snor_read_status(unsigned char sr[3])
 {
-	snor_select_die(0);
-	if (snor_read_sr(OPCODE_RDSR, &sr[0]) < 0 || snor_read_sr(OPCODE_RDSR2, &sr[1]) < 0 ||
-	    snor_read_sr(OPCODE_RDSR3, &sr[2]) < 0)
-		return -1;
-	return 0;
+	return snor_read_status_at(0, sr);
 }
 
 long snor_init(void)
@@ -1139,6 +1151,7 @@ static int snor_read_die(unsigned char *buf, unsigned long from, unsigned long l
 		data_offset = (physical_read_addr % (spi_chip_info->sector_size));
 
 		if (spi_chip_info->addr4b && snor_4byte_mode(1)) {
+			snor_4byte_mode(0);	/* B7 may have gone through */
 			failed = 1;
 			break;
 		}
