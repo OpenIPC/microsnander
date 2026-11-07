@@ -207,6 +207,8 @@ static int verify(unsigned char *buf, const char *fname, long long addr, long lo
 		k = part_len(addr + done, len - done);
 		memset(buf, 0, k);
 		ret = ms_stop ? -1 : prog.flash_read(buf, addr + done, k);
+		if (ms_stop)		/* Ctrl+C during the call: not a finished operation */
+			ret = -1;
 		if (ret != k) {
 			parts_end(NULL, 0, 0);
 			printf("Status: BAD(%d)\n", ret);
@@ -452,6 +454,8 @@ int main(int argc, char* argv[])
 		}
 		printf("Erase addr = 0x%016llX, len = 0x%016llX\n", addr, len);
 		ret = prog.flash_erase(addr, len);
+		if (!ret && ms_stop)
+			ret = -1;
 		if(!ret) {
 			printf("Status: OK\n");
 			rc = 0;
@@ -558,6 +562,8 @@ int main(int argc, char* argv[])
 				}
 			}
 			ret = ms_stop ? -1 : prog.flash_write(buf, addr + done, k);
+			if (ms_stop)		/* Ctrl+C during the call: not a finished operation */
+				ret = -1;
 			/* the drivers return the number of bytes written: less than k is a failure */
 			if (ret != k) {
 				parts_end(NULL, 0, 0);
@@ -623,6 +629,8 @@ int main(int argc, char* argv[])
 		for (done = 0; done < len; done += k) {
 			k = part_len(addr + done, len - done);
 			ret = ms_stop ? -1 : prog.flash_read(buf, addr + done, k);
+			if (ms_stop)		/* Ctrl+C during the call: not a finished operation */
+				ret = -1;
 			if (ret != k) {
 				parts_end(NULL, 0, 0);
 				printf("Status: BAD(%d)\n", ret);

@@ -14,6 +14,7 @@
 #include <sys/time.h>
 #include "flashcmd_api.h"
 #include "selftest.h"
+#include "timer.h"
 #include <stdarg.h>
 
 /* a line of the result: to the console, and kept in t->out for the web
@@ -179,6 +180,10 @@ int selftest(const struct selftest *t)
 	int got = t->cmd->flash_read(buf, a, n) == (int)n;
 	long d = got ? first_not_ff(buf, n) : 0;
 
+	if (ms_stop) {
+		report(t, "Self-test: stopped by Ctrl+C; the block gets its data back.\n");
+		goto restore;
+	}
 	if (e || !got || d >= 0) {
 		int same = got && !memcmp(buf, orig, n);	/* nothing happened to it */
 
@@ -202,7 +207,8 @@ int selftest(const struct selftest *t)
 		pat[i] = pattern(a + i);
 	t0 = now();
 	if (t->cmd->flash_write(pat, a, n) != (int)n) {
-		report(t, "Self-test: FAILED, the write command fails.\n");
+		report(t, ms_stop ? "Self-test: stopped by Ctrl+C; the block gets its data back.\n" :
+			  "Self-test: FAILED, the write command fails.\n");
 		goto restore;
 	}
 	t_write = now() - t0;
@@ -222,10 +228,17 @@ restore:
 		goto out;
 	{
 		int blank = first_not_ff(orig, n) < 0;
+		/* after a Ctrl+C the block still gets its data back: the stop
+		   waits for that (a second Ctrl+C quits at once) */
+		sig_atomic_t stop = ms_stop;
+		int bad;
 
-		if (t->cmd->flash_erase(a, n) ||
-		    (!blank && t->cmd->flash_write(orig, a, n) != (int)n) ||
-		    t->cmd->flash_read(buf, a, n) != (int)n || memcmp(buf, orig, n)) {
+		ms_stop = 0;
+		bad = t->cmd->flash_erase(a, n) ||
+		      (!blank && t->cmd->flash_write(orig, a, n) != (int)n) ||
+		      t->cmd->flash_read(buf, a, n) != (int)n || memcmp(buf, orig, n);
+		ms_stop = stop;
+		if (bad) {
 			char base[120], *name;
 			FILE *f = NULL;
 

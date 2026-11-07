@@ -44,6 +44,7 @@ static const unsigned long die_size = 32 << 20;
 static int four[2], die;		/* 4-byte address mode of each die; the selected die (DIES) */
 static long stop_reads;			/* Ctrl+C after this many bytes read */
 static long stop_pages;			/* Ctrl+C after this many pages programmed */
+static int stop_chip_erase;		/* Ctrl+C during a chip erase */
 static unsigned char cmd[300];
 static int ncmd, nread;
 static int wel, aai, locked;
@@ -163,6 +164,7 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Chip_Select_High(void)
 			if (kind == DIES) memset(mem + die * die_size, 0xff, die_size);	/* the selected die */
 			else memset(mem, 0xff, sizeof(mem));
 			if (kind == QE_SR1) busy = 20;
+			if (stop_chip_erase) ms_stop = 1;
 		}
 		wel = 0;
 		break;
@@ -199,7 +201,7 @@ static void chip(const struct chip_info *e, int k)
 	id[0] = e->id;
 	id[1] = e->jedec_id >> 24; id[2] = e->jedec_id >> 16; id[3] = e->jedec_id >> 8; id[4] = e->jedec_id;
 	kind = k; wel = aai = busy = busy_cmds = sr2_writes = 0;
-	four[0] = four[1] = die = 0; stop_reads = stop_pages = 0; ms_stop = 0;
+	four[0] = four[1] = die = 0; stop_reads = stop_pages = stop_chip_erase = 0; ms_stop = 0;
 	sr2 = k == QE_FIXED ? 0x02 : 0;
 	locked = k == SST26;
 	sr = k == SST26 ? 0 : 0x1c;		/* BP bits set at power-up */
@@ -490,6 +492,12 @@ int main(void)
 		check(die == 0 && !four[0] && !four[1] && !wel, "  die 0 selected at the end, both dies in 3-byte mode");
 		mem[0] = mem[b] = 0;
 		check(snor_erase(0, 64 << 20) == 0 && mem[0] == 0xff && mem[b] == 0xff && die == 0, "  a chip erase erases both dies");
+		mem[0] = mem[b] = 0;
+		stop_chip_erase = 1;
+		check(snor_erase(0, 64 << 20) != 0 && mem[0] == 0xff && mem[b] == 0 && die == 0,
+		      "  Ctrl+C during the erase of die 0: die 1 is not erased, the erase fails");
+		stop_chip_erase = 0;
+		ms_stop = 0;
 		check(snor_unprotect() == 0 && die == 0, "  -u goes over both dies");
 		die = 1;
 		check(snor_init() == 64 << 20 && die == 0, "  a die left selected by a stopped run: die 0 again at the start");

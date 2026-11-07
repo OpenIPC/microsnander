@@ -405,6 +405,17 @@ int main(void)
 	erase_fail[0] = 3;
 	check(snand_erase(0, 4 * 128 * 1024) != 0, "erase fails when the last block does not erase");
 
+	/* Ctrl+C: the erase stops before the next block and fails */
+	chip(0xef, 0xaa, 0x21);
+	snand_init();
+	memset(page(0), 0x00, PAGE);
+	ms_stop = 1;
+	check(snand_erase(0, 4 * 128 * 1024) != 0 && page(0)[0] == 0x00, "Ctrl+C stops a NAND erase before its next block");
+	check(snand_read(got, 0, PAGE) < 0, "  a read too");
+	fill(buf, 1, 40);
+	check(snand_write(buf, 64L * PAGE, PAGE) < 0 && page(64)[0] == 0xff, "  a write too");
+	ms_stop = 0;
+
 	/* a chip that stays busy (OIP) makes the operation fail instead of hanging */
 	chip(0xef, 0xaa, 0x21);
 	snand_init();
