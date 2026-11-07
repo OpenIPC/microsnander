@@ -471,6 +471,8 @@ int main(int argc, char* argv[])
 			goto out;
 		}
 		ret = unlock > 1 ? prog.flash_clear_qe() : prog.flash_unprotect();
+		if (!ret && ms_stop)
+			ret = -1;
 		if(!ret) {
 			printf("Status: OK\n");
 			rc = 0;
@@ -562,10 +564,9 @@ int main(int argc, char* argv[])
 				}
 			}
 			ret = ms_stop ? -1 : prog.flash_write(buf, addr + done, k);
-			if (ms_stop)		/* Ctrl+C during the call: not a finished operation */
-				ret = -1;
-			/* the drivers return the number of bytes written: less than k is a failure */
-			if (ret != k) {
+			/* the drivers return the number of bytes written: less than k is a
+			   failure, and so is a Ctrl+C during the call (with what was written) */
+			if (ret != k || ms_stop) {
 				parts_end(NULL, 0, 0);
 				if (ret < 0)
 					printf("Status: BAD(%d)\n", ret);

@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "flashcmd_api.h"
+#include "timer.h"
 const char *flash_chip_name = "W25Q80";
 int ECC_fcheck = 1, ECC_ignore = 0, Skip_BAD_page = 0; unsigned long long Skip_BAD_end; unsigned char _ondie_ecc_flag = 1; unsigned int bsize = 4096;
 static unsigned char chip[1 << 20];	/* MS_BIG=1: all of it; else 64 KiB */
@@ -13,8 +14,7 @@ static unsigned long largest;		/* MS_LARGEST=1: the longest read or write is pri
 static void note(unsigned long l) { if (l > largest) largest = l; }
 static const char *env(const char *n) { const char *v = getenv(n); return v ? v : ""; }
 static int r(unsigned char *b, unsigned long f, unsigned long l) { note(l); if (!strcmp(env("MS_FAIL"),"read")) return -1; if (!strcmp(env("MS_FAIL"),"shortread")) { memcpy(b, chip + f, l / 2); return l / 2; } memcpy(b, chip + f, l); return l; }
-static int w(unsigned char *b, unsigned long t, unsigned long l) { note(l); if (*env("MS_PROTECT")) return l; if (!strcmp(env("MS_FAIL"),"write")) return -1; if (!strcmp(env("MS_FAIL"),"partial")) { memcpy(chip + t, b, l / 2); return l / 2; } memcpy(chip + t, b, l); if (*env("MS_CORRUPT")) { unsigned long x = atol(env("MS_CORRUPT")); if (x >= t && x < t + l) chip[x] ^= 0x5a; } return l; }
-#include "timer.h"
+static int w(unsigned char *b, unsigned long t, unsigned long l) { note(l); if (*env("MS_PROTECT")) return l; if (!strcmp(env("MS_FAIL"),"write")) return -1; if (!strcmp(env("MS_FAIL"),"stopwrite")) { memcpy(chip + t, b, l); ms_stop = 1; return l; } if (!strcmp(env("MS_FAIL"),"partial")) { memcpy(chip + t, b, l / 2); return l / 2; } memcpy(chip + t, b, l); if (*env("MS_CORRUPT")) { unsigned long x = atol(env("MS_CORRUPT")); if (x >= t && x < t + l) chip[x] ^= 0x5a; } return l; }
 /* MS_FAIL=stop: Ctrl+C comes during the first erase, which then stops after it erased */
 static int stops;
 static int e(unsigned long o, unsigned long l) { if (*env("MS_PROTECT")) return 0; if (!strcmp(env("MS_FAIL"),"erase")) return -2; if (ms_stop) return -1; memset(chip + o, 0xff, l); if (!strcmp(env("MS_FAIL"),"stop") && !stops++) { ms_stop = 1; return -1; } return 0; }

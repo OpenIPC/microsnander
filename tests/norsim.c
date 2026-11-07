@@ -509,6 +509,9 @@ int main(void)
 			check(seen == 1, "  the registers came from die 1");
 		}
 		check(snor_unprotect() == 0 && die == 0, "  -u goes over both dies");
+		ms_stop = 1;
+		check(snor_unprotect() != 0 && die == 0, "  Ctrl+C: -u does not go on, die 0 again");
+		ms_stop = 0;
 		die = 1;
 		check(snor_init() == 64 << 20 && die == 0, "  a die left selected by a stopped run: die 0 again at the start");
 	}

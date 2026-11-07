@@ -1513,7 +1513,7 @@ static int snor_each_die(int (*fn)(void))
 	int ret = 0;
 
 	for (int d = 0; d < (spi_chip_info->dies > 1 ? spi_chip_info->dies : 1) && !ret; d++)
-		ret = snor_select_die(d) < 0 ? -1 : fn();
+		ret = ms_stop || snor_select_die(d) < 0 ? -1 : fn();
 	if (snor_select_die(0) < 0 && !ret)
 		ret = -1;
 	return ret;
