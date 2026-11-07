@@ -6,8 +6,12 @@
    locked until ULBPR, 8 KB blocks at the start). Two more: a chip without
    status registers 2 and 3 (they read 0xff, a write to them is ignored) and
    one with the quad enable bit set in its only status register, busy for a
-   while after every erase and program. The driver is built into
-   this file, so the checks can walk its chip table. */
+   while after every erase and program. Chips over 16 MB: one that takes B7
+   (4-byte address mode) only after a write enable, as Micron N25Q/MT25Q, one
+   that does not need it, and a W25M512JV of two dies selected with C2; a
+   chip left in 3-byte mode takes the first three address bytes, so data goes
+   to the wrong place, as on a real one. The driver is built into this file,
+   so the checks can walk its chip table. */
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
@@ -32,10 +36,13 @@ static int fast_clock(clockid_t id, struct timespec *t)
 unsigned int bsize;
 const char *flash_chip_name;
 
-enum { ORDINARY, SST25, SST26, NO_SR23, QE_SR1, QE_FIXED, NO_WRSR2 };
+enum { ORDINARY, SST25, SST26, NO_SR23, QE_SR1, QE_FIXED, NO_WRSR2, FOURB, FOURB_WREN, DIES };
 static int kind;
 static unsigned char id[5];
-static unsigned char mem[16 << 20];
+static unsigned char mem[64 << 20];
+static const unsigned long die_size = 32 << 20;
+static int four[2], die;		/* 4-byte address mode of each die; the selected die (DIES) */
+static long stop_reads;			/* Ctrl+C after this many bytes read */
 static unsigned char cmd[300];
 static int ncmd, nread;
 static int wel, aai, locked;
@@ -49,11 +56,19 @@ static int sr2_writes, sr2_reads;
 static int wp_low;			/* the WP# pin low: with SRP0 set, SR1 does not take a write */
 static int busy_cmds;			/* commands other than RDSR sent while busy */
 
-static unsigned long addr(void) { return ((unsigned long)cmd[1] << 16) | (cmd[2] << 8) | cmd[3]; }
+static int alen(void) { return four[die] ? 4 : 3; }
+static unsigned long addr(void)
+{
+	unsigned long a = ((unsigned long)cmd[1] << 16) | (cmd[2] << 8) | cmd[3];
+
+	return four[die] ? (a << 8) | cmd[4] : a;
+}
+/* where an address of the selected die is in mem */
+static unsigned long at(unsigned long a) { return kind == DIES ? die * die_size + a % die_size : a % sizeof(mem); }
 /* BP bits protect a part of the chip; with CMP set and no BP bits, all of it */
 static int writable(void) { return wel && !(kind == SST26 ? locked : (sr & 0x3c) || (sr2 & 0x40)); }
-static void program(unsigned long a, const unsigned char *d, int n) { for (int i = 0; i < n; i++) mem[(a + i) % sizeof(mem)] &= d[i]; }
-static void erase(unsigned long a, unsigned long n) { a -= a % n; memset(mem + a % sizeof(mem), 0xff, n); }
+static void program(unsigned long a, const unsigned char *d, int n) { for (int i = 0; i < n; i++) mem[at(a + i)] &= d[i]; }
+static void erase(unsigned long a, unsigned long n) { a -= a % n; memset(mem + at(a), 0xff, n); }
 
 SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Enable_Manual_Mode(void) { return SPI_CONTROLLER_RTN_NO_ERROR; }
 SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Chip_Select_Low(void) { ncmd = nread = 0; return SPI_CONTROLLER_RTN_NO_ERROR; }
@@ -78,7 +93,10 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Read_NByte(u8 *d, u32 len, SPI_CONTROLLER_SP
 		case OPCODE_RDSR: d[i] = sr | (wel ? SR_WEL : 0) | (aai ? 0x40 : 0) | (busy ? SR_WIP : 0); if (busy) busy--; break;
 		case OPCODE_RDSR2: d[i] = kind == NO_SR23 || kind == QE_SR1 ? 0xff : sr2; sr2_reads++; break;
 		case OPCODE_RDSR3: d[i] = kind == NO_SR23 ? 0xff : kind == QE_SR1 ? 0x07 : 0; break;	/* another register on Macronix */
-		case OPCODE_READ: d[i] = mem[(addr() + nread) % sizeof(mem)]; break;
+		case OPCODE_READ:
+			d[i] = mem[at(addr() + nread)];
+			if (stop_reads > 0 && !--stop_reads) ms_stop = 1;
+			break;
 		default: d[i] = 0;
 		}
 	}
@@ -114,8 +132,8 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Chip_Select_High(void)
 		break;
 	case OPCODE_ULBPR: if (wel && kind == SST26) { locked = 0; busy = 3; } wel = 0; break;
 	case OPCODE_PP:
-		if (writable() && ncmd > 4) {
-			program(addr(), cmd + 4, kind == SST25 ? 1 : ncmd - 4);	/* SST25: one byte only */
+		if (writable() && ncmd > 1 + alen()) {
+			program(addr(), cmd + 1 + alen(), kind == SST25 ? 1 : ncmd - 1 - alen());	/* SST25: one byte only */
 			if (kind == QE_SR1) busy = 2;
 		}
 		wel = 0;
@@ -139,9 +157,19 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Chip_Select_High(void)
 		wel = 0;
 		break;
 	case OPCODE_BE: case OPCODE_BE1:
-		if (writable()) { memset(mem, 0xff, sizeof(mem)); if (kind == QE_SR1) busy = 20; }
+		if (writable()) {
+			if (kind == DIES) memset(mem + die * die_size, 0xff, die_size);	/* the selected die */
+			else memset(mem, 0xff, sizeof(mem));
+			if (kind == QE_SR1) busy = 20;
+		}
 		wel = 0;
 		break;
+	case 0xb7: case 0xe9:			/* enter, exit 4-byte address mode */
+		if (kind >= FOURB && (kind != FOURB_WREN || wel))
+			four[die] = cmd[0] == 0xb7;
+		break;
+	case 0xc5: wel = 0; break;		/* Winbond extended address register: 0 */
+	case OPCODE_DIE_SELECT: if (kind == DIES && ncmd > 1) die = cmd[1] & 1; break;
 	}
 	ncmd = 0;
 	return SPI_CONTROLLER_RTN_NO_ERROR;
@@ -169,11 +197,11 @@ static void chip(const struct chip_info *e, int k)
 	id[0] = e->id;
 	id[1] = e->jedec_id >> 24; id[2] = e->jedec_id >> 16; id[3] = e->jedec_id >> 8; id[4] = e->jedec_id;
 	kind = k; wel = aai = busy = busy_cmds = sr2_writes = 0;
+	four[0] = four[1] = die = 0; stop_reads = 0; ms_stop = 0;
 	sr2 = k == QE_FIXED ? 0x02 : 0;
 	locked = k == SST26;
 	sr = k == SST26 ? 0 : 0x1c;		/* BP bits set at power-up */
 	if (k == QE_SR1) sr = 0x40;		/* quad enable, not protected */
-	memset(mem, 0x00, sizeof(mem));		/* not erased */
 }
 
 static void write_read_erase(const char *name, int k)
@@ -183,6 +211,7 @@ static void write_read_erase(const char *name, int k)
 	char what[160];
 	if (!e) { snprintf(what, sizeof(what), "%s is in the table", name); check(0, what); return; }
 	chip(e, k);
+	memset(mem, 0x00, e->sector_size * e->n_sectors);	/* not erased */
 	long size = snor_init();
 	snprintf(what, sizeof(what), "%s: detected, %ld KB", name, size >> 10);
 	check(size == (long)(e->sector_size * e->n_sectors), what);
@@ -392,6 +421,71 @@ int main(void)
 		int n = snor_write(buf, 0, sizeof(buf));
 		spi_fail_at = -1;
 		check(n == 20, "PCT25VF016B: a failed AAI command stops the write after 10 words");
+	}
+
+	/* over 16 MB: the 4-byte address mode, with and without a write enable before B7 */
+	{
+		static const struct { const char *name; int k; } c4[] = { { "N25Q256A13", FOURB_WREN }, { "W25Q256FV", FOURB } };
+		static unsigned char buf[5000], got[5000];
+		char what[160];
+
+		for (unsigned c = 0; c < sizeof(c4) / sizeof(c4[0]); c++) {
+			const char *name = c4[c].name;
+
+			chip(find(name), c4[c].k);
+			check(snor_init() == 32 << 20, name);
+			memset(mem, 0, 65536);
+			memset(mem + (16 << 20), 0, 65536);
+			snprintf(what, sizeof(what), "  %s: an erase at 16 MB erases there, not at 0", name);
+			check(snor_erase(16 << 20, 65536) == 0 && mem[16 << 20] == 0xff && mem[(16 << 20) + 65535] == 0xff &&
+			      mem[0] == 0, what);
+			for (unsigned i = 0; i < sizeof(buf); i++) buf[i] = (unsigned char)(i * 5 + 1);
+			int n = snor_write(buf, (16 << 20) + 0x1001, 4097);
+			memset(got, 0, sizeof(got));
+			snor_read(got, (16 << 20) + 0x1001, 4097);
+			snprintf(what, sizeof(what), "  %s: written above 16 MB, read back, nothing at 0", name);
+			check(n == 4097 && !memcmp(got, buf, 4097) && !memcmp(mem + (16 << 20) + 0x1001, buf, 4097) &&
+			      mem[0x1001] == 0, what);
+			snprintf(what, sizeof(what), "  %s: left in 3-byte mode, no write enable latch", name);
+			check(!four[0] && !wel && !busy_cmds, what);
+		}
+
+		/* Ctrl+C: the operation stops between two steps, out of 4-byte mode */
+		chip(find("N25Q256A13"), FOURB_WREN);
+		snor_init();
+		static unsigned char big[3 * 65536];
+		stop_reads = 1000;
+		check(snor_read(big, 16 << 20, sizeof(big)) < 0 && !four[0], "Ctrl+C stops a read, the chip is out of 4-byte mode");
+		ms_stop = 1;
+		check(snor_write(buf, 16 << 20, 4096) != 4096 && !four[0] && !wel, "  a write too, no write enable latch left");
+		check(snor_erase(16 << 20, 65536) != 0 && !four[0], "  an erase too");
+		ms_stop = 0;
+	}
+
+	/* W25M512JV: two W25Q256JV dies, C2 selects one */
+	{
+		static unsigned char buf[0x1000], got[0x1000];
+		const unsigned long b = 32 << 20;
+
+		chip(find("W25M512JV"), DIES);
+		check(snor_init() == 64 << 20, "W25M512JV: detected, 64 MB");
+		memset(mem, 0, 0x1000);
+		memset(mem + b - 0x1000, 0, 0x2000);
+		check(snor_erase(b - 65536, 2 * 65536) == 0 && mem[b - 1] == 0xff && mem[b] == 0xff && mem[0] == 0,
+		      "  an erase over the die boundary erases the end of die 0 and the start of die 1");
+		for (unsigned i = 0; i < sizeof(buf); i++) buf[i] = (unsigned char)(i * 3 + 7);
+		int n = snor_write(buf, b - 0x800, sizeof(buf));
+		memset(got, 0, sizeof(got));
+		int r = snor_read(got, b - 0x800, sizeof(got));
+		check(n == (int)sizeof(buf) && r == (int)sizeof(got) && !memcmp(got, buf, sizeof(buf)) &&
+		      !memcmp(mem + b - 0x800, buf, sizeof(buf)) && mem[0] == 0,
+		      "  a write over the boundary goes to both dies, reads back, nothing at 0");
+		check(die == 0 && !four[0] && !four[1] && !wel, "  die 0 selected at the end, both dies in 3-byte mode");
+		mem[0] = mem[b] = 0;
+		check(snor_erase(0, 64 << 20) == 0 && mem[0] == 0xff && mem[b] == 0xff && die == 0, "  a chip erase erases both dies");
+		check(snor_unprotect() == 0 && die == 0, "  -u goes over both dies");
+		die = 1;
+		check(snor_init() == 64 << 20 && die == 0, "  a die left selected by a stopped run: die 0 again at the start");
 	}
 
 	if (!fail) printf("all norsim checks passed\n");

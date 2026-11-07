@@ -203,6 +203,9 @@ SPI NAND 芯片默认使用片内 ECC 读写：文件中只有数据页。使用
 和命令行。QE 把 WP# 和 HOLD# 引脚变为数据线，以四线模式读取芯片的电路板没有它可能无法启动。
 部分芯片的 QE 在出厂时已固定：此时 `-uu` 会提示该位未被清除。
 
+Ctrl+C 会在操作的下一步停止，此时芯片处于一条完整命令之后的状态：退出 4 字节地址模式（大于 16 MB
+的芯片），选中第一个晶粒（由两个晶粒堆叠的芯片），因此电路板仍能从它启动。再按一次 Ctrl+C 立即退出。
+
 `-t` 是无需准备的芯片快速检查：读取保护位（SPI NOR：状态寄存器中的 BP、TB、CMP、SRP；SPI NAND：
 块锁定寄存器），然后取一个块（默认第一个块，通常是被锁定的引导程序所在处，或 `-a` 指定的块），保存其数据，
 擦除，写入测试图案，读回，再写回原数据。结果为一行：`OK`（退出码 0）、`PROTECTED`（退出码 2）或 `FAILED`
@@ -376,7 +379,8 @@ microsnander -m sigmastar -w u-boot.bin -v       # 写入可用的引导程序
 Microelectronics FM25Q、GigaDevice、Macronix、Spansion、XMC、XTX、Zbit、Giantec
 GM25Q、ISSI、Micron、Boya、Puya 等）和 135 款 SPI NAND 芯片（Etron、GigaDevice、Heyang、Foresee、ESMT、Dosilicon、XTX、Micron、
 Toshiba/Kioxia、Winbond、Macronix 等）。不在列表中的芯片会显示为未检测到；输出中的
-芯片 ID 可用于添加该芯片。
+芯片 ID 可用于添加该芯片。Winbond W25M512JV 在一个封装内含两个 W25Q256JV 晶粒，
+按一颗 64 MB 芯片读取、写入和擦除。
 
 ## 芯片电压
 

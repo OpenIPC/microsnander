@@ -26,6 +26,7 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <time.h>
+#include <signal.h>
 #include <stdio.h>
 
 #include "flashcmd_api.h"
@@ -40,7 +41,7 @@
 struct flash_cmd prog;
 extern unsigned int bsize;
 
-#define _VER	"1.25.1"
+#define _VER	"1.26.0"
 
 const char *ms_version = _VER;
 
@@ -205,7 +206,7 @@ static int verify(unsigned char *buf, const char *fname, long long addr, long lo
 	for (done = 0; done < len; done += k) {
 		k = part_len(addr + done, len - done);
 		memset(buf, 0, k);
-		ret = prog.flash_read(buf, addr + done, k);
+		ret = ms_stop ? -1 : prog.flash_read(buf, addr + done, k);
 		if (ret != k) {
 			parts_end(NULL, 0, 0);
 			printf("Status: BAD(%d)\n", ret);
@@ -235,6 +236,19 @@ static int verify(unsigned char *buf, const char *fname, long long addr, long lo
 	printf("Status: OK\n");
 	fclose(fp);
 	return 0;
+}
+
+/* Ctrl+C during an operation: it stops at the next step, where the chip is
+   as after a whole command (out of its 4-byte address mode, die 0 selected,
+   chip select high); a second Ctrl+C quits at once */
+static void on_stop(int sig)
+{
+	static const char m[] = "\nStopping after the current step; Ctrl+C again quits at once.\n";
+
+	ms_stop = 1;
+	signal(sig, SIG_DFL);
+	if (write(STDOUT_FILENO, m, sizeof(m) - 1) < 0)
+		return;
 }
 
 int main(int argc, char* argv[])
@@ -401,6 +415,8 @@ int main(int argc, char* argv[])
 
 	if((flen = flash_cmd_init(&prog)) <= 0)
 		goto out;
+	signal(SIGINT, on_stop);
+	signal(SIGTERM, on_stop);
 
 	if (op == 'i') {
 		rc = 0;
@@ -541,7 +557,7 @@ int main(int argc, char* argv[])
 						break;
 				}
 			}
-			ret = prog.flash_write(buf, addr + done, k);
+			ret = ms_stop ? -1 : prog.flash_write(buf, addr + done, k);
 			/* the drivers return the number of bytes written: less than k is a failure */
 			if (ret != k) {
 				parts_end(NULL, 0, 0);
@@ -606,7 +622,7 @@ int main(int argc, char* argv[])
 		parts_begin();
 		for (done = 0; done < len; done += k) {
 			k = part_len(addr + done, len - done);
-			ret = prog.flash_read(buf, addr + done, k);
+			ret = ms_stop ? -1 : prog.flash_read(buf, addr + done, k);
 			if (ret != k) {
 				parts_end(NULL, 0, 0);
 				printf("Status: BAD(%d)\n", ret);
@@ -667,6 +683,8 @@ int main(int argc, char* argv[])
 	}
 
 out:
+	if (ms_stop)
+		printf("Stopped by Ctrl+C.\n");
 	programmer_shutdown();
 	return rc;
 }

@@ -15,7 +15,13 @@
 #ifndef __TIMER_H__
 #define __TIMER_H__
 
+#include <signal.h>
+
 extern int timer_quiet;		/* main.c prints the time and the progress of the parts */
+
+/* set by Ctrl+C (main.c): an operation stops between two steps, so the chip
+   is left as after a complete command (not in its 4-byte address mode) */
+extern volatile sig_atomic_t ms_stop;
 
 void timer_start(void);
 void timer_end(void);
