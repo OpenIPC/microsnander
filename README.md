@@ -461,8 +461,10 @@ hundred KB is minutes; a whole 16 MB chip is much longer.
 Microelectronics FM25Q, GigaDevice, Macronix, Spansion, XMC, XTX, Zbit, Giantec
 GM25Q, ISSI, Micron, Boya, Puya and others) and 135 SPI NAND chips (Etron, GigaDevice, Heyang, Foresee, ESMT, Dosilicon, XTX,
 Micron, Toshiba/Kioxia, Winbond, Macronix and others).
-A chip that is not on the list is reported as not detected; its ID from the
-output helps to add it. The Winbond W25M512JV, two W25Q256JV dies in one package, is
+A SPI NOR chip that is not on the list but has an SFDP table (JESD216; most chips
+made since about 2011) is found by it: its size, the sector erase and the 4-byte
+mode come from the chip, and it is named `SFDP-` and its ID. A chip with neither is
+reported as not detected; its ID from the output helps to add it. The Winbond W25M512JV, two W25Q256JV dies in one package, is
 read, written and erased as one 64 MB chip.
 
 ## Chip voltage

@@ -399,8 +399,9 @@ microsnander -m sigmastar -w u-boot.bin -v       # 写入可用的引导程序
 `microsnander -L` 会列出支持的芯片：291 款 SPI NOR 芯片（Winbond、Eon、Fudan
 Microelectronics FM25Q、GigaDevice、Macronix、Spansion、XMC、XTX、Zbit、Giantec
 GM25Q、ISSI、Micron、Boya、Puya 等）和 135 款 SPI NAND 芯片（Etron、GigaDevice、Heyang、Foresee、ESMT、Dosilicon、XTX、Micron、
-Toshiba/Kioxia、Winbond、Macronix 等）。不在列表中的芯片会显示为未检测到；输出中的
-芯片 ID 可用于添加该芯片。Winbond W25M512JV 在一个封装内含两个 W25Q256JV 晶粒，
+Toshiba/Kioxia、Winbond、Macronix 等）。不在列表中但带有 SFDP 表（JESD216；约
+2011 年以后的大多数芯片都有）的 SPI NOR 芯片会按该表识别：容量、扇区擦除和 4 字节模式都取自芯片本身，
+名称为 `SFDP-` 加其 ID。两者都没有的芯片会显示为未检测到；输出中的芯片 ID 可用于添加该芯片。Winbond W25M512JV 在一个封装内含两个 W25Q256JV 晶粒，
 按一颗 64 MB 芯片读取、写入和擦除。
 
 ## 芯片电压

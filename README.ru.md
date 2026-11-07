@@ -466,8 +466,11 @@ microsnander -m sigmastar -w u-boot.bin -v       # рабочий загрузч
 `microsnander -L` выводит список: 291 микросхему SPI NOR (Winbond, Eon, Fudan
 Microelectronics FM25Q, GigaDevice, Macronix, Spansion, XMC, XTX, Zbit, Giantec
 GM25Q, ISSI, Micron, Boya, Puya и другие) и 135 микросхем SPI NAND (Etron, GigaDevice, Heyang, Foresee, ESMT, Dosilicon, XTX,
-Micron, Toshiba/Kioxia, Winbond, Macronix и другие). Микросхема не из списка
-определяется как ненайденная; её ID из вывода поможет её добавить. Winbond W25M512JV — два
+Micron, Toshiba/Kioxia, Winbond, Macronix и другие). Микросхема SPI NOR не из списка,
+у которой есть таблица SFDP (JESD216; она есть у большинства микросхем примерно с 2011 года),
+определяется по ней: размер, стирание сектора и 4-байтный режим берутся у самой микросхемы, а
+называется она `SFDP-` и её ID. Микросхема без того и другого определяется как ненайденная; её ID
+из вывода поможет её добавить. Winbond W25M512JV — два
 кристалла W25Q256JV в одном корпусе — читается, пишется и стирается как одна микросхема на 64 МБ.
 
 ## Напряжение микросхем
