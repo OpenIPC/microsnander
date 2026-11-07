@@ -508,6 +508,8 @@ int main(void)
 			seen = die_reads;
 			check(seen == 1, "  the registers came from die 1");
 		}
+		check(snor_erase(64UL << 20, 0) != 0 && snor_erase(65536, (unsigned long)-65536) != 0 && die == 0,
+		      "  an erase of nothing, or past the chip end with a wrapped length, fails");
 		check(snor_unprotect() == 0 && die == 0, "  -u goes over both dies");
 		ms_stop = 1;
 		check(snor_unprotect() != 0 && die == 0, "  Ctrl+C: -u does not go on, die 0 again");

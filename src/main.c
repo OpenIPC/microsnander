@@ -417,8 +417,16 @@ int main(int argc, char* argv[])
 
 	if((flen = flash_cmd_init(&prog)) <= 0)
 		goto out;
-	signal(SIGINT, on_stop);
-	signal(SIGTERM, on_stop);
+	/* the EZP runs a whole range as one stream in its own firmware: no step
+	   to stop at, so Ctrl+C ends the run at once there, as before */
+	if (prog.kind != FLASH_FIRMWARE) {
+		signal(SIGINT, on_stop);
+		signal(SIGTERM, on_stop);
+	}
+	if (addr >= flen || (len && len > flen - addr)) {
+		printf("The range 0x%llX + 0x%llX is past the chip end (0x%llX).\n", addr, len, (long long)flen);
+		goto out;
+	}
 
 	if (op == 'i') {
 		rc = 0;

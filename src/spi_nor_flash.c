@@ -516,7 +516,11 @@ static int snor_4byte_mode(int enable)
 			snor_write_enable();
 			snor_write_rg(0xc5, &code);
 		}
-		snor_write_disable();
+		retval |= snor_write_disable();
+		if (retval) {
+			printf("%s: the write disable failed\n", __func__);
+			return -1;
+		}
 		/* a held command that failed shows with the next read */
 		if (snor_wait_ready(1)) {
 			printf("4B mode switch failed %s: the USB transfer failed\n", enable ? "enable" : "disable");
@@ -1407,7 +1411,10 @@ static int snor_write_die(unsigned char *buf, unsigned long to, unsigned long le
 			if (rc < page_size) {
 				printf("%s: rc:%x page_size:%x\n",
 						__func__, rc, page_size);
+				if (spi_chip_info->addr4b)
+					snor_4byte_mode(0);
 				snor_write_disable();
+				timer_end();
 				return retlen - rc;
 			}
 		}
@@ -1469,7 +1476,11 @@ static int snor_on_dies(int op, unsigned char *buf, unsigned long addr, unsigned
 	if (spi_chip_info->dies < 2)
 		return op == DIE_READ ? snor_read_die(buf, addr, len) :
 		       op == DIE_WRITE ? snor_write_die(buf, addr, len) : snor_erase_die(addr, len);
-	if (addr + len > dsize * spi_chip_info->dies)
+	/* nothing to do, as on one die: an erase of nothing fails, a read or a write of it is 0 */
+	if (!len)
+		return op == DIE_ERASE ? -1 : 0;
+	/* a range past the chip end (len may come from a negative number) */
+	if (addr > dsize * spi_chip_info->dies || len > dsize * spi_chip_info->dies - addr)
 		return -1;
 	while (done < len) {
 		const unsigned long a = (addr + done) % dsize;

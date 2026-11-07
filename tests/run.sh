@@ -55,6 +55,8 @@ t 1 "-W with -I is an error"          $B -W 8080 -I
 t 1 "-l that is not a number"         $B -r x.bin -l 12abc
 t 1 "-a that is not a number"         $B -r x.bin -a zz
 t 1 "-o without -W is an error"       $B -o /tmp -i
+t 1 "-e -a past the chip end"          $B -e -a 0x20000
+t 1 "-r -l past the chip end"          $B -r x.bin -a 0x8000 -l 0x9000
 $B -W 127.0.0.1:8080 -K pw -o /srv -a 0x1000 -l 0x2000 | grep -q '^web: 127.0.0.1:8080 key=pw dir=/srv addr=0x1000 len=0x2000' && echo "ok   -W passes the address, password, dump directory and range" || { echo "FAIL -W arguments"; fail=1; }
 $B -h | grep -q '^ -W ' && $B -h | grep -q '^ -K ' && $B -h | grep -q '^ -o ' && echo "ok   -h lists -W, -K and -o" || { echo "FAIL -h without -W/-K/-o"; fail=1; }
 t 1 "-P ezp -S 15M is an error"       $B -P ezp -S 15M -i
