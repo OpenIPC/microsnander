@@ -563,8 +563,9 @@ static int snor_erase_sector(unsigned long offset)
 
 	ret = snor_wait_ready(950);
 
-	if (spi_chip_info->addr4b)
-		snor_4byte_mode(0);
+	/* a chip left in 4-byte mode would not boot: that fails the erase */
+	if (spi_chip_info->addr4b && snor_4byte_mode(0))
+		ret = -1;
 
 	return ret;
 }
@@ -1196,8 +1197,11 @@ static int snor_read_die(unsigned char *buf, unsigned long from, unsigned long l
 
 		SPI_CONTROLLER_Chip_Select_High();
 
-		if (spi_chip_info->addr4b)
-			snor_4byte_mode(0);
+		/* a chip left in 4-byte mode would not boot: that fails the read */
+		if (spi_chip_info->addr4b && snor_4byte_mode(0)) {
+			failed = 1;
+			break;
+		}
 	}
 	if (failed) {
 		printf("\nRead failed at 0x%08x after [%lu] of [%lu] bytes\n", read_addr, len - remain_len, len);
@@ -1416,8 +1420,13 @@ static int snor_write_die(unsigned char *buf, unsigned long to, unsigned long le
 	if (len == 0 && snor_wait_ready(3))	/* the last page */
 		retlen -= rc;
 
-	if (spi_chip_info->addr4b)
-		snor_4byte_mode(0);
+	/* a chip left in 4-byte mode would not boot: that fails the write */
+	if (spi_chip_info->addr4b && snor_4byte_mode(0)) {
+		printf("\nThe chip did not leave the 4-byte mode\n");
+		snor_write_disable();
+		timer_end();
+		return -1;
+	}
 
 	snor_write_disable();
 

@@ -16,6 +16,7 @@
 #include "selftest.h"
 #include "timer.h"
 #include <stdarg.h>
+#include <signal.h>
 
 /* a line of the result: to the console, and kept in t->out for the web
    mode and the app (the lines one after the other) */
@@ -230,16 +231,22 @@ restore:
 		goto out;
 	{
 		int blank = first_not_ff(orig, n) < 0;
-		/* after a Ctrl+C the block still gets its data back: the stop
-		   waits for that (a second Ctrl+C quits at once) */
+		/* after a Ctrl+C the block still gets its data back: Ctrl+C waits
+		   until it is back (the signals are held for that long) */
 		sig_atomic_t stop = ms_stop;
+		sigset_t hold, old;
 		int bad;
 
+		sigemptyset(&hold);
+		sigaddset(&hold, SIGINT);
+		sigaddset(&hold, SIGTERM);
+		sigprocmask(SIG_BLOCK, &hold, &old);
 		ms_stop = 0;
 		bad = t->cmd->flash_erase(a, n) ||
 		      (!blank && t->cmd->flash_write(orig, a, n) != (int)n) ||
 		      t->cmd->flash_read(buf, a, n) != (int)n || memcmp(buf, orig, n);
-		ms_stop = stop || ms_stop;	/* a Ctrl+C during the restore counts too */
+		sigprocmask(SIG_SETMASK, &old, NULL);	/* a Ctrl+C held now comes */
+		ms_stop = stop || ms_stop;		/* and counts, as the one before */
 		if (bad) {
 			char base[120], *name;
 			FILE *f = NULL;
