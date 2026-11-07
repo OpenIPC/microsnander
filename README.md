@@ -13,7 +13,7 @@
 MicroSNANDer is a programmer for SPI NOR and SPI NAND flash chips with the cheap CH341A,
 CH347 and EZP USB programmers, six models in all: a command-line tool with a web page
 built in, and an Android app. It reads, writes, erases and verifies the flash of cameras,
-routers and other boards, removes the write protection of SPI NOR chips, and knows 291
+routers and other boards, removes the write protection of SPI NOR chips, and knows 434
 SPI NOR and 135 SPI NAND chips. Each release file is about 200–270 KB.
 
 It is a stripped-down, extended, deeply modified and optimized version of
@@ -457,7 +457,7 @@ hundred KB is minutes; a whole 16 MB chip is much longer.
 
 ## Supported chips
 
-`microsnander -L` prints the list: 291 SPI NOR chips (Winbond, Eon, Fudan
+`microsnander -L` prints the list: 434 SPI NOR chips (Winbond, Eon, Fudan
 Microelectronics FM25Q, GigaDevice, Macronix, Spansion, XMC, XTX, Zbit, Giantec
 GM25Q, ISSI, Micron, Boya, Puya and others) and 135 SPI NAND chips (Etron, GigaDevice, Heyang, Foresee, ESMT, Dosilicon, XTX,
 Micron, Toshiba/Kioxia, Winbond, Macronix and others).
@@ -470,12 +470,14 @@ read, written and erased as one 64 MB chip.
 ## Chip voltage
 
 The programmers work at 3.3 V. The programmer does not measure the voltage, so microsnander
-takes it from the chip name: 56 SPI NOR chips of the list are 1.8 V parts (GigaDevice GD25L,
+takes it from the chip name: 107 SPI NOR chips of the list are 1.8 V parts (GigaDevice GD25L,
 Macronix MX25U, Winbond W25Q..W, Micron N25Q..A11 and MT25QU, XMC XM25QU and XM25LU, Zbit
-ZB25LQ, Boya BY25Q..L, ISSI IS25WP), and so are 20 SPI NAND chips (GigaDevice GD5F..R, Winbond
+ZB25LQ, Boya BY25Q..L, ISSI IS25WP and IS25WQ, Eon EN25S, Fudan FM25M, Adesto AT25DL,
+Microchip SST25WF, Dosilicon DS25M), and so are 20 SPI NAND chips (GigaDevice GD5F..R, Winbond
 W25N..W, Macronix MX35UF, Micron MT29F..ABB, ESMT F50D, Dosilicon DS35M). Connect them through
 a 1.8 V adapter: at 3.3 V the reads are not reliable and the chip can be damaged.
-GigaDevice GD25W, XMC XM25QW and Fudan FM25W take 1.65-3.6 V and work as they are.
+GigaDevice GD25W, XMC XM25QW, Fudan FM25W, Macronix MX25R and Adesto AT25DF021A take 1.65-3.6 V
+and work as they are.
 
 After a 1.8 V chip is found, the console prints a warning, the web page lights the Chip lamp
 red and shows the warning, and so does the Android app; `/api/state` has the `voltage` (`3.3`,
