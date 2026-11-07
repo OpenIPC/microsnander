@@ -163,7 +163,8 @@ microsnander [options]
                 an erase leaves such blocks as they are
  -L             print list support chips
  -i             read the chip ID info
- -e             erase chip (full or use with -a [-l])
+ -e             erase chip (full or use with -a [-l]); -ee: SPI NAND, the blocks with a
+                factory bad mark too (the mark goes for good)
  -l <bytes>     manually set length
  -a <address>   manually set address
  -w <filename>  write chip with data from filename
@@ -205,7 +206,8 @@ SPI NAND 芯片默认使用片内 ECC 读写：文件中只有数据页。使用
 SPI NAND 出厂时带有少量坏块，每个坏块在其第一页或第二页备用区的起始字节上标记为非 0xFF 的值。
 擦除会永久清除这种标记，因此 `-e` 保留这些块不动并把它们打印出来。数据不会写入带标记的块：
 不加 `-k` 时写入在该块处停止（全为 0xFF 的数据可以通过）；加 `-k` 时整块被跳过，数据在下一块
-继续，`-k` 读取也跳过同样的块。`-b` 列出整片芯片或 `-a`/`-l` 范围内带标记的块。标记在关闭
+继续，`-k` 读取也跳过同样的块。`-ee` 会连带擦除带标记的块，用于错误的标记（例如随另一颗芯片的原始转储写入的标记）：
+标记会永久消失，真正的坏块可能擦除失败。`-b` 列出整片芯片或 `-a`/`-l` 范围内带标记的块。标记在关闭
 ECC 的情况下读取，每块两页：整片 1 Gbit 芯片需要几秒钟。
 
 `-u` 清除保护位并保留 QE（quad enable），QE 不起保护作用。`-uu` 还会清除 QE，仅限 SPI NOR

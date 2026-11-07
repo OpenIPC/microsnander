@@ -10,7 +10,7 @@
 #include "timer.h"
 static int stops;
 const char *flash_chip_name = "W25Q80";
-int ECC_fcheck = 1, ECC_ignore = 0, Skip_BAD_page = 0; unsigned long long Skip_BAD_end; unsigned char _ondie_ecc_flag = 1; unsigned int bsize = 4096;
+int ECC_fcheck = 1, ECC_ignore = 0, Skip_BAD_page = 0, Erase_marked_blocks = 0; unsigned long long Skip_BAD_end; unsigned char _ondie_ecc_flag = 1; unsigned int bsize = 4096;
 static unsigned char chip[1 << 20];	/* MS_BIG=1: all of it; else 64 KiB */
 static unsigned long largest;		/* MS_LARGEST=1: the longest read or write is printed */
 static void note(unsigned long l) { if (l > largest) largest = l; }

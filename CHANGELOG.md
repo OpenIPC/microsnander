@@ -12,6 +12,8 @@ from every push to `main`; this file is the change history.
   without `-k` it stops there, with `-k` the whole block is skipped and the data goes on in the
   next one; a `-k` read skips the same blocks. `-b` lists the marked blocks of the chip or of
   `-a`/`-l`.
+- `-ee` erases the blocks with a factory bad mark too, for a mark that is wrong; the mark is
+  gone for good.
 - SPI NAND spare area sizes, checked against the datasheets and other databases: W25N01KV 96
   bytes (was 64), TH58CVG3S0HRAIJ 256 (was 128), GD5F2GQ4UA 64 (was 128), MT29F4G01AA 64 (was
   128). A raw dump (`-d`) of these chips now has the whole spare area of every page.

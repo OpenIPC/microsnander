@@ -183,7 +183,8 @@ microsnander [options]
                 an erase leaves such blocks as they are
  -L             print list support chips
  -i             read the chip ID info
- -e             erase chip (full or use with -a [-l])
+ -e             erase chip (full or use with -a [-l]); -ee: SPI NAND, the blocks with a
+                factory bad mark too (the mark goes for good)
  -l <bytes>     manually set length
  -a <address>   manually set address
  -w <filename>  write chip with data from filename
@@ -231,7 +232,9 @@ A SPI NAND comes from the factory with a few bad blocks, each marked by a byte o
 at the start of the spare area of its first or second page. An erase would clear the mark for
 good, so `-e` leaves these blocks as they are and prints them. No data goes into a marked block:
 without `-k` a write stops there (data of all 0xFF passes), with `-k` the whole block is skipped
-and the data goes on in the next one, and a `-k` read skips the same blocks. `-b` lists the
+and the data goes on in the next one, and a `-k` read skips the same blocks. `-ee` erases the
+marked blocks too, for a mark that is wrong (say, one that came with a raw dump of another
+chip): the mark is gone for good, and on a really bad block the erase may fail. `-b` lists the
 marked blocks of the chip, or of `-a`/`-l`. The marks are read with the ECC off, two pages per
 block: a few seconds for a whole 1 Gbit chip.
 

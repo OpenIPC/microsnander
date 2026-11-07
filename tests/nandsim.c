@@ -578,6 +578,12 @@ int main(void)
 		check(page(3 * 64)[PAGE] == 0x00 && page(3 * 64 + 5)[0] == 0x12, "  the marked block is not erased, its mark stays");
 		check(page(4 * 64 + 5)[0] == 0xff, "  the blocks around it are erased");
 		check(snand_erase(0, (long)PAGES * PAGE) == 0 && page(7 * 64 + 1)[PAGE] == 0x7f, "  a full chip erase keeps the marks too");
+		Erase_marked_blocks = 1;
+		check(snand_erase(2 * B, 4 * B) == 0 && page(3 * 64)[PAGE] == 0xff && page(3 * 64 + 5)[0] == 0xff &&
+		      spi_nand_block_marked(3) == 0 && spi_nand_block_marked(7) == 1, "-ee: a marked block is erased, its mark is gone");
+		Erase_marked_blocks = 0;
+		page(3 * 64)[PAGE] = 0x00;		/* marked again for the tests below */
+		spi_nand_marks_reset();
 
 		/* without -k: data does not go to a marked block, 0xFF may */
 		fill(big, 3 * 64, 30);

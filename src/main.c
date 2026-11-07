@@ -79,7 +79,8 @@ void usage(int code)
 		"                an erase leaves such blocks as they are\n"\
 		" -L             print list support chips\n"\
 		" -i             read the chip ID info\n"\
-		" -e             erase chip (full or use with -a [-l])\n"\
+		" -e             erase chip (full or use with -a [-l]); -ee: SPI NAND, the blocks with a\n"\
+		"                factory bad mark too (the mark goes for good)\n"\
 		" -l <bytes>     manually set length\n"\
 		" -a <address>   manually set address\n"\
 		" -w <filename>  write chip with data from filename\n"\
@@ -267,6 +268,7 @@ int main(int argc, char* argv[])
 	int regular;
 	struct stat st;
 	int unlock = 0;		/* how many -u: 2 also clears QE */
+	int erase_marked = 0;	/* how many -e: 2 also erases the blocks with a factory bad mark */
 	FILE *fp = NULL;
 
 	title();
@@ -330,8 +332,14 @@ int main(int argc, char* argv[])
 				else
 					op = 'u';
 				break;
-			case 'i':
 			case 'e':
+				/* -e and -ee (SPI NAND: the blocks with a factory bad mark too) */
+				if (++erase_marked > 2 || (op && op != 'e'))
+					op = 'x';
+				else
+					op = 'e';
+				break;
+			case 'i':
 			case 't':
 			case 'b':
 				if(!op)
@@ -463,6 +471,14 @@ int main(int argc, char* argv[])
 		if(len % bsize) {
 			printf("Please set len = 0x%016llX multiple of the block size 0x%08X\n", len, bsize);
 			goto out;
+		}
+		if (erase_marked > 1) {
+			if (prog.kind != FLASH_NAND) {
+				printf("-ee is for SPI NAND: only it has blocks marked bad at the factory.\n");
+				goto out;
+			}
+			Erase_marked_blocks = 1;
+			printf("The blocks with a factory bad mark are erased too: their marks are gone for good.\n");
 		}
 		printf("Erase addr = 0x%016llX, len = 0x%016llX\n", addr, len);
 		ret = prog.flash_erase(addr, len);

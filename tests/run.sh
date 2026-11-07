@@ -65,6 +65,11 @@ t 1 "-b on a SPI NOR is an error"      $B -b
 t 1 "-b when a mark fails"             MS_CHIP=nand MS_FAIL=marks $B -b
 t 1 "conflict -b -e"                   MS_CHIP=nand $B -b -e
 t 1 "-W with -b is an error"           $B -W 8080 -b
+t 0 "-ee on a SPI NAND"                MS_CHIP=nand $B -ee
+MS_CHIP=nand $B -ee | grep -q 'factory bad mark are erased too' && echo "ok     -ee says that the marks go" || { echo "FAIL -ee message"; fail=1; }
+t 1 "-ee on a SPI NOR is an error"     $B -ee
+t 1 "-eee is an error"                 MS_CHIP=nand $B -eee
+t 1 "conflict -ee -r"                  MS_CHIP=nand $B -ee -r x.bin
 MS_CHIP=nand $B -b -a 0x4000 | grep -q '^bad blocks 0x4000 0xc000' && echo "ok   -b -a: from the address to the chip end" || { echo "FAIL -b -a range"; fail=1; }
 t 1 "-S unknown speed"                $B -S 100M -i
 t 0 "-P ch347 -S 15M"                 $B -P ch347 -S 15M -i

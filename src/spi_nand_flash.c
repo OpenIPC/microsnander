@@ -322,6 +322,7 @@
 int ECC_fcheck = 1;
 int ECC_ignore = 0;
 int Skip_BAD_page = 0;
+int Erase_marked_blocks = 0;	/* -ee: the blocks with a factory bad mark are erased too */
 
 /* Longest wait for the chip to leave OIP (operation in progress). A page read,
    a program and a block erase take micro- to milliseconds; a chip that stays
@@ -4226,7 +4227,10 @@ static SPI_NAND_FLASH_RTN_T spi_nand_erase_internal( u32 addr, u32 len )
 				rtn_status = SPI_NAND_FLASH_RTN_IO_ERROR;
 				break;
 			}
-			if( marked ) {
+			if( marked && Erase_marked_blocks ) {
+				_SPI_NAND_PRINTF("\nBad block %u at 0x%x (factory mark): erased (-ee), the mark goes\n", block_index, addr);
+				_marks[block_index] = MARK_UNKNOWN;
+			} else if( marked ) {
 				_SPI_NAND_PRINTF("\nBad block %u at 0x%x (factory mark): not erased\n", block_index, addr);
 				kept++;
 				rtn_status = SPI_NAND_FLASH_RTN_NO_ERROR;
