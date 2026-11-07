@@ -169,6 +169,8 @@ static void chip(unsigned char a, unsigned char b, unsigned char c)
 }
 
 static unsigned char *page(long n) { return mem + n * (PAGE + OOB); }
+/* the data of pages first..first+n-1 equals b, page by page (the OOB in between left out) */
+static int pages_are(long first, long n, const unsigned char *b) { for (long i = 0; i < n; i++) if (memcmp(page(first + i), b + i * PAGE, PAGE)) return 0; return 1; }
 static void fill(unsigned char *b, long pages, int seed) { for (long i = 0; i < pages * PAGE; i++) b[i] = (unsigned char)(i * 7 + seed + i / PAGE); }
 
 int main(void)
@@ -241,6 +243,22 @@ int main(void)
 		}
 		check(!wrong && n18 == (int)(sizeof(v18) / sizeof(v18[0])),
 		      "the 1.8 V SPI NAND chips are told by their names, the others are 3.3 V");
+	}
+
+	/* spare areas checked against the datasheets (W25N01KV, MT29F4G01AAADD) and two
+	   databases (TH58CVG3S0HRAIJ, GD5F2GQ4UA) */
+	{
+		static const struct { const char *name; unsigned oob; } spare[] = {
+			{ "WINBOND W25N01KV", 96 }, { "KIOXIA TH58CVG3S0HRAIJ", 256 },
+			{ "GIGADEVICE GD5F2GQ4UA", 64 }, { "MICRON MT29F4G01AA", 64 },
+		};
+		const int n = sizeof(spi_nand_flash_tables) / sizeof(spi_nand_flash_tables[0]);
+		int right = 0;
+		for (unsigned j = 0; j < sizeof(spare) / sizeof(spare[0]); j++)
+			for (int i = 0; i < n; i++)
+				if (!strcmp(spi_nand_flash_tables[i].ptr_name, spare[j].name) && spi_nand_flash_tables[i].oob_size == spare[j].oob)
+					right++;
+		check(right == 4, "the spare area sizes of W25N01KV, TH58CVG3S0HRAIJ, GD5F2GQ4UA and MT29F4G01AA");
 	}
 
 	/* the block lock register (A0) after the unlock: the FORESEE F35SQA001G
@@ -537,6 +555,90 @@ int main(void)
 	fail_set_feature = 1;
 	check(snand_init() <= 0, "detection fails when CS high of the ECC write fails");
 	fail_set_feature = 0;
+
+	/* factory bad blocks: a byte other than 0xFF at the start of the spare area of
+	   the first or the second page of a block, read with the on-die ECC off */
+	{
+		const long B = 128 * 1024;		/* block: 64 pages */
+		static unsigned char big[4 * 128 * 1024], back[4 * 128 * 1024];
+
+		chip(0xef, 0xaa, 0x21);
+		snand_init();
+		page(3 * 64)[PAGE] = 0x00;		/* block 3: mark on the first page */
+		page(7 * 64 + 1)[PAGE] = 0x7f;		/* block 7: mark on the second page */
+		page(5 * 64 + 2)[PAGE] = 0x00;		/* block 5: the third page is not a mark */
+		check(spi_nand_block_marked(3) == 1 && spi_nand_block_marked(7) == 1 && spi_nand_block_marked(5) == 0 &&
+		      spi_nand_block_marked(2) == 0, "bad block marks on the first and the second page, not on the third");
+		check(feat[0xb0] & 0x10, "  the on-die ECC is on again after the marks are read");
+		check(snand_bad_blocks(0, 16 * B) == 0, "  -b lists the marked blocks");
+
+		memset(page(3 * 64 + 5), 0x12, PAGE);
+		memset(page(4 * 64 + 5), 0x12, PAGE);
+		check(snand_erase(2 * B, 4 * B) == 0, "erase over a marked block is OK");
+		check(page(3 * 64)[PAGE] == 0x00 && page(3 * 64 + 5)[0] == 0x12, "  the marked block is not erased, its mark stays");
+		check(page(4 * 64 + 5)[0] == 0xff, "  the blocks around it are erased");
+		check(snand_erase(0, (long)PAGES * PAGE) == 0 && page(7 * 64 + 1)[PAGE] == 0x7f, "  a full chip erase keeps the marks too");
+
+		/* without -k: data does not go to a marked block, 0xFF may */
+		fill(big, 3 * 64, 30);
+		nprog = 0;
+		check(snand_write(big, 3 * B, PAGE) < 0 && nprog == 0, "write of data into a marked block fails without -k, nothing programmed");
+		memset(big, 0xff, B);
+		check(snand_write(big, 3 * B, B) == B, "  data of all 0xFF over it is fine");
+		fill(big, 2, 31);
+		check(snand_write(big, 3 * B - PAGE, 2 * PAGE) < 0 && pages_are(3 * 64 - 1, 1, big),
+		      "  a write into it stops there, the page before it is written");
+
+		/* -k: the data goes around the marked block, the read takes the same way */
+		chip(0xef, 0xaa, 0x21);
+		snand_init();
+		page(3 * 64)[PAGE] = 0x00;
+		Skip_BAD_page = 1;
+		fill(big, 3 * 64, 32);
+		check(snand_write(big, 2 * B, 3 * B) == 3 * B, "-k write over a marked block");
+		check(pages_are(2 * 64, 64, big) && pages_are(4 * 64, 64, big + B) && pages_are(5 * 64, 64, big + 2 * B) &&
+		      page(3 * 64)[0] == 0xff && page(3 * 64 + 63)[PAGE - 1] == 0xff, "  the data is in blocks 2, 4, 5; block 3 is not written");
+		check(snand_read(back, 2 * B, 3 * B) == 3 * B && !memcmp(back, big, 3 * B), "  -k read gives it back");
+		snand_init();
+		Skip_BAD_page = 1;
+		memset(back, 0, sizeof(back));
+		check(snand_read(back, 2 * B, 3 * B) == 3 * B && !memcmp(back, big, 3 * B), "  in a new run too: the mark is on the chip");
+		Skip_BAD_end = 5 * B;			/* -a 2 blocks -l 3 blocks */
+		snand_erase(4 * B, 2 * B);
+		check(snand_write(big, 2 * B, 3 * B) < 0 && page(4 * 64)[0] == 0xff && page(5 * 64)[0] == 0xff,
+		      "-k write that needs a block past -a/-l fails before it writes after the marked block");
+		Skip_BAD_end = 0;
+		chip(0xef, 0xaa, 0x21);
+		snand_init();
+		Skip_BAD_page = 1;
+		page((PAGES / 64 - 1) * 64)[PAGE] = 0x00;	/* the last block */
+		check(snand_read(back, (long)PAGES * PAGE - 2 * B, 2 * B) < 0, "-k read that needs a block past the chip end fails");
+		Skip_BAD_page = 0;
+
+		/* a mark that does not come back stops the erase: the block is not erased */
+		chip(0xef, 0xaa, 0x21);
+		snand_init();
+		memset(page(1 * 64 + 3), 0x12, PAGE);
+		fail_cache = 64;
+		check(snand_erase(0, 4 * B) != 0 && page(64 + 3)[0] == 0x12, "erase stops when a mark fails on USB, nothing erased after it");
+		fail_cache = -1;
+		check(feat[0xb0] & 0x10, "  the on-die ECC is on again");
+		check(snand_erase(0, 4 * B) == 0 && page(64 + 3)[0] == 0xff, "  the next erase works");
+
+		/* raw (-d): the mark is after the data in a page of data + OOB */
+		chip(0xef, 0xaa, 0x21);
+		ECC_fcheck = 0;
+		snand_init();
+		page(3 * 64)[PAGE] = 0x00;
+		check(spi_nand_block_marked(3) == 1 && spi_nand_block_marked(4) == 0 && !(feat[0xb0] & 0x10),
+		      "raw (-d): the mark is found, the ECC stays off");
+		memset(big, 0xff, 2 * (PAGE + OOB));
+		big[PAGE] = 0x00;			/* the mark of a raw dump of another chip */
+		check(snand_write(big, 4L * 64 * (PAGE + OOB), 2 * (PAGE + OOB)) == 2 * (PAGE + OOB) && spi_nand_block_marked(4) == 1,
+		      "  a raw write that brings a mark: the block is marked from then on");
+		ECC_fcheck = 1;
+		snand_init();
+	}
 
 	if (!fail) printf("all nandsim checks passed\n");
 	return fail;

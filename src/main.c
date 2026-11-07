@@ -41,7 +41,7 @@
 struct flash_cmd prog;
 extern unsigned int bsize;
 
-#define _VER	"1.26.0"
+#define _VER	"1.27.0"
 
 const char *ms_version = _VER;
 
@@ -73,7 +73,10 @@ void usage(int code)
 		" -h             display this message\n"\
 		" -d             disable internal ECC (use read and write page size + OOB size)\n"\
 		" -I             ECC ignore errors (for read test only)\n"\
-		" -k             skip BAD pages (SPI NAND): use the next page instead\n"\
+		" -k             skip BAD pages (SPI NAND): use the next page instead; blocks\n"\
+		"                with a factory bad mark are skipped whole\n"\
+		" -b             list the blocks with a factory bad mark (SPI NAND; -a, -l: a range);\n"\
+		"                an erase leaves such blocks as they are\n"\
 		" -L             print list support chips\n"\
 		" -i             read the chip ID info\n"\
 		" -e             erase chip (full or use with -a [-l])\n"\
@@ -268,7 +271,7 @@ int main(int argc, char* argv[])
 
 	title();
 
-	while ((c = getopt(argc, argv, "diIhveutkqLl:a:w:r:P:S:W:K:o:m:")) != -1)
+	while ((c = getopt(argc, argv, "diIhveutbkqLl:a:w:r:P:S:W:K:o:m:")) != -1)
 	{
 		switch(c)
 		{
@@ -330,6 +333,7 @@ int main(int argc, char* argv[])
 			case 'i':
 			case 'e':
 			case 't':
+			case 'b':
 				if(!op)
 					op = c;
 				else
@@ -369,7 +373,7 @@ int main(int argc, char* argv[])
 		/* the page writes whole files from 0 with ECC on: no raw NAND
 		   (-d), no ECC ignore (-I), no BAD page skipping (-k) */
 		if (op || scan || vr || speed_set || !ECC_fcheck || ECC_ignore || Skip_BAD_page || sigmastar_on()) {
-			printf("-W runs the web mode: give no -i, -r, -w, -e, -u, -t, -q, -v, -S, -m, -d, -I or -k with it.\n\n");
+			printf("-W runs the web mode: give no -i, -r, -w, -e, -u, -t, -b, -q, -v, -S, -m, -d, -I or -k with it.\n\n");
 			return 1;
 		}
 		return web_serve(web, web_key, web_dir, addr, len);
@@ -469,6 +473,24 @@ int main(int argc, char* argv[])
 			rc = 0;
 		} else
 			printf("Status: BAD(%d)\n", ret);
+		goto out;
+	}
+
+	if (op == 'b') {
+		printf("BAD BLOCKS:\n");
+		if (prog.kind != FLASH_NAND) {
+			printf("Only a SPI NAND has bad blocks marked at the factory.\n");
+			goto out;
+		}
+		if (addr && !len)
+			len = flen - addr;
+		else if (!addr && !len)
+			len = flen;
+		if (!snand_bad_blocks(addr, len)) {
+			printf("Status: OK\n");
+			rc = 0;
+		} else
+			printf("Status: BAD\n");
 		goto out;
 	}
 

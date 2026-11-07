@@ -4,6 +4,18 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.27.0 — 2026-11-07
+
+- SPI NAND factory bad blocks: a block whose first or second page has a byte other than 0xFF at
+  the start of its spare area (read with the ECC off) is bad from the factory. `-e` leaves it as
+  it is and prints it, instead of erasing the mark away. A write does not put data into it:
+  without `-k` it stops there, with `-k` the whole block is skipped and the data goes on in the
+  next one; a `-k` read skips the same blocks. `-b` lists the marked blocks of the chip or of
+  `-a`/`-l`.
+- SPI NAND spare area sizes, checked against the datasheets and other databases: W25N01KV 96
+  bytes (was 64), TH58CVG3S0HRAIJ 256 (was 128), GD5F2GQ4UA 64 (was 128), MT29F4G01AA 64 (was
+  128). A raw dump (`-d`) of these chips now has the whole spare area of every page.
+
 ## 1.26.0 — 2026-11-07
 
 - SPI NOR over 16 MB: a write enable goes before the commands that enter and leave the 4-byte
