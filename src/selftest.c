@@ -177,6 +177,10 @@ int selftest(const struct selftest *t)
 		goto out;
 	}
 
+	if (ms_stop) {				/* stopped after the reads: nothing changed yet */
+		report(t, "Self-test: stopped by Ctrl+C; nothing was changed.\n");
+		goto out;
+	}
 	t0 = now();
 	changed = 1;
 	int e = t->cmd->flash_erase(a, n);

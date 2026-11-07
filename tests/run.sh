@@ -101,6 +101,7 @@ cp before.img chip.img; MS_CORRUPT=5 $B -t | grep -q 'the write does not take: .
 rm -f selftest-*.bin
 cp before.img chip.img; MS_FAIL=stop $B -t > stop.log; [ $? = 1 ] && grep -q 'stopped by Ctrl+C' stop.log && cmp -s chip.img before.img && [ ! -e selftest-W25Q80-0x0.bin ] && echo "ok   -t stopped by Ctrl+C after the erase: the block gets its data back, exit 1" || { echo "FAIL -t Ctrl+C"; cat stop.log | tail -3; fail=1; }
 cp before.img chip.img; MS_FAIL=stoprestore $B -t > stop.log; [ $? = 1 ] && grep -q 'stopped by Ctrl+C' stop.log && cmp -s chip.img before.img && [ ! -e selftest-W25Q80-0x0.bin ] && echo "ok   -t: a Ctrl+C during the restore waits until the block is back, exit 1" || { echo "FAIL -t Ctrl+C in restore"; tail -3 stop.log; fail=1; }
+head -c 65536 /dev/urandom > chip.img; cp chip.img before.img; MS_FAIL=stopread $B -t > stop.log; [ $? = 1 ] && grep -q 'nothing was changed' stop.log && cmp -s chip.img before.img && echo "ok   -t: Ctrl+C during the second read, nothing erased, exit 1" || { echo "FAIL -t Ctrl+C after reads"; tail -3 stop.log; fail=1; }
 rm -f selftest-*.bin stop.log
 MS_FAIL=stopwrite $B -w img.bin > stop.log; [ $? = 1 ] && grep -q 'Status: BAD, wrote 0x10000 of 0x10000 bytes' stop.log && grep -q 'Stopped by Ctrl+C' stop.log && echo "ok   a write stopped by Ctrl+C says how much was written, exit 1" || { echo "FAIL stopped write count"; tail -3 stop.log; fail=1; }
 rm -f stop.log
