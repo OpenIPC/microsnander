@@ -1337,10 +1337,12 @@ static int snor_write_die(unsigned char *buf, unsigned long to, unsigned long le
 		/* write the next page to flash */
 
 		/* the page before is not written until the chip is ready */
-		if (ms_stop || snor_wait_ready(3)) {
+		if (snor_wait_ready(3)) {
 			retlen -= rc;
 			break;
 		}
+		if (ms_stop)	/* Ctrl+C: the pages so far are written */
+			break;
 		snor_write_enable();
 
 		SPI_CONTROLLER_Chip_Select_Low();

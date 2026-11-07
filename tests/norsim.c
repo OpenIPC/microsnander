@@ -43,6 +43,7 @@ static unsigned char mem[64 << 20];
 static const unsigned long die_size = 32 << 20;
 static int four[2], die;		/* 4-byte address mode of each die; the selected die (DIES) */
 static long stop_reads;			/* Ctrl+C after this many bytes read */
+static long stop_pages;			/* Ctrl+C after this many pages programmed */
 static unsigned char cmd[300];
 static int ncmd, nread;
 static int wel, aai, locked;
@@ -135,6 +136,7 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Chip_Select_High(void)
 		if (writable() && ncmd > 1 + alen()) {
 			program(addr(), cmd + 1 + alen(), kind == SST25 ? 1 : ncmd - 1 - alen());	/* SST25: one byte only */
 			if (kind == QE_SR1) busy = 2;
+			if (stop_pages > 0 && !--stop_pages) ms_stop = 1;
 		}
 		wel = 0;
 		break;
@@ -197,7 +199,7 @@ static void chip(const struct chip_info *e, int k)
 	id[0] = e->id;
 	id[1] = e->jedec_id >> 24; id[2] = e->jedec_id >> 16; id[3] = e->jedec_id >> 8; id[4] = e->jedec_id;
 	kind = k; wel = aai = busy = busy_cmds = sr2_writes = 0;
-	four[0] = four[1] = die = 0; stop_reads = 0; ms_stop = 0;
+	four[0] = four[1] = die = 0; stop_reads = stop_pages = 0; ms_stop = 0;
 	sr2 = k == QE_FIXED ? 0x02 : 0;
 	locked = k == SST26;
 	sr = k == SST26 ? 0 : 0x1c;		/* BP bits set at power-up */
@@ -459,6 +461,11 @@ int main(void)
 		ms_stop = 1;
 		check(snor_write(buf, 16 << 20, 4096) != 4096 && !four[0] && !wel, "  a write too, no write enable latch left");
 		check(snor_erase(16 << 20, 65536) != 0 && !four[0], "  an erase too");
+		ms_stop = 0;
+		memset(mem + (16 << 20), 0xff, 4096);
+		stop_pages = 3;
+		check(snor_write(buf, 16 << 20, 4096) == 768 && !memcmp(mem + (16 << 20), buf, 768) &&
+		      mem[(16 << 20) + 768] == 0xff && !four[0], "  a stopped write counts every page it sent");
 		ms_stop = 0;
 	}
 
