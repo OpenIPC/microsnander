@@ -71,6 +71,8 @@ t 1 "-ee on a SPI NOR is an error"     $B -ee
 t 1 "-eee is an error"                 MS_CHIP=nand $B -eee
 t 1 "conflict -ee -r"                  MS_CHIP=nand $B -ee -r x.bin
 MS_CHIP=nand $B -b -a 0x4000 | grep -q '^bad blocks 0x4000 0xc000' && echo "ok   -b -a: from the address to the chip end" || { echo "FAIL -b -a range"; fail=1; }
+t 0 "-S 937.5K on the CH347"           $B -P ch347 -S 937.5K -i
+t 1 "-W with -c is an error"           $B -W 8080 -c x.bin
 t 1 "-S unknown speed"                $B -S 100M -i
 t 0 "-P ch347 -S 15M"                 $B -P ch347 -S 15M -i
 t 1 "-S with the CH341A is an error"  $B -P ch341a -S 15M -i
@@ -116,6 +118,21 @@ head -c 65536 /dev/urandom > chip.img; cp chip.img before.img; MS_FAIL=stopread 
 rm -f selftest-*.bin stop.log
 MS_FAIL=stopwrite $B -w img.bin > stop.log; [ $? = 1 ] && grep -q 'Status: BAD, wrote 0x10000 of 0x10000 bytes' stop.log && grep -q 'Stopped by Ctrl+C' stop.log && echo "ok   a write stopped by Ctrl+C says how much was written, exit 1" || { echo "FAIL stopped write count"; tail -3 stop.log; fail=1; }
 rm -f stop.log
+# -c: the chip against a file, nothing written
+head -c 65536 /dev/urandom > chip.img; cp chip.img before.img; head -c 5000 chip.img > part.bin
+t 0 "-c with the same data"            $B -c part.bin
+$B -c part.bin | grep -q 'Read addr = 0x0000000000000000, len = 0x0000000000001388' && echo "ok     -c compares as much as the file holds" || { echo "FAIL -c length"; fail=1; }
+head -c 4096 before.img | tail -c 96 > tail.bin
+t 0 "-c -a: from the address"          $B -c tail.bin -a 4000
+printf '\001' | dd of=part.bin bs=1 seek=4000 conv=notrunc 2>/dev/null; cmp -s chip.img before.img && t 1 "-c with a difference" $B -c part.bin
+$B -c part.bin | grep -q 'first difference at 0x0000000000000FA0' && cmp -s chip.img before.img && echo "ok     -c names the first difference and writes nothing" || { echo "FAIL -c difference"; fail=1; }
+$B -c part.bin | grep -q 'try again with -S 15M' && echo "FAIL -c: the CH347 hint with a CH341A" && fail=1 || echo "ok     no CH347 clock hint with a CH341A"
+$B -P ch347 -c part.bin | grep -q 'try again with -S 15M' && echo "ok     the CH347 at 30 MHz: the clock hint" || { echo "FAIL CH347 hint"; fail=1; }
+$B -P ch347 -S 15M -c part.bin | grep -q 'try again with -S 15M' && { echo "FAIL hint at 15M"; fail=1; } || echo "ok     at -S 15M: no hint"
+t 0 "-c -l shorter than the file"      $B -c part.bin -l 100
+t 1 "-c on a missing file"             $B -c none.bin
+t 1 "-c on a FIFO"                     $B -c /dev/null
+rm -f part.bin tail.bin
 t 1 "-t, an erase that fails"         MS_FAIL=erase $B -t
 MS_FAIL=erase $B -t | grep -q 'the erase command fails' && echo "ok     a failing erase command is FAILED, not PROTECTED" || { echo "FAIL -t erase fail"; fail=1; }
 t 1 "-t on SPI NAND, not block 0"     MS_CHIP=nand $B -t -a 0x20000

@@ -38,8 +38,8 @@ int programmer_select(const char *n) {
 	for (int i = 0; i < 3; i++) if (!strcasecmp(n, stubprogs[i].key)) { chosen = &stubprogs[i]; return 0; }
 	return -1; }
 const char *programmer_names(void) { return "ch341a, ch347, ezp, auto"; }
-int ch347_set_speed(const char *s) { return strcasecmp(s, "60M") && strcasecmp(s, "30M") && strcasecmp(s, "15M") && strcasecmp(s, "7.5M") && strcasecmp(s, "3.75M") && strcasecmp(s, "1.875M") ? -1 : 0; }
-const char *ch347_speed_list(void) { return "60M, 30M, 15M, 7.5M, 3.75M, 1.875M"; }
+int ch347_set_speed(const char *s) { return strcasecmp(s, "60M") && strcasecmp(s, "30M") && strcasecmp(s, "15M") && strcasecmp(s, "7.5M") && strcasecmp(s, "3.75M") && strcasecmp(s, "1.875M") && strcasecmp(s, "937.5K") && strcasecmp(s, "468.75K") ? -1 : 0; }
+const char *ch347_speed_list(void) { return "60M, 30M, 15M, 7.5M, 3.75M, 1.875M, 937.5K, 468.75K"; }
 int programmer_init(bool need_clock) { if (need_clock && !chosen->clock) { printf("-S: fixed clock\n"); return -2; } programmer = chosen; if (*env("MS_PROGRAMMER")) printf("programmer: %s\n", programmer->key); size_t n = *env("MS_BIG") ? sizeof(chip) : 65536; FILE *f = fopen("chip.img", "rb"); if (f) { if (fread(chip, 1, n, f) != n) memset(chip, 0, sizeof(chip)); fclose(f); } return 0; }
 int web_serve(const char *l, const char *k, const char *d, unsigned long long a, unsigned long long n)
 { printf("web: %s key=%s dir=%s addr=0x%llx len=0x%llx\n", l, k ? k : "-", d ? d : "-", a, n); return 0; }

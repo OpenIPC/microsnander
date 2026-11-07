@@ -8,6 +8,7 @@
 static unsigned short sim_pid = 0x55db;
 static int claimed_iface = -1, detached_iface = -1, attached_iface = -1;
 static unsigned char cfg15 = 0xff;
+static int cfg_echo;			/* firmware that sends the whole configuration back */
 static int cs_low;
 static unsigned char mosi[200000];
 static unsigned int nmosi, clocked;
@@ -50,7 +51,9 @@ int libusb_bulk_transfer(libusb_device_handle *h, unsigned char ep, unsigned cha
 		off += 3 + n;
 		ncmd++;
 		switch (c[0]) {
-		case CH347_CMD_SPI_SET_CFG: cfg15 = c[15]; resp[0] = c[0]; resp[1] = 1; resp[2] = 0; resp[3] = 0; nresp = 4; break;
+		case CH347_CMD_SPI_SET_CFG: cfg15 = c[15]; resp[0] = c[0]; resp[1] = 1; resp[2] = 0; resp[3] = 0; nresp = 4;
+			if (cfg_echo) { memcpy(resp + 4, c + 4, 25); nresp = 29; }
+			break;
 		case CH347_CMD_SPI_CS_CTRL:
 			if (c[3] & CH347_CS_CHANGE) cs_low = !(c[3] & CH347_CS_DEASSERT);
 			break;
@@ -76,6 +79,7 @@ int libusb_bulk_transfer(libusb_device_handle *h, unsigned char ep, unsigned cha
 		return 0;
 	}
 	if (nresp) {				/* answer to SET_CFG or SPI_OUT */
+		if ((int)nresp > len) return LIBUSB_ERROR_OVERFLOW;	/* more than the buffer takes */
 		memcpy(d, resp, nresp);
 		if (done) *done = nresp;
 		nresp = 0;
@@ -142,6 +146,14 @@ int main(void)
 	      "CH347F: interface 4; -S 60M: divisor 0");
 	ch347_spi_shutdown();
 	check(ch347_set_speed("1.875M") == 0 && ch347_set_speed("100M") < 0, "-S accepts the listed speeds only");
+	check(ch347_set_speed("937.5K") == 0 && ch347_spi_init() == 0 && cfg15 == (6 << 3), "-S 937.5K: divisor 6");
+	ch347_spi_shutdown();
+	check(ch347_set_speed("468.75K") == 0 && ch347_spi_init() == 0 && cfg15 == (7 << 3), "-S 468.75K: divisor 7");
+	ch347_spi_shutdown();
+	cfg_echo = 1;
+	check(ch347_set_speed("30M") == 0 && ch347_spi_init() == 0, "firmware that answers the configuration with all 29 bytes: init works");
+	ch347_spi_shutdown();
+	cfg_echo = 0;
 	sim_pid = 0;
 	check(ch347_spi_init() < 0, "no CH347: init fails");
 
