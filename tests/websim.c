@@ -9,6 +9,7 @@
 #include "../src/web.c"
 #include "../src/voltage.c"
 #include "../src/selftest.c"
+volatile sig_atomic_t ms_stop;		/* timer.c is not built in */
 
 #define SIM_SIZE (1 << 20)
 static unsigned char mem[SIM_SIZE];

@@ -3879,7 +3879,8 @@ static long long spi_nand_now_ms(void)
    neither a BAD page for -k nor a result to go on from. */
 static int spi_nand_stopped( SPI_NAND_FLASH_RTN_T status )
 {
-	return status == SPI_NAND_FLASH_RTN_TIMEOUT || status == SPI_NAND_FLASH_RTN_IO_ERROR;
+	return status == SPI_NAND_FLASH_RTN_TIMEOUT || status == SPI_NAND_FLASH_RTN_IO_ERROR ||
+	       status == SPI_NAND_FLASH_RTN_STOPPED;
 }
 
 /* Poll the status register until OIP clears; the last status is in *ptr_status.
@@ -4090,6 +4091,10 @@ static SPI_NAND_FLASH_RTN_T spi_nand_erase_internal( u32 addr, u32 len )
 
 			_SPI_NAND_DEBUG_PRINTF(SPI_NAND_FLASH_DEBUG_LEVEL_1, "spi_nand_erase_internal: addr = 0x%x, len = 0x%x, block_idx = 0x%x\n", addr, len, block_index );
 
+			if( ms_stop ) {		/* Ctrl+C: no more blocks */
+				rtn_status = SPI_NAND_FLASH_RTN_STOPPED;
+				break;
+			}
 			rtn_status = spi_nand_erase_block(block_index);
 			if( spi_nand_stopped(rtn_status) )
 				break;
@@ -4443,6 +4448,10 @@ static SPI_NAND_FLASH_RTN_T spi_nand_write_internal( u32 dst_addr, u32 len, u32 
 
 	while( remain_len > 0 )
 	{
+		if( ms_stop ) {		/* Ctrl+C: the pages so far are written */
+			rtn_status = SPI_NAND_FLASH_RTN_STOPPED;
+			break;
+		}
 		physical_dst_addr = write_addr;
 
 		/* Caculate page number */
@@ -4538,6 +4547,11 @@ static SPI_NAND_FLASH_RTN_T spi_nand_read_internal ( u32 addr, u32 len, u8 *ptr_
 
 	while(remain_len > 0)
 	{
+		if( ms_stop ) {		/* Ctrl+C */
+			*status = SPI_NAND_FLASH_RTN_STOPPED;
+			_SPI_NAND_SEMAPHORE_UNLOCK();
+			return SPI_NAND_FLASH_RTN_STOPPED;
+		}
 		physical_read_addr = read_addr;
 
 		/* Caculate page number */

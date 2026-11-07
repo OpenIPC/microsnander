@@ -70,6 +70,7 @@
 
 #define OPCODE_BRRD			0x16
 #define OPCODE_BRWR			0x17
+#define OPCODE_DIE_SELECT		0xC2	/* stacked dies (W25M): the active die, 0, 1 */
 
 /* Status Register bits. */
 #define SR_WIP				1	/* Write in progress */
@@ -110,11 +111,24 @@ struct chip_info {
 	unsigned long	sector_size;
 	unsigned int	n_sectors;
 	char		addr4b;
+	u8		dies;		/* stacked dies selected with 0xC2, each of the same size; 0: one */
 };
 
 struct chip_info *spi_chip_info;
 
+/* Stacked dies (W25M512JV): each die is a chip of its own, with its own
+   registers and address mode; the commands go to the die selected last. */
+static int snor_die = -1;			/* the selected die; -1: not known */
+
+static unsigned long snor_die_size(void)
+{
+	unsigned long size = spi_chip_info->sector_size * spi_chip_info->n_sectors;
+
+	return spi_chip_info->dies > 1 ? size / spi_chip_info->dies : size;
+}
+
 static int snor_wait_ready(int sleep_ms);
+static int snor_select_die(int die);
 static int snor_wait_busy(void);
 static int snor_read_sr(u8 opcode, u8 *val);
 static int snor_write_sr(u8 opcode, u8 *val);
@@ -152,18 +166,22 @@ int snor_sr1_macronix(void) { return snor_is_macronix(); }	/* see snorcmd_api.h 
  * Set write enable latch with Write Enable command.
  * Returns negative if error occurred.
  */
-static inline void snor_write_enable(void)
+static inline int snor_write_enable(void)
 {
-	SPI_CONTROLLER_Chip_Select_Low();
-	SPI_CONTROLLER_Write_One_Byte(OPCODE_WREN);
-	SPI_CONTROLLER_Chip_Select_High();
+	int err = SPI_CONTROLLER_Chip_Select_Low();
+
+	err |= SPI_CONTROLLER_Write_One_Byte(OPCODE_WREN);
+	err |= SPI_CONTROLLER_Chip_Select_High();
+	return err ? -1 : 0;
 }
 
-static inline void snor_write_disable(void)
+static inline int snor_write_disable(void)
 {
-	SPI_CONTROLLER_Chip_Select_Low();
-	SPI_CONTROLLER_Write_One_Byte(OPCODE_WRDI);
-	SPI_CONTROLLER_Chip_Select_High();
+	int err = SPI_CONTROLLER_Chip_Select_Low();
+
+	err |= SPI_CONTROLLER_Write_One_Byte(OPCODE_WRDI);
+	err |= SPI_CONTROLLER_Chip_Select_High();
+	return err ? -1 : 0;
 }
 
 /* One status register write of the unprotect. A chip that does not take it
@@ -320,7 +338,6 @@ static int unprotect(int all)
 	return 0;
 }
 
-int snor_unprotect(void) { return unprotect(1); }
 
 /* the write of a status register that clears QE, and the read back; 1: it stays */
 static int snor_clear_qe_bit(u8 wr, u8 rd, u8 *sr, u8 qe)
@@ -337,7 +354,7 @@ static int snor_clear_qe_bit(u8 wr, u8 rd, u8 *sr, u8 qe)
  * Macronix chips and bit 1 of status register 2 on the others; a chip without
  * that register or bit has nothing to clear. Returns as snor_unprotect().
  */
-int snor_clear_qe(void)
+static int clear_qe(void)
 {
 	const int macronix = snor_is_macronix();
 	const u8 rd = macronix ? OPCODE_RDSR : OPCODE_RDSR2;
@@ -481,11 +498,16 @@ static int snor_4byte_mode(int enable)
 	} else {
 		u8 code = enable ? 0xb7 : 0xe9; /* B7: enter 4B, E9: exit 4B */
 
-		SPI_CONTROLLER_Chip_Select_Low();
-		retval = SPI_CONTROLLER_Write_One_Byte(code);
-		SPI_CONTROLLER_Chip_Select_High();
+		/* Micron N25Q and MT25Q, W25Q256FV and XM25Q256C/512C take B7 and E9
+		   only after a write enable; the other chips do not need one and
+		   are not hurt by it. The latch is cleared after. */
+		retval = snor_write_enable();
+		retval |= SPI_CONTROLLER_Chip_Select_Low();
+		retval |= SPI_CONTROLLER_Write_One_Byte(code);
+		retval |= SPI_CONTROLLER_Chip_Select_High();
 		if (retval) {
 			printf("%s: ret: %x\n", __func__, retval);
+			snor_write_disable();
 			return -1;
 		}
 		if ((!enable) && (spi_chip_info->id == 0xef)) /* Winbond */
@@ -493,6 +515,16 @@ static int snor_4byte_mode(int enable)
 			code = 0;
 			snor_write_enable();
 			snor_write_rg(0xc5, &code);
+		}
+		retval |= snor_write_disable();
+		if (retval) {
+			printf("%s: the write disable failed\n", __func__);
+			return -1;
+		}
+		/* a held command that failed shows with the next read */
+		if (snor_wait_ready(1)) {
+			printf("4B mode switch failed %s: the USB transfer failed\n", enable ? "enable" : "disable");
+			return -1;
 		}
 	}
 	return 0;
@@ -514,8 +546,9 @@ static int snor_erase_sector(unsigned long offset)
 	if (snor_wait_ready(950))
 		return -1;
 
-	if (spi_chip_info->addr4b) {
-		snor_4byte_mode(1);
+	if (spi_chip_info->addr4b && snor_4byte_mode(1)) {
+		snor_4byte_mode(0);	/* B7 may have gone through */
+		return -1;
 	}
 
 	/* Send write enable, then erase commands. */
@@ -534,8 +567,9 @@ static int snor_erase_sector(unsigned long offset)
 
 	ret = snor_wait_ready(950);
 
-	if (spi_chip_info->addr4b)
-		snor_4byte_mode(0);
+	/* a chip left in 4-byte mode would not boot: that fails the erase */
+	if (spi_chip_info->addr4b && snor_4byte_mode(0))
+		ret = -1;
 
 	return ret;
 }
@@ -668,7 +702,7 @@ static struct chip_info chips_data [] = {
 	{ "W25Q128BV",		0xef, 0x40180000, 64 * 1024, 256, 0 },
 	{ "W25Q128FW",		0xef, 0x60180000, 64 * 1024, 256, 0 },
 	{ "W25Q256FV",		0xef, 0x40190000, 64 * 1024, 512, 1 },
-	{ "W25Q512JV",		0xef, 0x71190000, 64 * 1024, 1024, 1 },
+	{ "W25M512JV",		0xef, 0x71190000, 64 * 1024, 1024, 1, 2 },	/* two W25Q256JV dies */
 	{ "W25Q32JWIM",		0xef, 0x80160000, 64 * 1024, 64,  0 },
 	{ "W25Q64JVIM",		0xef, 0x70170000, 64 * 1024, 128, 0 },
 	{ "W25Q64JWIM",		0xef, 0x80170000, 64 * 1024, 128, 0 },
@@ -1007,13 +1041,24 @@ const char *snor_lookup(const unsigned char id[3], unsigned long *size, unsigned
 	return NULL;
 }
 
-/* Status registers 1, 2 and 3 of the chip found by snor_init() */
+/* Status registers 1, 2 and 3 of the chip found by snor_init(); on a chip of
+   several dies, those of the die that holds addr (each die has its own) */
+int snor_read_status_at(unsigned long addr, unsigned char sr[3])
+{
+	int ret = 0;
+
+	if (snor_select_die(spi_chip_info->dies > 1 ? addr / snor_die_size() : 0) < 0 ||
+	    snor_read_sr(OPCODE_RDSR, &sr[0]) < 0 || snor_read_sr(OPCODE_RDSR2, &sr[1]) < 0 ||
+	    snor_read_sr(OPCODE_RDSR3, &sr[2]) < 0)
+		ret = -1;
+	if (snor_select_die(0) < 0)
+		ret = -1;
+	return ret;
+}
+
 int snor_read_status(unsigned char sr[3])
 {
-	if (snor_read_sr(OPCODE_RDSR, &sr[0]) < 0 || snor_read_sr(OPCODE_RDSR2, &sr[1]) < 0 ||
-	    snor_read_sr(OPCODE_RDSR3, &sr[2]) < 0)
-		return -1;
-	return 0;
+	return snor_read_status_at(0, sr);
 }
 
 long snor_init(void)
@@ -1025,11 +1070,14 @@ long snor_init(void)
 
 	bsize = spi_chip_info->sector_size;
 	flash_chip_name = spi_chip_info->name;
+	snor_die = -1;
+	if (snor_select_die(0) < 0)	/* a run stopped on another die left it selected */
+		return -1;
 
 	return spi_chip_info->sector_size * spi_chip_info->n_sectors;
 }
 
-int snor_erase(unsigned long offs, unsigned long len)
+static int snor_erase_die(unsigned long offs, unsigned long len)
 {
 	unsigned long plen = len;
 	snor_dbg("%s: offs:%x len:%x\n", __func__, offs, len);
@@ -1038,7 +1086,9 @@ int snor_erase(unsigned long offs, unsigned long len)
 	if (len == 0)
 		return -1;
 
-	if(!offs && len == (spi_chip_info->sector_size * spi_chip_info->n_sectors))
+	if (ms_stop)
+		return -1;
+	if(!offs && len == snor_die_size())
 	{
 		printf("Please Wait......\n");
 		return full_erase_chip();
@@ -1053,7 +1103,7 @@ int snor_erase(unsigned long offs, unsigned long len)
 
 	/* now erase those sectors */
 	while (len > 0) {
-		if (snor_erase_sector(offs)) {
+		if (ms_stop || snor_erase_sector(offs)) {
 			printf("\nErase failed at 0x%lx\n", offs);
 			timer_end();
 			return -1;
@@ -1074,7 +1124,7 @@ int snor_erase(unsigned long offs, unsigned long len)
 	return 0;
 }
 
-int snor_read(unsigned char *buf, unsigned long from, unsigned long len)
+static int snor_read_die(unsigned char *buf, unsigned long from, unsigned long len)
 {
 	u32 read_addr, physical_read_addr, remain_len, data_offset;
 	int failed;
@@ -1097,12 +1147,19 @@ int snor_read(unsigned char *buf, unsigned long from, unsigned long len)
 	failed = 0;
 
 	while(remain_len > 0) {
+		if (ms_stop) {
+			failed = 1;
+			break;
+		}
 
 		physical_read_addr = read_addr;
 		data_offset = (physical_read_addr % (spi_chip_info->sector_size));
 
-		if (spi_chip_info->addr4b)
-			snor_4byte_mode(1);
+		if (spi_chip_info->addr4b && snor_4byte_mode(1)) {
+			snor_4byte_mode(0);	/* B7 may have gone through */
+			failed = 1;
+			break;
+		}
 
 		SPI_CONTROLLER_Chip_Select_Low();
 
@@ -1144,8 +1201,11 @@ int snor_read(unsigned char *buf, unsigned long from, unsigned long len)
 
 		SPI_CONTROLLER_Chip_Select_High();
 
-		if (spi_chip_info->addr4b)
-			snor_4byte_mode(0);
+		/* a chip left in 4-byte mode would not boot: that fails the read */
+		if (spi_chip_info->addr4b && snor_4byte_mode(0)) {
+			failed = 1;
+			break;
+		}
 	}
 	if (failed) {
 		printf("\nRead failed at 0x%08x after [%lu] of [%lu] bytes\n", read_addr, len - remain_len, len);
@@ -1218,6 +1278,8 @@ static int snor_write_aai(unsigned char *buf, unsigned long to, unsigned long le
 	while (len >= 2) {
 		int err = 0;
 
+		if (ms_stop)
+			goto fail;
 		if (!aai)
 			snor_write_enable();
 		err |= SPI_CONTROLLER_Chip_Select_Low();
@@ -1264,7 +1326,7 @@ fail:
 	return plen - len;
 }
 
-int snor_write(unsigned char *buf, unsigned long to, unsigned long len)
+static int snor_write_die(unsigned char *buf, unsigned long to, unsigned long len)
 {
 	u32 page_offset, page_size;
 	int rc = 0, retlen = 0;
@@ -1276,7 +1338,7 @@ int snor_write(unsigned char *buf, unsigned long to, unsigned long len)
 	if (len == 0)
 		return 0;
 
-	if (to + len > spi_chip_info->sector_size * spi_chip_info->n_sectors)
+	if (to + len > snor_die_size())
 		return -1;
 
 	timer_start();
@@ -1298,8 +1360,11 @@ int snor_write(unsigned char *buf, unsigned long to, unsigned long len)
 	/* what page do we start with? */
 	page_offset = to % FLASH_PAGESIZE;
 
-	if (spi_chip_info->addr4b)
-		snor_4byte_mode(1);
+	if (spi_chip_info->addr4b && snor_4byte_mode(1)) {
+		snor_4byte_mode(0);
+		timer_end();
+		return -1;
+	}
 
 	/* write everything in PAGESIZE chunks */
 	while (len > 0) {
@@ -1312,6 +1377,8 @@ int snor_write(unsigned char *buf, unsigned long to, unsigned long len)
 			retlen -= rc;
 			break;
 		}
+		if (ms_stop)	/* Ctrl+C: the pages so far are written */
+			break;
 		snor_write_enable();
 
 		SPI_CONTROLLER_Chip_Select_Low();
@@ -1344,7 +1411,10 @@ int snor_write(unsigned char *buf, unsigned long to, unsigned long len)
 			if (rc < page_size) {
 				printf("%s: rc:%x page_size:%x\n",
 						__func__, rc, page_size);
+				if (spi_chip_info->addr4b)
+					snor_4byte_mode(0);
 				snor_write_disable();
+				timer_end();
 				return retlen - rc;
 			}
 		}
@@ -1357,8 +1427,13 @@ int snor_write(unsigned char *buf, unsigned long to, unsigned long len)
 	if (len == 0 && snor_wait_ready(3))	/* the last page */
 		retlen -= rc;
 
-	if (spi_chip_info->addr4b)
-		snor_4byte_mode(0);
+	/* a chip left in 4-byte mode would not boot: that fails the write */
+	if (spi_chip_info->addr4b && snor_4byte_mode(0)) {
+		printf("\nThe chip did not leave the 4-byte mode\n");
+		snor_write_disable();
+		timer_end();
+		return -1;
+	}
 
 	snor_write_disable();
 
@@ -1371,6 +1446,102 @@ int snor_write(unsigned char *buf, unsigned long to, unsigned long len)
 
 	return retlen;
 }
+
+static int snor_select_die(int die)
+{
+	int err = 0;
+
+	if (spi_chip_info->dies < 2 || die == snor_die)
+		return 0;
+	if (snor_wait_ready(1))
+		return -1;
+	err |= SPI_CONTROLLER_Chip_Select_Low();
+	err |= SPI_CONTROLLER_Write_One_Byte(OPCODE_DIE_SELECT);
+	err |= SPI_CONTROLLER_Write_One_Byte((u8)die);
+	err |= SPI_CONTROLLER_Chip_Select_High();
+	snor_die = err ? -1 : die;
+	return err ? -1 : 0;
+}
+
+/* each die gets its part of the range; die 0 is selected again at the end,
+   as after power-up. Returns the bytes done (read and write), or 0 / -1. */
+enum { DIE_READ, DIE_WRITE, DIE_ERASE };
+
+static int snor_on_dies(int op, unsigned char *buf, unsigned long addr, unsigned long len)
+{
+	const unsigned long dsize = snor_die_size();
+	unsigned long done = 0;
+	int ret = 0;
+
+	if (spi_chip_info->dies < 2)
+		return op == DIE_READ ? snor_read_die(buf, addr, len) :
+		       op == DIE_WRITE ? snor_write_die(buf, addr, len) : snor_erase_die(addr, len);
+	/* nothing to do, as on one die: an erase of nothing fails, a read or a write of it is 0 */
+	if (!len)
+		return op == DIE_ERASE ? -1 : 0;
+	/* a range past the chip end (len may come from a negative number) */
+	if (addr > dsize * spi_chip_info->dies || len > dsize * spi_chip_info->dies - addr)
+		return -1;
+	while (done < len) {
+		const unsigned long a = (addr + done) % dsize;
+		const unsigned long k = len - done < dsize - a ? len - done : dsize - a;
+
+		if (ms_stop || snor_select_die((addr + done) / dsize) < 0) {
+			ret = -1;
+			break;
+		}
+		ret = op == DIE_READ ? snor_read_die(buf ? buf + done : NULL, a, k) :
+		      op == DIE_WRITE ? snor_write_die(buf + done, a, k) : snor_erase_die(a, k);
+		if (op == DIE_ERASE ? ret != 0 : ret != (int)k) {
+			if (op != DIE_ERASE && ret > 0)
+				done += ret;
+			ret = -1;
+			break;
+		}
+		done += k;
+	}
+	/* the chip must be on die 0 again, or what comes next goes to the other die */
+	if (snor_select_die(0) < 0) {
+		printf("\nDie 0 could not be selected again\n");
+		ret = -1;
+		if (op == DIE_WRITE)
+			return -1;
+	}
+	if (op == DIE_ERASE)
+		return ret < 0 ? -1 : 0;
+	return ret < 0 && op == DIE_READ ? -1 : (int)done;
+}
+
+int snor_read(unsigned char *buf, unsigned long from, unsigned long len)
+{
+	return snor_on_dies(DIE_READ, buf, from, len);
+}
+
+int snor_write(unsigned char *buf, unsigned long to, unsigned long len)
+{
+	return snor_on_dies(DIE_WRITE, buf, to, len);
+}
+
+int snor_erase(unsigned long offs, unsigned long len)
+{
+	return snor_on_dies(DIE_ERASE, NULL, offs, len);
+}
+
+/* -u and -uu: on every die */
+static int snor_each_die(int (*fn)(void))
+{
+	int ret = 0;
+
+	for (int d = 0; d < (spi_chip_info->dies > 1 ? spi_chip_info->dies : 1) && !ret; d++)
+		ret = ms_stop || snor_select_die(d) < 0 ? -1 : fn();
+	if (snor_select_die(0) < 0 && !ret)
+		ret = -1;
+	return ret;
+}
+
+static int unprotect_all(void) { return unprotect(1); }
+int snor_unprotect(void) { return snor_each_die(unprotect_all); }
+int snor_clear_qe(void) { return snor_each_die(clear_qe); }
 
 void support_snor_list(void)
 {

@@ -4,6 +4,20 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.26.0 — 2026-11-07
+
+- SPI NOR over 16 MB: a write enable goes before the commands that enter and leave the 4-byte
+  address mode. Micron N25Q and MT25Q, W25Q256FV and XM25Q256C/512C take them only after one;
+  without it they stayed in 3-byte mode, and an erase or a write above 16 MB went to the start
+  of the chip. The write enable latch is cleared after.
+- Ctrl+C stops an operation at its next step, out of the 4-byte address mode and with chip
+  select high, instead of leaving a chip in that mode (a board then does not boot from it
+  until a power cycle). A second Ctrl+C quits at once.
+- The chip with the ID `EF 71 19`, listed as W25Q512JV, is the W25M512JV: two W25Q256JV dies
+  of 32 MB. Each die is now selected with the die select command (C2h) for its part of a
+  read, write or erase, and `-u` and `-uu` go over both; the upper 32 MB used to go to the
+  first die. The W25Q512JV, `EF 40 20`, stays as it was.
+
 ## 1.25.1 — 2026-11-05
 
 - Android app: the message of the last operation goes away when the next one starts, so an old

@@ -229,6 +229,10 @@ clears QE as well, SPI NOR on the command line only. QE turns the WP# and HOLD# 
 lines, and a board that reads the chip in quad mode may not boot without it. Some chips have
 it fixed at the factory: then `-uu` says that it stays.
 
+Ctrl+C stops an operation at its next step, where the chip is left as after a whole command:
+out of its 4-byte address mode (chips over 16 MB), with the first die selected (a chip of two
+stacked dies), so a board boots from it. A second Ctrl+C quits at once.
+
 `-t` is a quick check of the chip, with nothing to prepare: it reads the protection bits
 (SPI NOR: BP, TB, CMP, SRP in the status registers; SPI NAND: the block lock register), then
 takes one block — the first by default, where a locked loader usually is, or the one at `-a` —
@@ -433,7 +437,8 @@ Microelectronics FM25Q, GigaDevice, Macronix, Spansion, XMC, XTX, Zbit, Giantec
 GM25Q, ISSI, Micron, Boya, Puya and others) and 135 SPI NAND chips (Etron, GigaDevice, Heyang, Foresee, ESMT, Dosilicon, XTX,
 Micron, Toshiba/Kioxia, Winbond, Macronix and others).
 A chip that is not on the list is reported as not detected; its ID from the
-output helps to add it.
+output helps to add it. The Winbond W25M512JV, two W25Q256JV dies in one package, is
+read, written and erased as one 64 MB chip.
 
 ## Chip voltage
 

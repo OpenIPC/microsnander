@@ -14,7 +14,9 @@
 #include <sys/time.h>
 #include "flashcmd_api.h"
 #include "selftest.h"
+#include "timer.h"
 #include <stdarg.h>
+#include <signal.h>
 
 /* a line of the result: to the console, and kept in t->out for the web
    mode and the app (the lines one after the other) */
@@ -119,6 +121,8 @@ static int protection(const struct selftest *t, char *why, size_t n)
 	return on;
 }
 
+#define STOPPED "Self-test: stopped by Ctrl+C; the block gets its data back.\n"
+
 int selftest(const struct selftest *t)
 {
 	unsigned long n = t->block;
@@ -156,7 +160,8 @@ int selftest(const struct selftest *t)
 		goto out;
 	}
 	if (t->cmd->flash_read(orig, a, n) != (int)n || t->cmd->flash_read(buf, a, n) != (int)n) {
-		report(t, "Self-test: FAILED, the block does not read.\n");
+		report(t, ms_stop ? "Self-test: stopped by Ctrl+C; nothing was changed.\n" :
+			  "Self-test: FAILED, the block does not read.\n");
 		goto out;
 	}
 	if (memcmp(orig, buf, n)) {
@@ -172,6 +177,10 @@ int selftest(const struct selftest *t)
 		goto out;
 	}
 
+	if (ms_stop) {				/* stopped after the reads: nothing changed yet */
+		report(t, "Self-test: stopped by Ctrl+C; nothing was changed.\n");
+		goto out;
+	}
 	t0 = now();
 	changed = 1;
 	int e = t->cmd->flash_erase(a, n);
@@ -179,6 +188,10 @@ int selftest(const struct selftest *t)
 	int got = t->cmd->flash_read(buf, a, n) == (int)n;
 	long d = got ? first_not_ff(buf, n) : 0;
 
+	if (ms_stop) {
+		report(t, STOPPED);
+		goto restore;
+	}
 	if (e || !got || d >= 0) {
 		int same = got && !memcmp(buf, orig, n);	/* nothing happened to it */
 
@@ -202,12 +215,12 @@ int selftest(const struct selftest *t)
 		pat[i] = pattern(a + i);
 	t0 = now();
 	if (t->cmd->flash_write(pat, a, n) != (int)n) {
-		report(t, "Self-test: FAILED, the write command fails.\n");
+		report(t, ms_stop ? STOPPED : "Self-test: FAILED, the write command fails.\n");
 		goto restore;
 	}
 	t_write = now() - t0;
 	if (t->cmd->flash_read(buf, a, n) != (int)n) {
-		report(t, "Self-test: FAILED, the written block does not read back.\n");
+		report(t, ms_stop ? STOPPED : "Self-test: FAILED, the written block does not read back.\n");
 		goto restore;
 	}
 	d = first_diff(buf, pat, n);
@@ -222,10 +235,23 @@ restore:
 		goto out;
 	{
 		int blank = first_not_ff(orig, n) < 0;
+		/* after a Ctrl+C the block still gets its data back: Ctrl+C waits
+		   until it is back (the signals are held for that long) */
+		sig_atomic_t stop = ms_stop;
+		sigset_t hold, old;
+		int bad;
 
-		if (t->cmd->flash_erase(a, n) ||
-		    (!blank && t->cmd->flash_write(orig, a, n) != (int)n) ||
-		    t->cmd->flash_read(buf, a, n) != (int)n || memcmp(buf, orig, n)) {
+		sigemptyset(&hold);
+		sigaddset(&hold, SIGINT);
+		sigaddset(&hold, SIGTERM);
+		sigprocmask(SIG_BLOCK, &hold, &old);
+		ms_stop = 0;
+		bad = t->cmd->flash_erase(a, n) ||
+		      (!blank && t->cmd->flash_write(orig, a, n) != (int)n) ||
+		      t->cmd->flash_read(buf, a, n) != (int)n || memcmp(buf, orig, n);
+		sigprocmask(SIG_SETMASK, &old, NULL);	/* a Ctrl+C held now comes */
+		ms_stop = stop || ms_stop;		/* and counts, as the one before */
+		if (bad) {
 			char base[120], *name;
 			FILE *f = NULL;
 
@@ -256,6 +282,10 @@ restore:
 			ret = 1;
 			goto out;
 		}
+	}
+	if (ret == 0 && ms_stop) {		/* stopped after the test passed: not a finished run */
+		report(t, STOPPED);
+		ret = 1;
 	}
 	if (ret == 0) {
 		char te[16], tw[16];

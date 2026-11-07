@@ -55,6 +55,8 @@ t 1 "-W with -I is an error"          $B -W 8080 -I
 t 1 "-l that is not a number"         $B -r x.bin -l 12abc
 t 1 "-a that is not a number"         $B -r x.bin -a zz
 t 1 "-o without -W is an error"       $B -o /tmp -i
+t 1 "-e -a past the chip end"          $B -e -a 0x20000
+t 1 "-r -l past the chip end"          $B -r x.bin -a 0x8000 -l 0x9000
 $B -W 127.0.0.1:8080 -K pw -o /srv -a 0x1000 -l 0x2000 | grep -q '^web: 127.0.0.1:8080 key=pw dir=/srv addr=0x1000 len=0x2000' && echo "ok   -W passes the address, password, dump directory and range" || { echo "FAIL -W arguments"; fail=1; }
 $B -h | grep -q '^ -W ' && $B -h | grep -q '^ -K ' && $B -h | grep -q '^ -o ' && echo "ok   -h lists -W, -K and -o" || { echo "FAIL -h without -W/-K/-o"; fail=1; }
 t 1 "-P ezp -S 15M is an error"       $B -P ezp -S 15M -i
@@ -97,6 +99,12 @@ MS_PROTECT=1 $B -t | grep -q 'no register bit says so' && echo "ok     a block t
 t 1 "-t, a write that does not take"  MS_CORRUPT=5 $B -t
 cp before.img chip.img; MS_CORRUPT=5 $B -t | grep -q 'the write does not take: .* at 0x5,' && head -c 4096 before.img | cmp -s - selftest-W25Q80-0x0.bin && echo "ok     the bad byte and its address; the old block saved to selftest-W25Q80-0x0.bin" || { echo "FAIL -t corrupt"; fail=1; }
 rm -f selftest-*.bin
+cp before.img chip.img; MS_FAIL=stop $B -t > stop.log; [ $? = 1 ] && grep -q 'stopped by Ctrl+C' stop.log && cmp -s chip.img before.img && [ ! -e selftest-W25Q80-0x0.bin ] && echo "ok   -t stopped by Ctrl+C after the erase: the block gets its data back, exit 1" || { echo "FAIL -t Ctrl+C"; cat stop.log | tail -3; fail=1; }
+cp before.img chip.img; MS_FAIL=stoprestore $B -t > stop.log; [ $? = 1 ] && grep -q 'stopped by Ctrl+C' stop.log && cmp -s chip.img before.img && [ ! -e selftest-W25Q80-0x0.bin ] && echo "ok   -t: a Ctrl+C during the restore waits until the block is back, exit 1" || { echo "FAIL -t Ctrl+C in restore"; tail -3 stop.log; fail=1; }
+head -c 65536 /dev/urandom > chip.img; cp chip.img before.img; MS_FAIL=stopread $B -t > stop.log; [ $? = 1 ] && grep -q 'nothing was changed' stop.log && cmp -s chip.img before.img && echo "ok   -t: Ctrl+C during the second read, nothing erased, exit 1" || { echo "FAIL -t Ctrl+C after reads"; tail -3 stop.log; fail=1; }
+rm -f selftest-*.bin stop.log
+MS_FAIL=stopwrite $B -w img.bin > stop.log; [ $? = 1 ] && grep -q 'Status: BAD, wrote 0x10000 of 0x10000 bytes' stop.log && grep -q 'Stopped by Ctrl+C' stop.log && echo "ok   a write stopped by Ctrl+C says how much was written, exit 1" || { echo "FAIL stopped write count"; tail -3 stop.log; fail=1; }
+rm -f stop.log
 t 1 "-t, an erase that fails"         MS_FAIL=erase $B -t
 MS_FAIL=erase $B -t | grep -q 'the erase command fails' && echo "ok     a failing erase command is FAILED, not PROTECTED" || { echo "FAIL -t erase fail"; fail=1; }
 t 1 "-t on SPI NAND, not block 0"     MS_CHIP=nand $B -t -a 0x20000

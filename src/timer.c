@@ -21,6 +21,7 @@
 static time_t start_time = 0;
 static time_t print_time = 0;
 int timer_quiet = 0;
+volatile sig_atomic_t ms_stop;
 
 void timer_start(void)
 {
