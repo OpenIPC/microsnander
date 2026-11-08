@@ -330,6 +330,8 @@ int Erase_marked_blocks = 0;	/* -ee: the blocks with a factory bad mark are eras
 #ifndef SPI_NAND_OIP_TIMEOUT_MS
 #define SPI_NAND_OIP_TIMEOUT_MS		3000
 #endif
+/* Reads of a page with an ECC error the chip cannot correct before it fails */
+#define SPI_NAND_READ_TRIES		3
 unsigned long long Skip_BAD_end = 0;	/* -k keeps the data below this address; 0: the chip end */
 
 static u8 plane_column_high( u32 column, u32 page_size );
@@ -4293,11 +4295,6 @@ static SPI_NAND_FLASH_RTN_T ecc_fail_check( u32 page_number, u8 status )
 		}
 	}
 
-	if(rtn_status == SPI_NAND_FLASH_RTN_DETECTED_BAD_BLOCK)
-	{
-		_SPI_NAND_PRINTF("[spinand_ecc_fail_check] : ECC cannot recover detected !, page = 0x%x\n", page_number);
-	}
-
 	return (rtn_status);
 }
 
@@ -4394,20 +4391,36 @@ static SPI_NAND_FLASH_RTN_T spi_nand_load_page_into_cache( u32 page_number)
 	}
 	else
 	{
-		spi_nand_select_die ( page_number );
+		int tries;
 
-		spi_nand_protocol_page_read ( page_number );
+		/* An ECC error the chip could not correct may be a weak read of a
+		   cell near its threshold, or noise on the lines: the page is read
+		   from the array again before it counts as failed. */
+		for( tries = 1; ; tries++ )
+		{
+			spi_nand_select_die ( page_number );
 
-		/*  Checking status for load page/erase/program complete */
-		rtn_status = spi_nand_wait_ready( &status, "Page read", page_number );
-		if( rtn_status != SPI_NAND_FLASH_RTN_NO_ERROR )
-			return rtn_status;
+			spi_nand_protocol_page_read ( page_number );
 
-		_SPI_NAND_DEBUG_PRINTF(SPI_NAND_FLASH_DEBUG_LEVEL_1, "spi_nand_load_page_into_cache : status = 0x%x\n", status);
-		if (ECC_fcheck && !ECC_ignore)
+			/*  Checking status for load page/erase/program complete */
+			rtn_status = spi_nand_wait_ready( &status, "Page read", page_number );
+			if( rtn_status != SPI_NAND_FLASH_RTN_NO_ERROR )
+				return rtn_status;
+
+			_SPI_NAND_DEBUG_PRINTF(SPI_NAND_FLASH_DEBUG_LEVEL_1, "spi_nand_load_page_into_cache : status = 0x%x\n", status);
+			if( !ECC_fcheck || ECC_ignore )
+				return SPI_NAND_FLASH_RTN_NO_ERROR;
 			rtn_status = ecc_fail_check(page_number, status);
-		else
-			rtn_status = 0;
+			if( rtn_status != SPI_NAND_FLASH_RTN_DETECTED_BAD_BLOCK )
+				break;
+			if( tries == SPI_NAND_READ_TRIES || ms_stop )
+			{
+				_SPI_NAND_PRINTF("\nPage 0x%x: an ECC error the chip cannot correct, in %d reads\n", page_number, tries);
+				return rtn_status;
+			}
+		}
+		if( tries > 1 )
+			_SPI_NAND_PRINTF("\nPage 0x%x: an ECC error the chip cannot correct, read %d is good\n", page_number, tries);
 	}
 
 	return (rtn_status);
@@ -4803,11 +4816,6 @@ static SPI_NAND_FLASH_RTN_T spi_nand_read_page (u32 page_number, SPI_NAND_FLASH_
 	rtn_status = spi_nand_load_page_into_cache(page_number);
 	if( spi_nand_stopped(rtn_status) )
 		return rtn_status;
-	if( rtn_status == SPI_NAND_FLASH_RTN_DETECTED_BAD_BLOCK )
-	{
-		_SPI_NAND_PRINTF("spi_nand_read_page: Bad Block, ECC cannot recovery detecte, page = 0x%x\n", page_number);
-		rtn_status = SPI_NAND_FLASH_RTN_DETECTED_BAD_BLOCK;
-	}
 
 	/* 2. Read whole data from cache of NAND Flash Chip */
 	_SPI_NAND_DEBUG_PRINTF(SPI_NAND_FLASH_DEBUG_LEVEL_1, "spi_nand_read_page: curren_page_num = 0x%x, page_number = 0x%x\n", _current_page_num, page_number);

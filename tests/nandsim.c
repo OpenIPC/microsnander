@@ -39,6 +39,9 @@ static unsigned char feat[256];
 static unsigned char cmd[16];
 static unsigned int ncmd, nread;
 static long ecc_bad[MAXBAD], prog_fail[MAXBAD], erase_fail[MAXBAD];	/* erase_fail: block numbers */
+static long ecc_flaky = -1;		/* this page fails ECC on its next ecc_flaky_left reads */
+static int ecc_flaky_left;
+static unsigned npage_reads;		/* page reads (13h) since the counter was cleared */
 static unsigned int nprog;		/* program executes (0x10) */
 static int col_hi_read = -1, col_hi_load = -1;	/* high column byte of the last read from cache / program load */
 static int stuck_busy;			/* the status register always shows OIP */
@@ -125,7 +128,12 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Chip_Select_High(void)
 	case 0x13:				/* page read: ECC result in status bits 5:4 */
 		memcpy(cache, mem + row() * (PAGE + OOB), sizeof(cache));
 		loaded = row();
+		npage_reads++;
 		feat[0xc0] = (feat[0xc0] & ~0x30) | (in(ecc_bad, row()) ? 0x20 : 0);
+		if (row() == ecc_flaky && ecc_flaky_left > 0) {
+			ecc_flaky_left--;
+			feat[0xc0] |= 0x20;
+		}
 		break;
 	case 0x10:				/* program execute */
 		if (busy_after >= 0 && (int)nprog >= busy_after) stuck_busy = 1;
@@ -164,6 +172,7 @@ static void chip(unsigned char a, unsigned char b, unsigned char c)
 	memset(mem, 0xff, (size_t)PAGES * (PAGE + OOB));
 	memset(feat, 0, sizeof(feat));
 	for (int i = 0; i < MAXBAD; i++) ecc_bad[i] = prog_fail[i] = erase_fail[i] = -1;
+	ecc_flaky = -1;
 	Skip_BAD_page = 0;
 	nprog = 0;
 	stuck_busy = 0;
@@ -411,6 +420,35 @@ int main(void)
 	ecc_bad[0] = 50;
 	check(snand_read(got, 50L * PAGE, PAGE) < 0 && snand_read(got, 50L * PAGE, PAGE) < 0,
 	      "an ECC-failed page fails again on the second read");
+
+	/* an ECC error is read again before it fails: three reads of the page */
+	chip(0xef, 0xaa, 0x21);
+	snand_init();
+	ecc_bad[0] = 52;
+	npage_reads = 0;
+	check(snand_read(got, 52L * PAGE, PAGE) < 0 && npage_reads == 3,
+	      "a page with an ECC error is read three times before the read fails");
+	ecc_bad[0] = -1;
+	/* an error that goes away on the next read is no failure */
+	memset(mem + 53L * (PAGE + OOB), 0x5a, PAGE);
+	ecc_flaky = 53;
+	ecc_flaky_left = 1;
+	npage_reads = 0;
+	check(snand_read(got, 53L * PAGE, PAGE) == PAGE && npage_reads == 2 && got[0] == 0x5a && got[PAGE - 1] == 0x5a,
+	      "an ECC error that the second read does not have: the read goes on with its data");
+	ecc_flaky = 54;
+	ecc_flaky_left = 2;
+	npage_reads = 0;
+	check(snand_read(got, 54L * PAGE, PAGE) == PAGE && npage_reads == 3,
+	      "  also when only the third read is good");
+	ecc_flaky = -1;
+	/* -I: no ECC check, so no second read */
+	ecc_bad[0] = 55;
+	ECC_ignore = 1;
+	npage_reads = 0;
+	check(snand_read(got, 55L * PAGE, PAGE) == PAGE && npage_reads == 1, "-I reads a page once");
+	ECC_ignore = 0;
+	ecc_bad[0] = -1;
 
 	/* pages of all 0xFF are not programmed: nothing would change on the chip */
 	chip(0xef, 0xaa, 0x21);

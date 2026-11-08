@@ -230,7 +230,9 @@ check (the clip or socket and pin 1, the power, a SoC that holds the bus).
 
 SPI NAND chips are read and written with their internal ECC by default: the file
 holds the data pages only. With `-d` the ECC is off and every page is read and
-written with its OOB (spare) area, for a raw dump.
+written with its OOB (spare) area, for a raw dump. A page with an ECC error the chip
+cannot correct is read from the array up to three times: an error that the next read
+does not have is no failure, and the page is printed.
 
 With `-k` a page that fails ECC on read or fails to program is skipped and the
 data goes on in the next page, so everything after it shifts by a page; each
