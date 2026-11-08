@@ -14,7 +14,7 @@ MicroSNANDer — программатор микросхем флеш-памят
 USB-программаторов CH341A, CH347 и EZP, всего шесть моделей: консольная программа со
 встроенной веб-страницей и приложение для Android. Он читает, записывает, стирает и проверяет
 флеш камер, роутеров и других плат, снимает защиту от записи с микросхем SPI NOR и
-знает 434 микросхемы SPI NOR и 135 микросхем SPI NAND. Каждый файл релиза занимает около
+знает 434 микросхемы SPI NOR и 167 микросхем SPI NAND. Каждый файл релиза занимает около
 200–270 КБ.
 
 Это урезанная, дополненная, глубоко модифицированная и оптимизированная версия
@@ -465,7 +465,7 @@ microsnander -m sigmastar -w u-boot.bin -v       # рабочий загрузч
 
 `microsnander -L` выводит список: 434 микросхемы SPI NOR (Winbond, Eon, Fudan
 Microelectronics FM25Q, GigaDevice, Macronix, Spansion, XMC, XTX, Zbit, Giantec
-GM25Q, ISSI, Micron, Boya, Puya и другие) и 135 микросхем SPI NAND (Etron, GigaDevice, Heyang, Foresee, ESMT, Dosilicon, XTX,
+GM25Q, ISSI, Micron, Boya, Puya и другие) и 167 микросхем SPI NAND (Etron, GigaDevice, Heyang, Foresee, ESMT, Dosilicon, XTX,
 Micron, Toshiba/Kioxia, Winbond, Macronix и другие). Микросхема SPI NOR не из списка,
 у которой есть таблица SFDP (JESD216; она есть у большинства микросхем примерно с 2011 года),
 определяется по ней: размер, стирание сектора и 4-байтный режим берутся у самой микросхемы, а
@@ -479,8 +479,9 @@ Micron, Toshiba/Kioxia, Winbond, Macronix и другие). Микросхема
 узнаёт его по названию микросхемы: 107 микросхем SPI NOR из списка рассчитаны на 1,8 В
 (GigaDevice GD25L, Macronix MX25U, Winbond W25Q..W, Micron N25Q..A11 и MT25QU, XMC XM25QU и
 XM25LU, Zbit ZB25LQ, Boya BY25Q..L, ISSI IS25WP и IS25WQ, Eon EN25S, Fudan FM25M, Adesto AT25DL,
-Microchip SST25WF, Dosilicon DS25M), и 20 микросхем SPI NAND тоже (GigaDevice
-GD5F..R, Winbond W25N..W, Macronix MX35UF, Micron MT29F..ABB, ESMT F50D, Dosilicon DS35M).
+Microchip SST25WF, Dosilicon DS25M), и 45 микросхем SPI NAND тоже (GigaDevice
+GD5F..R, Winbond W25N..W, Macronix MX35UF, Micron MT29F..ABB и MT29F..ADB, ESMT F50D, Dosilicon
+DS35M, Kioxia TC58CY и TH58CY, Etron EM78, XTX XT26Q).
 Их подключают через переходник на 1,8 В: на 3,3 В чтение ненадёжно, а микросхема может
 повредиться. GigaDevice GD25W, XMC XM25QW, Fudan FM25W, Macronix MX25R и Adesto AT25DF021A работают от 1,65–3,6 В и подключаются
 как есть.

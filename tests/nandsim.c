@@ -229,6 +229,12 @@ int main(void)
 			"MXIC MX35UF1G14AC", "MXIC MX35UF2G14AC", "MXIC MX35UF1GE4AD", "MXIC MX35UF2GE4AD", "MXIC MX35UF4GE4AD",
 			"MICRON MT29F2G01ABB", "MICRON MT29F4G01ABB", "ESMT F50D1G41LB(2M)", "DS DS35M1GA", "DS DS35M2GA",
 			"DS DS35M2GB", "DS DS35M2GBS",
+			"MXIC MX35UF1GE4AC", "MXIC MX35UF1G24AD", "MXIC MX35UF2GE4AC", "MXIC MX35UF2G24AD", "MXIC MX35UF4G24AD",
+			"WINBOND W25N512GW", "WINBOND W25N01JW", "WINBOND W25N02KW", "TOSHIBA TC58CYG0S3H", "TOSHIBA TC58CYG1S3H",
+			"TOSHIBA TC58CYG2S0H", "KIOXIA TC58CYG0S3HRAIJ", "KIOXIA TC58CYG1S3HRAIJ", "KIOXIA TC58CYG2S0HRAIJ",
+			"KIOXIA TH58CYG3S0HRAIJ", "MICRON MT29F8G01ADBFD", "GIGADEVICE GD5F1GQ4RExxH", "GIGADEVICE GD5F2GQ4RE",
+			"GIGADEVICE GD5F2GQ5RExxH", "GIGADEVICE GD5F4GQ4RC", "GIGADEVICE GD5F4GM8RE", "XTX XT26Q01D",
+			"ETRON EM78D044VCF", "ETRON EM78E044VCA", "ETRON EM78F044VCA",
 		};
 		int wrong = 0, n18 = 0;
 		for (int i = 0; i < n; i++) {
@@ -371,6 +377,30 @@ int main(void)
 	snand_init();
 	snand_read(got, 64L * 2048, 16);
 	check(col_hi_read == 0x10, "2 KB page, plane 1: plane bit is column bit 12");
+
+	/* the new chips: an uncorrectable ECC status (bits 5:4 = 10) fails the read */
+	{
+		static const unsigned char ids[][3] = {
+			{ 0xc8, 0xc9, 0 }, { 0xc8, 0x95, 0 }, { 0x0b, 0xe3, 0 }, { 0x0b, 0x51, 0 }, { 0xd5, 0x22, 0 },
+			{ 0x98, 0xb2, 0 }, { 0x98, 0xd2, 0x40 }, { 0xc2, 0x92, 0x01 }, { 0xef, 0xaa, 0x20 }, { 0x2c, 0x9f, 0 },
+		};
+		int missed = 0;
+
+		for (unsigned i = 0; i < sizeof(ids) / sizeof(ids[0]); i++) {
+			chip(ids[i][0], ids[i][1], ids[i][2]);
+			if (snand_init() <= 0) { printf("     %02x %02x %02x: not detected\n", ids[i][0], ids[i][1], ids[i][2]); missed++; continue; }
+			ecc_bad[0] = 3;
+			if (snand_read(got, 3L * PAGE, 16) >= 0) {
+				printf("     %s: the ECC failure is not seen\n", (_SPI_NAND_GET_DEVICE_INFO_PTR)->ptr_name);
+				missed++;
+			}
+		}
+		check(!missed, "new SPI NAND chips: an uncorrectable ECC status fails the read");
+		chip(0xc8, 0xa4, 0x68);			/* GD5F4GQ4RC: 3-bit status, only 111 is uncorrectable */
+		snand_init();
+		ecc_bad[0] = 3;
+		check(snand_read(got, 3L * PAGE, 16) == 16, "  GD5F4GQ4RC: 010 is a corrected error, not a failure");
+	}
 
 	/* a page with an ECC error is not served from the driver cache on the next read */
 	chip(0xef, 0xaa, 0x21);
