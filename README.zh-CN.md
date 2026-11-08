@@ -12,8 +12,8 @@
 
 MicroSNANDer 是一个 SPI NOR 和 SPI NAND 闪存芯片编程工具，配合廉价的 CH341A、CH347 和 EZP USB
 编程器（共六种型号）使用，包括内置网页的 Linux 命令行程序和适用于 Android 手机及电视盒的应用。它可以读取、写入、擦除、校验和比较摄像机、
-路由器及其他开发板的闪存，解除 SPI NOR 芯片的写保护，保留 SPI NAND 芯片的出厂坏块，支持 434 款 SPI NOR 和
-167 款 SPI NAND 芯片；不在列表中的 SPI NOR 芯片按其自身的 SFDP 表识别。
+路由器及其他开发板的闪存，解除 SPI NOR 芯片的写保护，保留 SPI NAND 芯片的出厂坏块，支持 440 款 SPI NOR 和
+170 款 SPI NAND 芯片；不在列表中的 SPI NOR 芯片按其自身的 SFDP 表识别。
 每个发布文件约 240–290 KB。
 
 它是 McMCC 的 [SNANDer](https://github.com/McMCCRU/SNANDer) 1.7.4 经过精简、增强、深度修改和优化的版本：
@@ -434,9 +434,9 @@ microsnander -m sigmastar -w u-boot.bin -v       # 写入可用的引导程序
 
 ## 支持的芯片
 
-`microsnander -L` 会列出支持的芯片：434 款 SPI NOR 芯片（Winbond、Eon、Fudan
+`microsnander -L` 会列出支持的芯片：440 款 SPI NOR 芯片（Winbond、Eon、Fudan
 Microelectronics FM25Q、GigaDevice、Macronix、Spansion、XMC、XTX、Zbit、Giantec
-GM25Q、ISSI、Micron、Boya、Puya 等）和 167 款 SPI NAND 芯片（Etron、GigaDevice、Heyang、Foresee、ESMT、Dosilicon、XTX、Micron、
+GM25Q、ISSI、Micron、Boya、Puya 等）和 170 款 SPI NAND 芯片（Etron、GigaDevice、Heyang、Foresee、ESMT、Dosilicon、XTX、Micron、
 Toshiba/Kioxia、Winbond、Macronix 等）。不在列表中但带有 SFDP 表（JESD216；约
 2011 年以后的大多数芯片都有）的 SPI NOR 芯片会按该表识别：容量、扇区擦除和 4 字节模式都取自芯片本身，
 名称为 `SFDP-` 加其 ID。两者都没有的芯片会显示为未检测到；输出中的芯片 ID 可用于添加该芯片。Winbond W25M512JV 在一个封装内含两个 W25Q256JV 晶粒，

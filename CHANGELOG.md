@@ -4,6 +4,18 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.37.0 — 2026-11-08
+
+- SPI NOR: XT25Q32F, XT25Q256F, XT25W512B, ZB25VQ32D, PY25F256LD and PY25F512LD added, checked
+  against their datasheets (the XT25Q32F against two chip databases, Linux among them).
+  0B6018 is the XT25Q128D, as its datasheet says, and 0B4015 the XT25F16B, as Linux names it;
+  they were listed as XT25F128D and XT25F32B.
+- The 1.8 V warning now covers the XTX XT25Q series and the Puya PY25F..L series; the XT25W
+  series is shown as 1.65-3.6 V.
+- SPI NAND: Fudan FM25G04C, FM25LG01B and FM25LG02B added from their datasheets. The two
+  FM25LG chips are 1.8 V and keep the on-die ECC switch in the feature register B0h, not in
+  90h like the other Fudan chips here.
+
 ## 1.36.0 — 2026-11-08
 
 - CH347: the chip select goes inside the SPI data frames on the CH347T with firmware 0341 or
