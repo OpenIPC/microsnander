@@ -60,6 +60,17 @@ t 1 "-r -l past the chip end"          $B -r x.bin -a 0x8000 -l 0x9000
 $B -W 127.0.0.1:8080 -K pw -o /srv -a 0x1000 -l 0x2000 | grep -q '^web: 127.0.0.1:8080 key=pw dir=/srv addr=0x1000 len=0x2000' && echo "ok   -W passes the address, password, dump directory and range" || { echo "FAIL -W arguments"; fail=1; }
 $B -h | grep -q '^ -W ' && $B -h | grep -q '^ -K ' && $B -h | grep -q '^ -o ' && echo "ok   -h lists -W, -K and -o" || { echo "FAIL -h without -W/-K/-o"; fail=1; }
 t 1 "-P ezp -S 15M is an error"       $B -P ezp -S 15M -i
+t 0 "-b on a SPI NAND"                 MS_CHIP=nand $B -b
+t 1 "-b on a SPI NOR is an error"      $B -b
+t 1 "-b when a mark fails"             MS_CHIP=nand MS_FAIL=marks $B -b
+t 1 "conflict -b -e"                   MS_CHIP=nand $B -b -e
+t 1 "-W with -b is an error"           $B -W 8080 -b
+t 0 "-ee on a SPI NAND"                MS_CHIP=nand $B -ee
+MS_CHIP=nand $B -ee | grep -q 'factory bad mark are erased too' && echo "ok     -ee says that the marks go" || { echo "FAIL -ee message"; fail=1; }
+t 1 "-ee on a SPI NOR is an error"     $B -ee
+t 1 "-eee is an error"                 MS_CHIP=nand $B -eee
+t 1 "conflict -ee -r"                  MS_CHIP=nand $B -ee -r x.bin
+MS_CHIP=nand $B -b -a 0x4000 | grep -q '^bad blocks 0x4000 0xc000' && echo "ok   -b -a: from the address to the chip end" || { echo "FAIL -b -a range"; fail=1; }
 t 1 "-S unknown speed"                $B -S 100M -i
 t 0 "-P ch347 -S 15M"                 $B -P ch347 -S 15M -i
 t 1 "-S with the CH341A is an error"  $B -P ch341a -S 15M -i

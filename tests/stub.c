@@ -10,7 +10,7 @@
 #include "timer.h"
 static int stops;
 const char *flash_chip_name = "W25Q80";
-int ECC_fcheck = 1, ECC_ignore = 0, Skip_BAD_page = 0; unsigned long long Skip_BAD_end; unsigned char _ondie_ecc_flag = 1; unsigned int bsize = 4096;
+int ECC_fcheck = 1, ECC_ignore = 0, Skip_BAD_page = 0, Erase_marked_blocks = 0; unsigned long long Skip_BAD_end; unsigned char _ondie_ecc_flag = 1; unsigned int bsize = 4096;
 static unsigned char chip[1 << 20];	/* MS_BIG=1: all of it; else 64 KiB */
 static unsigned long largest;		/* MS_LARGEST=1: the longest read or write is printed */
 static void note(unsigned long l) { if (l > largest) largest = l; }
@@ -61,3 +61,5 @@ int snor_read_status(unsigned char sr[3]) { return snor_read_status_at(0, sr); }
 int snor_read_status_at(unsigned long a, unsigned char sr[3]) { (void)a; unsigned long v = strtoul(*env("MS_SR") ? env("MS_SR") : "000200", NULL, 16); sr[0] = v >> 16; sr[1] = v >> 8; sr[2] = v; return 0; }
 int snor_block_locks(void) { return *env("MS_SST26") != 0; }
 int snor_sr1_macronix(void) { return *env("MS_MACRONIX") != 0; }
+/* -b on the stub NAND: MS_FAIL=marks makes the marks fail */
+int snand_bad_blocks(unsigned long a, unsigned long l) { printf("bad blocks 0x%lx 0x%lx\n", a, l); return strcmp(env("MS_FAIL"), "marks") ? 0 : -1; }

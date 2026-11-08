@@ -85,6 +85,7 @@
 #define _SPI_NAND_PAGE_SIZE_2KBYTE			0x0800
 #define _SPI_NAND_PAGE_SIZE_4KBYTE			0x1000
 #define _SPI_NAND_OOB_SIZE_64BYTE			0x40
+#define _SPI_NAND_OOB_SIZE_96BYTE			0x60
 #define _SPI_NAND_OOB_SIZE_120BYTE			0x78
 #define _SPI_NAND_OOB_SIZE_128BYTE			0x80
 #define _SPI_NAND_OOB_SIZE_256BYTE			0x100
@@ -321,6 +322,7 @@
 int ECC_fcheck = 1;
 int ECC_ignore = 0;
 int Skip_BAD_page = 0;
+int Erase_marked_blocks = 0;	/* -ee: the blocks with a factory bad mark are erased too */
 
 /* Longest wait for the chip to leave OIP (operation in progress). A page read,
    a program and a block erase take micro- to milliseconds; a chip that stays
@@ -886,7 +888,7 @@ static const struct SPI_NAND_FLASH_INFO_T spi_nand_flash_tables[] = {
 		ptr_name:				"WINBOND W25N01KV",
 		device_size:				_SPI_NAND_CHIP_SIZE_1GBIT,
 		page_size:				_SPI_NAND_PAGE_SIZE_2KBYTE,
-		oob_size:				_SPI_NAND_OOB_SIZE_64BYTE,
+		oob_size:				_SPI_NAND_OOB_SIZE_96BYTE,
 		erase_size:				_SPI_NAND_BLOCK_SIZE_128KBYTE,
 		dummy_mode:				SPI_NAND_FLASH_READ_DUMMY_BYTE_APPEND,
 		read_mode:				SPI_NAND_FLASH_READ_SPEED_MODE_DUAL,
@@ -1515,7 +1517,7 @@ static const struct SPI_NAND_FLASH_INFO_T spi_nand_flash_tables[] = {
 		ptr_name:				"KIOXIA TH58CVG3S0HRAIJ",
 		device_size:				_SPI_NAND_CHIP_SIZE_8GBIT,
 		page_size:				_SPI_NAND_PAGE_SIZE_4KBYTE,
-		oob_size:				_SPI_NAND_OOB_SIZE_128BYTE,
+		oob_size:				_SPI_NAND_OOB_SIZE_256BYTE,
 		erase_size:				_SPI_NAND_BLOCK_SIZE_256KBYTE,
 		dummy_mode:				SPI_NAND_FLASH_READ_DUMMY_BYTE_APPEND,
 		read_mode:				SPI_NAND_FLASH_READ_SPEED_MODE_DUAL,
@@ -1605,7 +1607,7 @@ static const struct SPI_NAND_FLASH_INFO_T spi_nand_flash_tables[] = {
 		ptr_name:				"MICRON MT29F4G01AA",
 		device_size:				_SPI_NAND_CHIP_SIZE_4GBIT,
 		page_size:				_SPI_NAND_PAGE_SIZE_2KBYTE,
-		oob_size:				_SPI_NAND_OOB_SIZE_128BYTE,
+		oob_size:				_SPI_NAND_OOB_SIZE_64BYTE,
 		erase_size:				_SPI_NAND_BLOCK_SIZE_128KBYTE,
 		dummy_mode:				SPI_NAND_FLASH_READ_DUMMY_BYTE_APPEND,
 		read_mode:				SPI_NAND_FLASH_READ_SPEED_MODE_DUAL,
@@ -2027,12 +2029,12 @@ static const struct SPI_NAND_FLASH_INFO_T spi_nand_flash_tables[] = {
 		ptr_name:				"GIGADEVICE GD5F2GQ4UA",
 		device_size:				_SPI_NAND_CHIP_SIZE_2GBIT,
 		page_size:				_SPI_NAND_PAGE_SIZE_2KBYTE,
-		oob_size:				_SPI_NAND_OOB_SIZE_128BYTE,
+		oob_size:				_SPI_NAND_OOB_SIZE_64BYTE,
 		erase_size:				_SPI_NAND_BLOCK_SIZE_128KBYTE,
 		dummy_mode:				SPI_NAND_FLASH_READ_DUMMY_BYTE_APPEND,
 		read_mode:				SPI_NAND_FLASH_READ_SPEED_MODE_DUAL,
 		write_mode:				SPI_NAND_FLASH_WRITE_SPEED_MODE_SINGLE,
-		oob_free_layout:			&ooblayout_gigadevice_128,
+		oob_free_layout:			&ooblayout_gigadevice_a,
 		feature:				SPI_NAND_FLASH_FEATURE_NONE,
 	},
 
@@ -4043,6 +4045,157 @@ SPI_NAND_FLASH_RTN_T spi_nand_erase_block ( u32 block_index)
 	return rtn_status;
 }
 
+/* Factory bad blocks. The maker marks a bad block with a byte other than 0xFF
+   at the start of the spare area of its first or of its second page (makers
+   differ in which one). An erase clears the mark for good, so such a block is
+   not erased. The byte is not under ECC: it is read with the on-die ECC off.
+   What was read is kept for the run, per block. */
+#define MARK_UNKNOWN	0
+#define MARK_GOOD	1
+#define MARK_BAD	2
+#define MARK_AHEAD	64		/* blocks read with one switch of the ECC */
+static u8 *_marks;
+static u32 _marks_count;
+/* the on-die ECC did not come back on after a scan of the marks: no NAND
+   operation goes on before it does (a later one in the web mode would read
+   pages as if the ECC were on) */
+static int _ecc_lost;
+
+static void spi_nand_marks_reset( void )
+{
+	free(_marks);
+	_marks = NULL;
+	_marks_count = 0;
+}
+
+/* Turn the on-die ECC on or off; the die selected by that is not known after */
+static SPI_NAND_FLASH_RTN_T spi_nand_ecc_switch( int on )
+{
+	SPI_NAND_FLASH_RTN_T rtn_status;
+
+	ECC_fcheck = on;
+	rtn_status = SPI_NAND_Flash_Enable_OnDie_ECC();
+	_die_id = 0xff;
+	return rtn_status;
+}
+
+static SPI_NAND_FLASH_RTN_T spi_nand_read_marks( u32 first, u32 count )
+{
+	struct SPI_NAND_FLASH_INFO_T *ptr_dev_info_t = _SPI_NAND_GET_DEVICE_INFO_PTR;
+	u32 pages = ptr_dev_info_t->erase_size / ptr_dev_info_t->page_size;
+	/* the spare area starts after the data; a raw page (-d) holds both */
+	u32 column = ECC_fcheck ? ptr_dev_info_t->page_size : ptr_dev_info_t->page_size - bmt_oob_size;
+	int ecc = ECC_fcheck;
+	SPI_NAND_FLASH_RTN_T rtn_status = SPI_NAND_FLASH_RTN_NO_ERROR, rtn_ecc;
+	u32 b, p, page;
+	u8 status, mark;
+
+	if( ecc )
+		rtn_status = spi_nand_ecc_switch(0);
+	for( b = first; b < first + count && rtn_status == SPI_NAND_FLASH_RTN_NO_ERROR; b++ ) {
+		_marks[b] = MARK_GOOD;
+		for( p = 0; p < 2; p++ ) {
+			page = b * pages + p;
+			spi_nand_select_die(page);
+			spi_nand_protocol_page_read(page);
+			rtn_status = spi_nand_wait_ready(&status, "Page read", page);
+			if( rtn_status != SPI_NAND_FLASH_RTN_NO_ERROR )
+				break;
+			if( (ptr_dev_info_t->feature) & SPI_NAND_FLASH_PLANE_SELECT_HAVE )
+				_plane_select_bit = ((page >> 6) & 0x1);
+			rtn_status = spi_nand_protocol_read_from_cache(column, 1, &mark, SPI_NAND_FLASH_READ_SPEED_MODE_SINGLE,
+								      ptr_dev_info_t->dummy_mode);
+			if( rtn_status != SPI_NAND_FLASH_RTN_NO_ERROR ) {
+				_SPI_NAND_PRINTF("\nBad block mark of page 0x%x: the USB transfer failed\n", page);
+				break;
+			}
+			if( mark != 0xff ) {
+				_marks[b] = MARK_BAD;
+				break;
+			}
+		}
+		if( rtn_status != SPI_NAND_FLASH_RTN_NO_ERROR )
+			_marks[b] = MARK_UNKNOWN;
+	}
+	_current_page_num = 0xFFFFFFFF;		/* the chip's cache holds another page now */
+	if( ecc ) {
+		rtn_ecc = spi_nand_ecc_switch(1);
+		if( rtn_ecc != SPI_NAND_FLASH_RTN_NO_ERROR ) {
+			/* what was read stays unknown, and the ECC is set again first */
+			_SPI_NAND_PRINTF("\nThe on-die ECC did not come back on after the bad block marks\n");
+			for( b = first; b < first + count; b++ )
+				_marks[b] = MARK_UNKNOWN;
+			_ecc_lost = 1;
+		}
+		if( rtn_status == SPI_NAND_FLASH_RTN_NO_ERROR )
+			rtn_status = rtn_ecc;
+	}
+	return rtn_status;
+}
+
+/* Before a NAND operation: the ECC back on if a scan left it off; 0, -1 */
+static int spi_nand_ecc_restore( void )
+{
+	if( !_ecc_lost )
+		return 0;
+	if( spi_nand_ecc_switch(1) != SPI_NAND_FLASH_RTN_NO_ERROR ) {
+		_SPI_NAND_PRINTF("\nThe on-die ECC cannot be turned on again\n");
+		return -1;
+	}
+	_ecc_lost = 0;
+	return 0;
+}
+
+/* 1: the block has a factory bad mark, 0: it has none, -1: the mark did not come
+   back (USB or a busy chip); the operation stops then */
+static int spi_nand_block_marked( u32 block )
+{
+	struct SPI_NAND_FLASH_INFO_T *ptr_dev_info_t = _SPI_NAND_GET_DEVICE_INFO_PTR;
+	u32 count = ptr_dev_info_t->device_size / ptr_dev_info_t->erase_size;
+
+	if( block >= count )
+		return 0;
+	if( spi_nand_ecc_restore() < 0 )
+		return -1;
+	if( !_marks ) {
+		_marks = calloc(count, 1);
+		if( !_marks ) {
+			_SPI_NAND_PRINTF("\nNo memory for the bad block marks\n");
+			return -1;
+		}
+		_marks_count = count;
+	}
+	if( _marks[block] == MARK_UNKNOWN &&
+	    spi_nand_read_marks(block, (count - block < MARK_AHEAD) ? count - block : MARK_AHEAD) != SPI_NAND_FLASH_RTN_NO_ERROR )
+		return -1;
+	return _marks[block] == MARK_BAD;
+}
+
+/* -b: the blocks with a factory bad mark in addr..addr+len; 0, or -1 when a
+   mark did not come back */
+int snand_bad_blocks( unsigned long addr, unsigned long len )
+{
+	struct SPI_NAND_FLASH_INFO_T *ptr_dev_info_t = _SPI_NAND_GET_DEVICE_INFO_PTR;
+	u32 block, first = addr / ptr_dev_info_t->erase_size;
+	u32 end = (addr + len + ptr_dev_info_t->erase_size - 1) / ptr_dev_info_t->erase_size;
+	u32 found = 0;
+	int m;
+
+	for( block = first; block < end; block++ ) {
+		if( ms_stop )		/* Ctrl+C: the blocks so far are listed */
+			return -1;
+		m = spi_nand_block_marked(block);
+		if( m < 0 )
+			return -1;
+		if( m ) {
+			printf("Bad block %u at 0x%08x (factory mark)\n", block, block * ptr_dev_info_t->erase_size);
+			found++;
+		}
+	}
+	printf("%u bad block(s) of %u\n", found, end - first);
+	return 0;
+}
+
 /*------------------------------------------------------------------------------------
  * FUNCTION: static SPI_NAND_FLASH_RTN_T spi_nand_erase_internal( u32     addr,
  *                                                                u32     len )
@@ -4067,6 +4220,8 @@ static SPI_NAND_FLASH_RTN_T spi_nand_erase_internal( u32 addr, u32 len )
 	u32 block_index = 0;
 	u32 erase_len = 0;
 	u32 failed = 0;		/* blocks that did not erase */
+	u32 kept = 0;		/* blocks with a factory bad mark, left as they are */
+	int marked;
 	SPI_NAND_FLASH_RTN_T rtn_status = SPI_NAND_FLASH_RTN_NO_ERROR;
 #if 0
 	print_dot  = 0;
@@ -4095,6 +4250,20 @@ static SPI_NAND_FLASH_RTN_T spi_nand_erase_internal( u32 addr, u32 len )
 				rtn_status = SPI_NAND_FLASH_RTN_STOPPED;
 				break;
 			}
+			marked = spi_nand_block_marked(block_index);
+			if( marked < 0 ) {
+				rtn_status = SPI_NAND_FLASH_RTN_IO_ERROR;
+				break;
+			}
+			if( marked && Erase_marked_blocks ) {
+				_SPI_NAND_PRINTF("\nBad block %u at 0x%x (factory mark): erased (-ee), the mark goes\n", block_index, addr);
+				_marks[block_index] = MARK_UNKNOWN;
+			} else if( marked ) {
+				_SPI_NAND_PRINTF("\nBad block %u at 0x%x (factory mark): not erased\n", block_index, addr);
+				kept++;
+				rtn_status = SPI_NAND_FLASH_RTN_NO_ERROR;
+				goto next;
+			}
 			rtn_status = spi_nand_erase_block(block_index);
 			if( spi_nand_stopped(rtn_status) )
 				break;
@@ -4107,6 +4276,7 @@ static SPI_NAND_FLASH_RTN_T spi_nand_erase_internal( u32 addr, u32 len )
 				failed++;
 			}
 
+next:
 			/* 2.7 Erase next block if needed */
 			addr		+= _current_flash_info_t.erase_size;
 			erase_len	+= _current_flash_info_t.erase_size;
@@ -4126,6 +4296,8 @@ static SPI_NAND_FLASH_RTN_T spi_nand_erase_internal( u32 addr, u32 len )
 		}
 		else
 			printf("Erase 100%% [%u] of [%u] bytes      \n", erase_len, len);
+		if( kept && !spi_nand_stopped(rtn_status) )
+			printf("%u bad block(s) with a factory mark kept as they are\n", kept);
 	}
 	else
 	{
@@ -4428,7 +4600,8 @@ int test_write_fail_flag = 0;
 static SPI_NAND_FLASH_RTN_T spi_nand_write_internal( u32 dst_addr, u32 len, u32 *ptr_rtn_len, u8* ptr_buf, SPI_NAND_FLASH_WRITE_SPEED_MODE_T speed_mode )
 {
 	u32 remain_len, write_addr, data_len, page_number, physical_dst_addr;
-	u32 addr_offset;
+	u32 addr_offset, block, pages;
+	int marked;
 	struct SPI_NAND_FLASH_INFO_T *ptr_dev_info_t;
 	SPI_NAND_FLASH_RTN_T rtn_status = SPI_NAND_FLASH_RTN_NO_ERROR;
 #if 0
@@ -4437,6 +4610,7 @@ static SPI_NAND_FLASH_RTN_T spi_nand_write_internal( u32 dst_addr, u32 len, u32 
 
 	*ptr_rtn_len = 0;
 	ptr_dev_info_t = _SPI_NAND_GET_DEVICE_INFO_PTR;
+	pages = ptr_dev_info_t->erase_size / ptr_dev_info_t->page_size;
 	remain_len = len;
 	write_addr = dst_addr;
 
@@ -4466,6 +4640,32 @@ static SPI_NAND_FLASH_RTN_T spi_nand_write_internal( u32 dst_addr, u32 len, u32 
 		else
 		{
 			data_len = remain_len;
+		}
+
+		/* a block with a factory bad mark: -k puts the data in the next block;
+		   without -k only data of all 0xFF may go there, nothing is programmed.
+		   A raw image (-d) is the physical chip, marks and all: written as it is */
+		block = page_number / pages;
+		marked = ECC_fcheck ? spi_nand_block_marked(block) : 0;
+		if( marked < 0 ) {
+			rtn_status = SPI_NAND_FLASH_RTN_IO_ERROR;
+			break;
+		}
+		if( marked && Skip_BAD_page ) {
+			printf("\nSkip bad block %u at 0x%x (factory mark)\n", block, block * ptr_dev_info_t->erase_size);
+			write_addr = (block + 1) * ptr_dev_info_t->erase_size;
+			if( (unsigned long long)write_addr + remain_len > skip_limit(ptr_dev_info_t) ) {
+				printf("No room left for the data after the skipped blocks\n");
+				rtn_status = SPI_NAND_FLASH_RTN_DETECTED_BAD_BLOCK;
+				break;
+			}
+			continue;
+		}
+		if( marked && !all_ff(&ptr_buf[len - remain_len], data_len) ) {
+			printf("\nBad block %u at 0x%x (factory mark): not written; -k writes around it\n",
+			       block, block * ptr_dev_info_t->erase_size);
+			rtn_status = SPI_NAND_FLASH_RTN_DETECTED_BAD_BLOCK;
+			break;
 		}
 
 		rtn_status = spi_nand_write_page(page_number, addr_offset, &(ptr_buf[len - remain_len]), data_len, 0, NULL, 0 , speed_mode);
@@ -4499,6 +4699,9 @@ static SPI_NAND_FLASH_RTN_T spi_nand_write_internal( u32 dst_addr, u32 len, u32 
 	}
 	if (!timer_quiet)
 		printf("Written 100%% [%u] of [%u] bytes      \n", len - remain_len, len);
+	/* raw pages (-d) carry their spare areas, marks too: read them again later */
+	if( !ECC_fcheck )
+		spi_nand_marks_reset();
 	_SPI_NAND_SEMAPHORE_UNLOCK();
 
 	return (rtn_status);
@@ -4559,6 +4762,30 @@ static SPI_NAND_FLASH_RTN_T spi_nand_read_internal ( u32 addr, u32 len, u8 *ptr_
 		page_number = (physical_read_addr / (ptr_dev_info_t->page_size));
 
 		_SPI_NAND_DEBUG_PRINTF(SPI_NAND_FLASH_DEBUG_LEVEL_1, "spi_nand_read_internal: read_addr = 0x%x, page_number = 0x%x, data_offset = 0x%x\n", physical_read_addr, page_number, data_offset);
+
+		/* -k: a block with a factory bad mark holds none of the data; a raw
+		   dump (-d) is the physical chip, marks and all */
+		if( Skip_BAD_page && ECC_fcheck ) {
+			u32 block = page_number / (ptr_dev_info_t->erase_size / ptr_dev_info_t->page_size);
+			int marked = spi_nand_block_marked(block);
+
+			if( marked < 0 ) {
+				*status = SPI_NAND_FLASH_RTN_IO_ERROR;
+				_SPI_NAND_SEMAPHORE_UNLOCK();
+				return SPI_NAND_FLASH_RTN_IO_ERROR;
+			}
+			if( marked ) {
+				printf("\nSkip bad block %u at 0x%x (factory mark)\n", block, block * ptr_dev_info_t->erase_size);
+				read_addr = (block + 1) * ptr_dev_info_t->erase_size;
+				if( (unsigned long long)read_addr + remain_len > ptr_dev_info_t->device_size ) {
+					printf("No room left for the data after the skipped blocks\n");
+					*status = SPI_NAND_FLASH_RTN_DETECTED_BAD_BLOCK;
+					_SPI_NAND_SEMAPHORE_UNLOCK();
+					return SPI_NAND_FLASH_RTN_DETECTED_BAD_BLOCK;
+				}
+				continue;
+			}
+		}
 
 		if( Skip_BAD_page && skipped_page(page_number) )
 			rtn_status = SPI_NAND_FLASH_RTN_DETECTED_BAD_BLOCK;
@@ -5749,6 +5976,8 @@ int snand_read(unsigned char *buf, unsigned long from, unsigned long len)
 	unsigned long retlen = 0;
 	SPI_NAND_FLASH_RTN_T status;
 
+	if( spi_nand_ecc_restore() < 0 )
+		return -1;
 	if(!nandflash_read((unsigned long)from, (unsigned long)len, &retlen, buf, &status))
 		return len;
 	return -1;
@@ -5756,6 +5985,8 @@ int snand_read(unsigned char *buf, unsigned long from, unsigned long len)
 
 int snand_erase(unsigned long offs, unsigned long len)
 {
+	if( spi_nand_ecc_restore() < 0 )
+		return -1;
 	return nandflash_erase((unsigned long)offs, (unsigned long)len);
 }
 
@@ -5763,6 +5994,8 @@ int snand_write(unsigned char *buf, unsigned long to, unsigned long len)
 {
 	unsigned long retlen = 0;
 
+	if( spi_nand_ecc_restore() < 0 )
+		return -1;
 	if(!nandflash_write((unsigned long)to, (unsigned long)len, &retlen, buf))
 		return (int)retlen;
 	return -1;
@@ -5771,6 +6004,8 @@ int snand_write(unsigned char *buf, unsigned long to, unsigned long len)
 long snand_init(void)
 {
 	_skipped_count = 0;
+	spi_nand_marks_reset();
+	_ecc_lost = 0;			/* the detection sets the ECC again */
 	if(!nandflash_init(0)) {
 		struct SPI_NAND_FLASH_INFO_T *ptr_dev_info_t = _SPI_NAND_GET_DEVICE_INFO_PTR;
 		bsize = ptr_dev_info_t->erase_size;

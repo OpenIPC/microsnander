@@ -157,10 +157,14 @@ microsnander [options]
  -h             display this message
  -d             disable internal ECC (use read and write page size + OOB size)
  -I             ECC ignore errors (for read test only)
- -k             skip BAD pages (SPI NAND): use the next page instead
+ -k             skip BAD pages (SPI NAND): use the next page instead; blocks
+                with a factory bad mark are skipped whole
+ -b             list the blocks with a factory bad mark (SPI NAND; -a, -l: a range);
+                an erase leaves such blocks as they are
  -L             print list support chips
  -i             read the chip ID info
- -e             erase chip (full or use with -a [-l])
+ -e             erase chip (full or use with -a [-l]); -ee: SPI NAND, the blocks with a
+                factory bad mark too (the mark goes for good)
  -l <bytes>     manually set length
  -a <address>   manually set address
  -w <filename>  write chip with data from filename
@@ -182,7 +186,7 @@ microsnander [options]
  -o <dir>       web mode: where Read saves the dumps (default: the current one)
 ```
 
-每次运行只执行一个操作：`-i`、`-e`、`-r`、`-w`、`-u` 或 `-t`。不指定 `-a` 和 `-l` 时，
+每次运行只执行一个操作：`-i`、`-e`、`-r`、`-w`、`-u`、`-t` 或 `-b`。不指定 `-a` 和 `-l` 时，
 操作覆盖整片芯片。地址和长度可以是十进制，或带 `0x` 的十六进制。擦除按整块进行：
 长度必须是芯片报告的块大小的整数倍。
 
@@ -198,6 +202,13 @@ SPI NAND 芯片默认使用片内 ECC 读写：文件中只有数据页。使用
 末尾之后的页的读取也会失败。
 写入失败的页只在同一次运行的 `-v` 中被记住：之后用 `-k` 读取时可能把它当作数据读出，
 转储从该页起会错位。
+
+SPI NAND 出厂时带有少量坏块，每个坏块在其第一页或第二页备用区的起始字节上标记为非 0xFF 的值。
+擦除会永久清除这种标记，因此 `-e` 保留这些块不动并把它们打印出来。数据不会写入带标记的块：
+不加 `-k` 时写入在该块处停止（全为 0xFF 的数据可以通过）；加 `-k` 时整块被跳过，数据在下一块
+继续，`-k` 读取也跳过同样的块。`-ee` 会连带擦除带标记的块，用于错误的标记（例如随另一颗芯片的原始转储写入的标记）：
+标记会永久消失，真正的坏块可能擦除失败。`-b` 列出整片芯片或 `-a`/`-l` 范围内带标记的块。标记在关闭
+ECC 的情况下读取，每块两页：整片 1 Gbit 芯片需要几秒钟。
 
 `-u` 清除保护位并保留 QE（quad enable），QE 不起保护作用。`-uu` 还会清除 QE，仅限 SPI NOR
 和命令行。QE 把 WP# 和 HOLD# 引脚变为数据线，以四线模式读取芯片的电路板没有它可能无法启动。
@@ -291,7 +302,7 @@ microsnander -P ch347 -W 8080 -o /srv/dumps
 - 只使用一个编程器，选择方式与不带 `-W` 时相同；连接了多个时请用 `-P`。
 - 每个操作开始时打开编程器、结束后关闭，因此两次操作之间可以重新插拔，或用普通方式运行 microsnander。
 - 每次只运行一个操作；操作进行中的请求会得到 `409`。操作进行时页面每秒查询两次状态。
-- `-W` 不接受自身的操作（`-i`、`-r`、`-w`、`-e`、`-u`、`-t`），也不接受 `-q`、`-m`、`-v`、`-S`、`-d`、`-I` 或 `-k`：
+- `-W` 不接受自身的操作（`-i`、`-r`、`-w`、`-e`、`-u`、`-t`、`-b`），也不接受 `-q`、`-m`、`-v`、`-S`、`-d`、`-I` 或 `-k`：
   操作由页面完成，在开启 ECC 的情况下从地址 0 写入完整文件，并始终校验。`-K` 和 `-o` 只能与 `-W` 一起使用。
 - 客户端断开时服务继续运行；慢速客户端不会阻塞其他客户端（最多同时 16 个连接）。
 

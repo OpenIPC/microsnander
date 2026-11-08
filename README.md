@@ -177,10 +177,14 @@ microsnander [options]
  -h             display this message
  -d             disable internal ECC (use read and write page size + OOB size)
  -I             ECC ignore errors (for read test only)
- -k             skip BAD pages (SPI NAND): use the next page instead
+ -k             skip BAD pages (SPI NAND): use the next page instead; blocks
+                with a factory bad mark are skipped whole
+ -b             list the blocks with a factory bad mark (SPI NAND; -a, -l: a range);
+                an erase leaves such blocks as they are
  -L             print list support chips
  -i             read the chip ID info
- -e             erase chip (full or use with -a [-l])
+ -e             erase chip (full or use with -a [-l]); -ee: SPI NAND, the blocks with a
+                factory bad mark too (the mark goes for good)
  -l <bytes>     manually set length
  -a <address>   manually set address
  -w <filename>  write chip with data from filename
@@ -202,7 +206,7 @@ microsnander [options]
  -o <dir>       web mode: where Read saves the dumps (default: the current one)
 ```
 
-One operation per run: `-i`, `-e`, `-r`, `-w`, `-u` or `-t`. Without `-a` and `-l` the
+One operation per run: `-i`, `-e`, `-r`, `-w`, `-u`, `-t` or `-b`. Without `-a` and `-l` the
 operation covers the whole chip. Addresses and lengths are decimal or hex with
 `0x`. Erase works on whole blocks: the length must be a multiple of the block size
 the chip reports.
@@ -223,6 +227,16 @@ skipped page is printed. A write stays inside `-a`/`-l` (without `-l`, up to the
 chip end): give `-l` the size of the partition, and a write that needs more room
 than that fails. A read that would need a page past the chip end fails. A page that failed to program is remembered only for `-v` in the same run:
 a later `-k` read may read it as data, and the dump is shifted from there on.
+
+A SPI NAND comes from the factory with a few bad blocks, each marked by a byte other than 0xFF
+at the start of the spare area of its first or second page. An erase would clear the mark for
+good, so `-e` leaves these blocks as they are and prints them. No data goes into a marked block:
+without `-k` a write stops there (data of all 0xFF passes), with `-k` the whole block is skipped
+and the data goes on in the next one, and a `-k` read skips the same blocks. `-ee` erases the
+marked blocks too, for a mark that is wrong (say, one that came with a raw dump of another
+chip): the mark is gone for good, and on a really bad block the erase may fail. `-b` lists the
+marked blocks of the chip, or of `-a`/`-l`. The marks are read with the ECC off, two pages per
+block: a few seconds for a whole 1 Gbit chip.
 
 `-u` clears the protection bits and keeps QE (quad enable), which protects nothing. `-uu`
 clears QE as well, SPI NOR on the command line only. QE turns the WP# and HOLD# pins into data
@@ -332,7 +346,7 @@ How it works:
   can be replugged, or used by a normal microsnander run.
 - One operation runs at a time; a request while one runs gets `409`. The page polls the state
   twice a second while an operation runs.
-- `-W` takes no operation of its own (`-i`, `-r`, `-w`, `-e`, `-u`, `-t`) and no `-q`, `-m`, `-v`,
+- `-W` takes no operation of its own (`-i`, `-r`, `-w`, `-e`, `-u`, `-t`, `-b`) and no `-q`, `-m`, `-v`,
   `-S`, `-d`, `-I` or `-k`: the page does the operations, writes whole files from address 0 with ECC on
   and always verifies. `-K` and `-o` go with `-W` only.
 - The service keeps running when a client disconnects; a slow client does not hold the others
