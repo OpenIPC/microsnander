@@ -51,6 +51,11 @@ static const struct series series[] = {
 	{ "MT29F*ABB",		MS_VOLTAGE_18 },	/* Micron; ..ABA is 3.3 V */
 	{ "F50D*",		MS_VOLTAGE_18 },	/* ESMT; F50L is 3.3 V */
 	{ "DS35M*",		MS_VOLTAGE_18 },	/* Dosilicon; DS35Q is 3.3 V */
+	{ "TC58CY*",		MS_VOLTAGE_18 },	/* Kioxia (Toshiba); TC58CV is 3.3 V */
+	{ "TH58CY*",		MS_VOLTAGE_18 },
+	{ "MT29F*ADB*",		MS_VOLTAGE_18 },	/* Micron 8 Gbit; ..ADA.. is 3.3 V */
+	{ "EM78*",		MS_VOLTAGE_18 },	/* Etron; EM73 is 3.3 V */
+	{ "XT26Q*",		MS_VOLTAGE_18 },	/* XTX; XT26G is 3.3 V */
 };
 
 int ms_voltage(const char *chip)

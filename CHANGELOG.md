@@ -4,6 +4,19 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.31.0 — 2026-11-08
+
+- 32 SPI NAND chips more, 167 in all: Macronix MX35UF1GE4AC, MX35UF1G24AD, MX35UF2GE4AC,
+  MX35UF2G24AD, MX35UF4G24AD; Winbond W25N512GV, W25N512GW, W25N01JW, W25N02KW;
+  Kioxia (Toshiba) TC58CYG0S3H, TC58CYG1S3H, TC58CYG2S0H and their RAIJ parts, TH58CYG3S0HRAIJ;
+  Micron MT29F2G01AAAED, MT29F8G01ADAFD, MT29F8G01ADBFD; GigaDevice GD5F1GQ4RExxH, GD5F2GQ4RE,
+  GD5F2GQ5RExxH, GD5F4GQ4UA, GD5F4GQ4RC, GD5F4GM8UE, GD5F4GM8RE; XTX XT26G04A, XT26Q01D; Etron
+  EM73C044VCC, EM78D044VCF, EM78E044VCA, EM78F044VCA. Each one has the same size, page, spare
+  area and block in at least two independent chip databases; how it reports an uncorrectable
+  ECC error, its planes and its dies are taken from them as well.
+- The supply voltage by the name: 1.8 V for Kioxia TC58CY and TH58CY, Micron MT29F..ADB, Etron
+  EM78 and XTX XT26Q.
+
 ## 1.30.0 — 2026-11-08
 
 - 143 SPI NOR chips more, 434 in all: each one checked in at least two independent chip

@@ -14,7 +14,7 @@ MicroSNANDer is a programmer for SPI NOR and SPI NAND flash chips with the cheap
 CH347 and EZP USB programmers, six models in all: a command-line tool with a web page
 built in, and an Android app. It reads, writes, erases and verifies the flash of cameras,
 routers and other boards, removes the write protection of SPI NOR chips, and knows 434
-SPI NOR and 135 SPI NAND chips. Each release file is about 200–270 KB.
+SPI NOR and 167 SPI NAND chips. Each release file is about 200–270 KB.
 
 It is a stripped-down, extended, deeply modified and optimized version of
 [SNANDer](https://github.com/McMCCRU/SNANDer) 1.7.4 by McMCC: Linux only, SPI NOR
@@ -459,7 +459,7 @@ hundred KB is minutes; a whole 16 MB chip is much longer.
 
 `microsnander -L` prints the list: 434 SPI NOR chips (Winbond, Eon, Fudan
 Microelectronics FM25Q, GigaDevice, Macronix, Spansion, XMC, XTX, Zbit, Giantec
-GM25Q, ISSI, Micron, Boya, Puya and others) and 135 SPI NAND chips (Etron, GigaDevice, Heyang, Foresee, ESMT, Dosilicon, XTX,
+GM25Q, ISSI, Micron, Boya, Puya and others) and 167 SPI NAND chips (Etron, GigaDevice, Heyang, Foresee, ESMT, Dosilicon, XTX,
 Micron, Toshiba/Kioxia, Winbond, Macronix and others).
 A SPI NOR chip that is not on the list but has an SFDP table (JESD216; most chips
 made since about 2011) is found by it: its size, the sector erase and the 4-byte
@@ -473,8 +473,9 @@ The programmers work at 3.3 V. The programmer does not measure the voltage, so m
 takes it from the chip name: 107 SPI NOR chips of the list are 1.8 V parts (GigaDevice GD25L,
 Macronix MX25U, Winbond W25Q..W, Micron N25Q..A11 and MT25QU, XMC XM25QU and XM25LU, Zbit
 ZB25LQ, Boya BY25Q..L, ISSI IS25WP and IS25WQ, Eon EN25S, Fudan FM25M, Adesto AT25DL,
-Microchip SST25WF, Dosilicon DS25M), and so are 20 SPI NAND chips (GigaDevice GD5F..R, Winbond
-W25N..W, Macronix MX35UF, Micron MT29F..ABB, ESMT F50D, Dosilicon DS35M). Connect them through
+Microchip SST25WF, Dosilicon DS25M), and so are 45 SPI NAND chips (GigaDevice GD5F..R, Winbond
+W25N..W, Macronix MX35UF, Micron MT29F..ABB and MT29F..ADB, ESMT F50D, Dosilicon DS35M, Kioxia
+TC58CY and TH58CY, Etron EM78, XTX XT26Q). Connect them through
 a 1.8 V adapter: at 3.3 V the reads are not reliable and the chip can be damaged.
 GigaDevice GD25W, XMC XM25QW, Fudan FM25W, Macronix MX25R and Adesto AT25DF021A take 1.65-3.6 V
 and work as they are.

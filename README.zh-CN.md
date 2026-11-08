@@ -12,7 +12,7 @@
 
 MicroSNANDer 是一个 SPI NOR 和 SPI NAND 闪存芯片编程工具，配合廉价的 CH341A、CH347 和 EZP USB
 编程器（共六种型号）使用，包括内置网页的命令行程序和 Android 应用。它可以读取、写入、擦除和校验摄像机、
-路由器及其他开发板的闪存，解除 SPI NOR 芯片的写保护，支持 434 款 SPI NOR 和 135 款 SPI NAND 芯片。
+路由器及其他开发板的闪存，解除 SPI NOR 芯片的写保护，支持 434 款 SPI NOR 和 167 款 SPI NAND 芯片。
 每个发布文件约 200–270 KB。
 
 它是 McMCC 的 [SNANDer](https://github.com/McMCCRU/SNANDer) 1.7.4 经过精简、增强、深度修改和优化的版本：
@@ -398,7 +398,7 @@ microsnander -m sigmastar -w u-boot.bin -v       # 写入可用的引导程序
 
 `microsnander -L` 会列出支持的芯片：434 款 SPI NOR 芯片（Winbond、Eon、Fudan
 Microelectronics FM25Q、GigaDevice、Macronix、Spansion、XMC、XTX、Zbit、Giantec
-GM25Q、ISSI、Micron、Boya、Puya 等）和 135 款 SPI NAND 芯片（Etron、GigaDevice、Heyang、Foresee、ESMT、Dosilicon、XTX、Micron、
+GM25Q、ISSI、Micron、Boya、Puya 等）和 167 款 SPI NAND 芯片（Etron、GigaDevice、Heyang、Foresee、ESMT、Dosilicon、XTX、Micron、
 Toshiba/Kioxia、Winbond、Macronix 等）。不在列表中但带有 SFDP 表（JESD216；约
 2011 年以后的大多数芯片都有）的 SPI NOR 芯片会按该表识别：容量、扇区擦除和 4 字节模式都取自芯片本身，
 名称为 `SFDP-` 加其 ID。两者都没有的芯片会显示为未检测到；输出中的芯片 ID 可用于添加该芯片。Winbond W25M512JV 在一个封装内含两个 W25Q256JV 晶粒，
@@ -410,8 +410,8 @@ Toshiba/Kioxia、Winbond、Macronix 等）。不在列表中但带有 SFDP 表�
 SPI NOR 芯片是 1.8 V 型号（GigaDevice GD25L、Macronix MX25U、Winbond W25Q..W、Micron
 N25Q..A11 和 MT25QU、XMC XM25QU 和 XM25LU、Zbit ZB25LQ、Boya BY25Q..L、ISSI IS25WP 和 IS25WQ、
 Eon EN25S、Fudan FM25M、Adesto AT25DL、Microchip SST25WF、Dosilicon DS25M），
-还有 20 款 SPI NAND 芯片也是（GigaDevice GD5F..R、Winbond W25N..W、Macronix MX35UF、Micron
-MT29F..ABB、ESMT F50D、Dosilicon DS35M）。这些芯片要通过 1.8 V 转接板连接：在 3.3 V 下读取
+还有 45 款 SPI NAND 芯片也是（GigaDevice GD5F..R、Winbond W25N..W、Macronix MX35UF、Micron
+MT29F..ABB 和 MT29F..ADB、ESMT F50D、Dosilicon DS35M、Kioxia TC58CY 和 TH58CY、Etron EM78、XTX XT26Q）。这些芯片要通过 1.8 V 转接板连接：在 3.3 V 下读取
 不可靠，芯片也可能损坏。GigaDevice GD25W、XMC XM25QW、Fudan FM25W、Macronix MX25R 和 Adesto AT25DF021A 支持 1.65-3.6 V，
 可以直接连接。
 
