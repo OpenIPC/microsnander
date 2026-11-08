@@ -542,6 +542,35 @@ int main(int argc, char* argv[])
 	}
 
 	len_given = len != 0;
+	/* -c: the range is that of the file, known before anything is read; a file
+	   that is no regular file is refused before it is opened for reading (a
+	   FIFO would wait for a writer) */
+	if (op == 'c') {
+		int fd = open(fname, O_RDONLY | O_NONBLOCK);
+
+		printf("COMPARE:\n");
+		if (fd < 0) {
+			printf("Couldn't open file %s for reading.\n", fname);
+			goto out;
+		}
+		if (fstat(fd, &st) || !S_ISREG(st.st_mode) || st.st_size <= 0) {
+			close(fd);
+			printf("-c compares with a regular file that is not empty: %s is not one.\n", fname);
+			goto out;
+		}
+		close(fd);
+		if (!len_given) {
+			if (st.st_size > flen - addr) {
+				printf("File %s (0x%llX bytes) is longer than the chip from 0x%llX (0x%llX bytes); "
+				       "-l compares its start.\n", fname, (long long)st.st_size, addr, flen - addr);
+				goto out;
+			}
+			len = st.st_size;
+		} else if (st.st_size < len) {
+			printf("File %s is shorter than -l: comparing its 0x%llX bytes.\n", fname, (long long)st.st_size);
+			len = st.st_size;
+		}
+	}
 	if(addr && !len)
 		len = flen - addr;
 	else if(!addr && !len)
@@ -549,8 +578,8 @@ int main(int argc, char* argv[])
 	/* -k moves data to later pages, but only inside -a/-l (without -l: to the chip end) */
 	Skip_BAD_end = addr + len;
 
-	if ((op == 'w' || op == 'c') && !(fp = fopen(fname, "rb"))) {
-		printf(op == 'w' ? "WRITE:\n" : "COMPARE:\n");
+	if (op == 'w' && !(fp = fopen(fname, "rb"))) {
+		printf("WRITE:\n");
 		printf("Couldn't open file %s for reading.\n", fname);
 		goto out;
 	}
@@ -577,20 +606,6 @@ int main(int argc, char* argv[])
 	if (op == 'c') {
 		/* the chip against the file, nothing written: from -a, as long as the
 		   file (or -l, if that is shorter) */
-		printf("COMPARE:\n");
-		fclose(fp);
-		fp = NULL;
-		if (!regular) {
-			printf("-c compares with a regular file that is not empty: %s is not one.\n", fname);
-			free(buf);
-			goto out;
-		}
-		if (!len_given || st.st_size < len) {
-			if (len_given)
-				printf("File %s is shorter than -l: comparing its 0x%llX bytes.\n", fname, (long long)st.st_size);
-			if (st.st_size < len)
-				len = st.st_size;
-		}
 		rc = verify(buf, fname, addr, len, 1);
 		free(buf);
 		goto out;

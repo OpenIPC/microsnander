@@ -53,6 +53,7 @@ static int wel, aai, locked;
 static int busy;			/* status reads that still show WIP after WRSR or ULBPR */
 static unsigned char sr;			/* BP bits */
 static unsigned long aai_addr;
+static int rdid_fail;			/* the read of the ID fails on USB */
 static int spi_fail_at = -1;		/* the Nth AAI command fails on the wire */
 static int naai;
 static unsigned char sr2;		/* status register 2: CMP 0x40, QE 0x02, SRP1 0x01 */
@@ -91,6 +92,7 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Write_One_Byte(u8 data) { return SPI_CONTROL
 SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Read_NByte(u8 *d, u32 len, SPI_CONTROLLER_SPEED_T speed)
 {
 	(void)speed;
+	if (rdid_fail && cmd[0] == OPCODE_RDID) return SPI_CONTROLLER_RTN_DEF_NO;
 	for (u32 i = 0; i < len; i++, nread++) {
 		switch (cmd[0]) {
 		case OPCODE_RDID: d[i] = nread < 5 ? id[nread] : 0; break;
@@ -538,6 +540,13 @@ int main(void)
 		buf[0] = 0x34;
 		check(snor_write(buf, 1000, 2) == 2 && nprogs == 1 && mem[1000] == 0x34, "  a short write with data is programmed");
 	}
+
+	/* an ID read that fails on USB is no chip, and no ID is guessed from it */
+	chip(find("W25Q128BV"), ORDINARY);
+	rdid_fail = 1;
+	check(snor_init() < 0, "an ID read that fails on USB: no chip detected");
+	rdid_fail = 0;
+	check(snor_init() == 16 << 20, "  the next read finds it");
 
 	if (!fail) printf("all norsim checks passed\n");
 	return fail;

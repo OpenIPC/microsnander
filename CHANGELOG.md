@@ -8,13 +8,16 @@ from every push to `main`; this file is the change history.
 
 - `-c <file>` compares the chip with a file and writes nothing: from `-a`, as long as the file
   or `-l`; `Status: OK` or the first difference, as `-v`.
+  A file longer than the chip from `-a` is refused unless `-l` says how much of it to compare;
+  a file that is no regular file is refused before it is read.
 - SPI NOR: pages of all 0xFF are not programmed, as on SPI NAND: they change nothing, and an
   image with empty areas writes faster.
 - CH347: two slower SPI clocks, `-S 937.5K` and `-S 468.75K`. The answer to the SPI
   configuration is read into a buffer of its full length: firmware that sends the whole
   configuration back no longer fails the start.
 - A difference found by `-v` or `-c` on a CH347 at 30 MHz or more suggests `-S 15M`.
-- An ID of `ff ff ff` or `00 00 00` says that no chip answered and what to check.
+- An ID of `ff ff ff` or `00 00 00` says that no chip answered and what to check. An ID read
+  that fails on USB says so instead.
 
 ## 1.27.0 — 2026-11-08
 

@@ -132,6 +132,12 @@ $B -P ch347 -S 15M -c part.bin | grep -q 'try again with -S 15M' && { echo "FAIL
 t 0 "-c -l shorter than the file"      $B -c part.bin -l 100
 t 1 "-c on a missing file"             $B -c none.bin
 t 1 "-c on a FIFO"                     $B -c /dev/null
+head -c 70000 /dev/urandom > big.bin
+t 1 "-c with a file longer than the chip" $B -c big.bin
+$B -c big.bin | grep -q 'is longer than the chip from 0x0' && echo "ok     says so, nothing is read" || { echo "FAIL -c long file message"; fail=1; }
+head -c 4096 before.img > big.bin; head -c 70000 /dev/urandom >> big.bin
+t 0 "-c -l: the start of a longer file"  $B -c big.bin -l 4096
+rm -f fifo; mkfifo fifo; timeout 5 $B -c fifo > fifo.log; [ $? = 1 ] && grep -q 'is not one' fifo.log && echo "ok   -c on a FIFO with no writer does not wait" || { echo "FAIL -c FIFO waits"; fail=1; }; rm -f fifo
 rm -f part.bin tail.bin
 t 1 "-t, an erase that fails"         MS_FAIL=erase $B -t
 MS_FAIL=erase $B -t | grep -q 'the erase command fails' && echo "ok     a failing erase command is FAILED, not PROTECTED" || { echo "FAIL -t erase fail"; fail=1; }

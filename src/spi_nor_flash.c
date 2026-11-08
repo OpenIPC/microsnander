@@ -928,7 +928,9 @@ static int snor_read_devid(u8 *rxbuf, int n_rx)
 	SPI_CONTROLLER_Write_One_Byte(OPCODE_RDID);
 
 	retval = SPI_CONTROLLER_Read_NByte(rxbuf, n_rx, SPI_CONTROLLER_SPEED_SINGLE);
-	SPI_CONTROLLER_Chip_Select_High();
+	/* a failure of a held command comes with CS high */
+	if (SPI_CONTROLLER_Chip_Select_High())
+		retval = -1;
 	if (retval) {
 		printf("%s: ret: %x\n", __func__, retval);
 		return retval;
@@ -983,7 +985,11 @@ struct chip_info *chip_prob(void)
 	u32 jedec, jedec_strip, weight;
 	int i;
 
-	snor_read_devid(buf, 5);
+	memset(buf, 0, sizeof(buf));
+	if (snor_read_devid(buf, 5)) {
+		printf("SPI NOR Flash Not Detected: the ID read failed on USB.\n");
+		return NULL;
+	}
 	jedec = (u32)((u32)(buf[1] << 24) | ((u32)buf[2] << 16) | ((u32)buf[3] <<8) | (u32)buf[4]);
 	jedec_strip = jedec & 0xffff0000;
 
