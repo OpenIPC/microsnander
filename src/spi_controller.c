@@ -29,8 +29,8 @@
  * a page program, with the read of a status register or of data, or at CS
  * high. Every transfer is a USB round trip, so a page program is one
  * transfer instead of five. Longer writes go out at once, so their result
- * is the result of the call. A held transfer that fails at CS high fails
- * the next call too (most callers do not check CS high; the next call is
+ * is the result of the call. A held transfer, or CS high itself, that fails
+ * at CS high fails the next call too (most callers do not check CS high; the next call is
  * usually the status read that would report the operation done).
  */
 #define SPI_HOLD_MAX	4		/* longest write that is held back: an opcode, an address */
@@ -117,8 +117,12 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Chip_Select_High( void )
 
 	if (ret)
 		held_failed = 1;
-	if (programmer->cs(false))
+	/* the CH347 sends the last frame of a write with CS high: its failure,
+	   like that of a held transfer, fails the next call */
+	if (programmer->cs(false)) {
+		held_failed = 1;
 		ret = -1;
+	}
 	return (SPI_CONTROLLER_RTN_T)ret;
 }
 

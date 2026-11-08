@@ -16,7 +16,8 @@ static int rec_send(unsigned int w, unsigned int r, const unsigned char *wa, uns
 	memset(ra, 0x5a, r);
 	return fail_send ? -1 : 0;
 }
-static int rec_cs(bool low) { (void)low; cs_changes++; return 0; }
+static int fail_cs;
+static int rec_cs(bool low) { cs_changes++; return !low && fail_cs ? -1 : 0; }
 
 static const struct programmer rec = { .key = "rec", .name = "rec", .send = rec_send, .cs = rec_cs };
 const struct programmer *programmer = &rec;
@@ -80,6 +81,24 @@ int main(void)
 	int ret3 = SPI_CONTROLLER_Read_NByte(&v, 1, SPI_CONTROLLER_SPEED_SINGLE);
 	SPI_CONTROLLER_Chip_Select_High();
 	check(ret != 0 && ret2 != 0 && ret3 == 0, "a held command that fails at CS high fails the next read, once");
+
+	/* CS high that fails (the CH347 sends the last frame of a write with it)
+	   fails the next call, once */
+	SPI_CONTROLLER_Chip_Select_Low();
+	SPI_CONTROLLER_Write_One_Byte(0x02);
+	SPI_CONTROLLER_Write_NByte(page, sizeof(page), SPI_CONTROLLER_SPEED_SINGLE);
+	fail_cs = 1;
+	ret = SPI_CONTROLLER_Chip_Select_High();
+	fail_cs = 0;
+	SPI_CONTROLLER_Chip_Select_Low();
+	SPI_CONTROLLER_Write_One_Byte(0x05);
+	ret2 = SPI_CONTROLLER_Read_NByte(&v, 1, SPI_CONTROLLER_SPEED_SINGLE);
+	SPI_CONTROLLER_Chip_Select_High();
+	SPI_CONTROLLER_Chip_Select_Low();
+	SPI_CONTROLLER_Write_One_Byte(0x05);
+	ret3 = SPI_CONTROLLER_Read_NByte(&v, 1, SPI_CONTROLLER_SPEED_SINGLE);
+	SPI_CONTROLLER_Chip_Select_High();
+	check(ret != 0 && ret2 != 0 && ret3 == 0, "a page program whose CS high fails fails the next read, once");
 
 	/* a short data write (a last page of 10 bytes) goes out at once: its result is the call's */
 	fail_send = 1;
