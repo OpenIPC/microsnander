@@ -4,6 +4,20 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.38.0 — 2026-11-08
+
+- Web page: a bar of 20 segments replaces the dial. It fills amber as the operation goes on, turns
+  green over the same segments during the verify, runs a light when there is no percentage (Detect,
+  Erase, Registers), is all green at the end and red where a failure stopped.
+- Web page: the state is in the title of the browser tab; labels and the footer are easier to read;
+  the button of the running operation keeps its colour.
+- Web mode: Erase, Write and Clear protection now need the chip confirmed, as Self-test did: a request
+  that does not name it gets 400, before an upload takes space.
+- Clear protection now detects the chip and asks first, on the page and in the Android app, and
+  goes only to the chip confirmed. On the page it is off without a chip.
+- Web mode: without `-K`, on an address other than 127.x, the service says at the start that anyone
+  who reaches the port can erase or write the chip.
+
 ## 1.37.0 — 2026-11-08
 
 - SPI NOR: XT25Q32F, XT25Q256F, XT25W512B, ZB25VQ32D, PY25F256LD and PY25F512LD added, checked

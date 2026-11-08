@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>MicroSNANDer Web</title>
 <style>
-:root{--panel:#2c2119;--panel2:#3d2d22;--brass:#c9a24d;--brass2:#8c6a2a;--amber:#ffb347;--ember:#ff6a1a;--ink:#e8d9b8;--dim:#8a7455;--red:#c8452c;--green:#5ad38f}
+:root{--panel:#2c2119;--panel2:#3d2d22;--brass:#c9a24d;--brass2:#8c6a2a;--amber:#ffb347;--ember:#ff6a1a;--ink:#e8d9b8;--dim:#b09873;--red:#c8452c;--green:#5ad38f}
 *{box-sizing:border-box}
 body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 50% 0,#3b2c22 0,#1a1512 55%,#0f0b09 100%);color:var(--ink);font-family:Georgia,'Times New Roman',serif;display:flex;flex-direction:column;align-items:center;padding:28px 12px}
 h1{font-size:clamp(22px,4.5vw,40px);letter-spacing:.2em;text-transform:uppercase;margin:0 0 6px;text-align:center;color:var(--brass);text-shadow:0 1px 0 #f3d78a,0 -1px 0 #3d2a0c,0 0 22px rgba(201,162,77,.35)}
@@ -23,19 +23,18 @@ h1{font-size:clamp(22px,4.5vw,40px);letter-spacing:.2em;text-transform:uppercase
 .bulb.bad{background:radial-gradient(circle at 40% 35%,#ffd0c4,var(--red) 45%,#5a1a0e);box-shadow:0 0 14px var(--red);animation:blink 1.2s infinite}
 @keyframes blink{50%{box-shadow:0 0 2px var(--red)}}
 .mid{display:flex;gap:22px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-top:22px}
-.gauge{position:relative;width:220px;height:118px;overflow:hidden;flex:none;margin:0 auto}
-.dial{position:absolute;left:0;top:0;width:220px;height:220px;border-radius:50%;border:6px solid var(--brass2);background:radial-gradient(circle at 50% 50%,#f4e6c3 0,#e6d3a3 55%,#c9b27a 100%);box-shadow:inset 0 0 18px rgba(0,0,0,.5)}
-.tick{position:absolute;left:50%;top:110px;width:2px;height:104px;margin-left:-1px;margin-top:-104px;transform-origin:50% 100%}
-.tick:after{content:'';position:absolute;top:8px;left:0;width:2px;height:12px;background:#3a2a10}
-.needle{position:absolute;left:50%;top:110px;width:4px;height:98px;margin-left:-2px;margin-top:-98px;background:linear-gradient(180deg,#d33 0,#7a1a10 70%,#2a1c10);transform-origin:50% 100%;transform:rotate(-88deg);transition:transform .6s cubic-bezier(.3,1.4,.4,1);border-radius:2px;box-shadow:0 0 4px rgba(0,0,0,.6)}
-.hub{position:absolute;left:50%;top:110px;width:26px;height:26px;margin:-13px 0 0 -13px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#f1d38b,#8c6a2a 60%,#3a2a10);box-shadow:0 2px 4px #000}
-.lbl{position:absolute;bottom:8px;font-family:'Courier New',monospace;font-size:11px;letter-spacing:.2em;color:#3a2a10;font-weight:bold}
-.lbl.l{left:28px}.lbl.r{right:22px}
 .readout{flex:1;min-width:230px;font-family:'Courier New',monospace}
 .state{font-size:clamp(18px,3vw,26px);letter-spacing:.18em;text-transform:uppercase;color:var(--amber);text-shadow:0 0 12px rgba(255,179,71,.5);padding:14px 16px;border:2px solid #574123;border-radius:8px;background:#120d0a;box-shadow:inset 0 0 20px rgba(0,0,0,.8);transition:color .3s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .state.off{color:var(--dim);text-shadow:none}
 .state.ok{color:var(--green);text-shadow:0 0 12px rgba(90,211,143,.45)}
 .state.bad{color:var(--red);text-shadow:0 0 12px rgba(200,69,44,.5)}
+.bg{display:grid;grid-template-columns:repeat(20,1fr);gap:3px;height:32px;margin-top:10px;padding:6px 8px;background:#120d0a;border:2px solid #574123;border-radius:8px;box-shadow:inset 0 0 14px rgba(0,0,0,.8)}
+.bg b{background:#2a2016;border-radius:1px}
+.bg b.on{background:linear-gradient(180deg,#ffd38a,var(--amber));box-shadow:0 0 6px var(--amber)}
+.bg b.ok{background:var(--green);box-shadow:0 0 6px var(--green)}
+.bg b.bad{background:var(--red);box-shadow:0 0 6px var(--red)}
+.bg.run b{animation:run 1.6s linear infinite;animation-delay:calc(var(--i)*.08s)}
+@keyframes run{0%,18%{background:var(--amber);box-shadow:0 0 6px var(--amber)}19%,100%{background:#2a2016;box-shadow:none}}
 .meta{margin-top:10px;font-size:12px;color:var(--dim);letter-spacing:.08em;line-height:1.7;word-break:break-all}
 .meta b{display:inline-block;width:96px;font-weight:normal}
 .meta a{color:var(--amber)}
@@ -52,6 +51,7 @@ h1{font-size:clamp(22px,4.5vw,40px);letter-spacing:.2em;text-transform:uppercase
 .btn.danger.engaged .ind{background:radial-gradient(circle at 40% 35%,#ffe1d0,var(--ember) 45%,#7a2a05);box-shadow:0 0 10px var(--ember);animation:flick .35s infinite}
 @keyframes flick{50%{opacity:.25}}
 .btn:disabled{cursor:not-allowed;filter:grayscale(.7) brightness(.6)}
+.btn:disabled.engaged{filter:none}
 .btn.wide{grid-column:auto;font-size:13px}
 .log{font-family:'Courier New',monospace;font-size:12px;color:var(--dim);margin-top:18px;min-height:16px;letter-spacing:.08em}
 .regs{display:grid;grid-template-columns:auto repeat(8,1fr);gap:8px 6px;margin-top:20px;font-family:'Courier New',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase}
@@ -62,7 +62,7 @@ h1{font-size:clamp(22px,4.5vw,40px);letter-spacing:.2em;text-transform:uppercase
 .regbtns{display:flex;justify-content:flex-end;margin-top:20px}
 .regbtns .btn{min-width:240px}
 body:not(.ready) *{transition:none!important}
-.foot{margin-top:0;font-family:'Courier New',monospace;font-size:11px;color:#5e4d36;letter-spacing:.2em;text-transform:uppercase;text-align:center}
+.foot{margin-top:0;font-family:'Courier New',monospace;font-size:11px;color:#958061;letter-spacing:.2em;text-transform:uppercase;text-align:center}
 </style>
 </head>
 <body>
@@ -78,11 +78,7 @@ body:not(.ready) *{transition:none!important}
 <div class="lamp"><span class="bulb" id="l-busy"></span>Busy</div>
 </div>
 <div class="mid">
-<div class="gauge"><div class="dial"></div>
-<div class="tick" style="transform:rotate(-80deg)"></div><div class="tick" style="transform:rotate(-40deg)"></div><div class="tick"></div><div class="tick" style="transform:rotate(40deg)"></div><div class="tick" style="transform:rotate(80deg)"></div>
-<span class="lbl l">0</span><span class="lbl r">100%</span>
-<div class="needle" id="needle"></div><div class="hub"></div></div>
-<div class="readout"><div class="state off" id="state">Stand by</div><div class="meta" id="meta">Press Detect to find the chip.</div></div>
+<div class="readout"><div class="state off" id="state">Stand by</div><div class="bg" id="bar"></div><div class="meta" id="meta">Press Detect to find the chip.</div></div>
 </div>
 <div class="btns">
 <button class="btn" id="b-detect">Detect<span class="ind"></span></button>
@@ -111,6 +107,20 @@ var protect={SRP0:1,TB:1,BP2:1,BP1:1,BP0:1,CMP:1,SRP1:1,WPS:1,SRWD:1,BP3:1};
 var ops=['detect','read','erase','write','registers','unprotect','selftest'],timer=null,lastOp='',busyLocal=false;
 var words={detect:'Detecting',read:'Reading',erase:'Erasing',write:'Writing',verify:'Verifying',registers:'Reading registers',unprotect:'Unprotecting',selftest:'Self-testing'};
 function $(i){return document.getElementById(i)}
+for(var i=0;i<20;i++){var seg=document.createElement('b');seg.style.setProperty('--i',i);$('bar').appendChild(seg)}
+/* the display and the title of the browser tab */
+function show(t,c){var st=$('state');st.textContent=t;st.className='state'+(c?' '+c:'');document.title=t+' \u00b7 MicroSNANDer'}
+/* the bar: amber as the work goes on; the verify of a write, which starts from 0
+   again, turns the same segments green and never takes one back. No percentage: a
+   running light. A failure: red on the segment where it stopped */
+function meter(s){
+ var n=20,run=s.busy&&!s.total,cur=s.total?Math.min(n,Math.floor(n*s.done/s.total)):0,verify=s.phase==='verify';
+ $('bar').className='bg'+(run?' run':'');
+ [].forEach.call($('bar').children,function(e,i){
+  var c=verify?(i<cur?'ok':'on'):(i<cur?'on':'');
+  e.className=s.busy?(run?'':c):s.ok===true?'ok':s.ok===false?(i===Math.min(cur,n-1)?'bad':c):'';
+ });
+}
 var base=location.origin;	/* without user:password@ of the address, which fetch() refuses */
 function bulb(id,c){$(id).className='bulb'+(c?' '+c:'')}
 function esc(t){return String(t).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
@@ -124,12 +134,12 @@ function render(s){
  bulb('l-chip',s.chip?(s.voltage==='1.8'?'bad':'ok'):(s.ok===false&&s.programmer&&!s.chip?'bad':''));
  bulb('l-busy',s.busy?'on':'');
  $('ver').textContent='microsnander '+(s.version||'');
- var st=$('state'),pct=s.total?Math.floor(100*s.done/s.total):0;
- if(s.busy){st.textContent=(words[s.phase]||words[s.op]||s.op)+(s.total?' '+pct+'%':'');st.className='state'}
- else if(s.ok===true){st.textContent=s.op==='read'?'Saved':s.op==='write'?'Written':s.op==='erase'?'Erased':s.op==='unprotect'?'Unprotected':s.op==='selftest'?'Self-test OK':'Ready';st.className='state'}
- else if(s.ok===false){st.textContent='Failed';st.className='state bad'}
- else{st.textContent='Stand by';st.className='state off'}
- $('needle').style.transform='rotate('+(s.busy&&s.total?(-88+176*s.done/s.total):(s.ok===true&&s.total?88:-88))+'deg)';
+ var pct=s.total?Math.floor(100*s.done/s.total):0;
+ if(s.busy)show((words[s.phase]||words[s.op]||s.op)+(s.total?' '+pct+'%':''));
+ else if(s.ok===true)show(s.op==='read'?'Saved':s.op==='write'?'Written':s.op==='erase'?'Erased':s.op==='unprotect'?'Unprotected':s.op==='selftest'?'Self-test OK':'Ready');
+ else if(s.ok===false)show('Failed','bad');
+ else show('Stand by','off');
+ meter(s);
  var m='';
  if(s.programmer)m+='<b>PROGRAMMER</b>'+esc(s.programmer)+'<br>';
  if(s.chip)m+='<b>CHIP</b>'+esc(s.chip)+' &middot; '+size(s.size)+(s.voltage?' &middot; '+esc(s.voltage)+' V':'')+'<br>';
@@ -137,8 +147,8 @@ function render(s){
  if(s.file)m+='<b>DUMP</b><a href="/dumps/'+encodeURIComponent(s.file)+'" download>'+esc(s.file)+'</a><br>';
  if(s.message)m+=esc(s.message);
  $('meta').innerHTML=m||'Press Detect to find the chip.';
- /* Erase and Write only on a chip found: nothing to confirm or to pick without one */
- ops.forEach(function(o){var b=$('b-'+o);b.disabled=!!s.busy||((o==='erase'||o==='write'||o==='selftest')&&!s.chip);b.classList.toggle('engaged',!!s.busy&&(s.op===o))});
+ /* what changes the chip only on a chip found: nothing to confirm or to pick without one */
+ ops.forEach(function(o){var b=$('b-'+o);b.disabled=!!s.busy||((o==='erase'||o==='write'||o==='selftest'||o==='unprotect')&&!s.chip);b.classList.toggle('engaged',!!s.busy&&(s.op===o))});
  if(s.sr){
   var sr=s.sr_macronix?s.sr.slice(0,1):s.sr,names=s.sr_macronix?bitsMx:bits;
   $('regnote').hidden=!!s.sr_macronix;$('regnote-mx').hidden=!s.sr_macronix;
@@ -152,10 +162,10 @@ function render(s){
  if(s.busy&&!timer)timer=setInterval(poll,500);
  if(!s.busy&&timer){clearInterval(timer);timer=null}
 }
-function offline(){bulb('l-link','bad');$('t-link').textContent='No link';$('state').textContent='Link offline';$('state').className='state bad'}
+function offline(){bulb('l-link','bad');$('t-link').textContent='No link';show('Link offline','bad');$('bar').className='bg';[].forEach.call($('bar').children,function(e){e.className=''})}
 function poll(){fetch(base+'/api/state',{cache:'no-store'}).then(function(r){return r.json()}).then(render).catch(offline)}
 /* accepted(n): the operation started as number n ("Started n."); chip: the
-   one confirmed for Erase or Write, the server refuses another one */
+   one confirmed for what changes it, the server refuses another one */
 function run(op,body,btn,accepted,chip){
  lastOp=op;btn.classList.add('pressed');setTimeout(function(){btn.classList.remove('pressed')},180);
  $('log').textContent='> '+op+(body?' '+body.byteLength+' bytes':'')+' ... engaging';
@@ -181,7 +191,7 @@ function detectThen(btn,cb){
 }
 function chipName(s){return s.chip+' ('+size(s.size)+')'}
 $('b-erase').onclick=function(){var b=this;detectThen(b,function(s){if(confirm('Erase the whole '+chipName(s)+'?'))run('erase',null,b,null,s)})};
-$('b-unprotect').onclick=function(){run('unprotect',null,this)};
+$('b-unprotect').onclick=function(){var b=this;detectThen(b,function(s){if(confirm('Clear the protection bits of the '+chipName(s)+'?'))run('unprotect',null,b,null,s)})};
 /* the self-test erases the first block and writes its data back: the chip found, then the question */
 $('b-selftest').onclick=function(){var b=this;detectThen(b,function(s){if(confirm('Self-test of the '+chipName(s)+': erase its first block, write and read a pattern, put the old data back?'))run('selftest',null,b,null,s)})};
 $('b-write').onclick=function(){$('file').click()};
