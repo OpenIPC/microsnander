@@ -22,6 +22,7 @@
  *   POST /api/write        write the request body from address 0, then verify
  *   POST /api/registers    read the status registers (SPI NOR)
  *   POST /api/unprotect    clear the protection (as -u), then read them
+ *   POST /api/selftest     -t on the first block
  *   GET  /dumps/<file>     a dump made by Read
  */
 #include <errno.h>
@@ -213,7 +214,7 @@ static int op_read(struct ms_chip *c, char *msg, size_t n)
 	return 0;
 }
 
-/* the chip the page confirmed an Erase or a Write for ("": any) */
+/* the chip the page confirmed the operation for ("": any) */
 static char want_chip[64];
 static long long want_size;
 
@@ -259,7 +260,8 @@ static void *worker(void *arg)
 	case OP_WRITE:     ms_expect(want_chip, want_size);
 			   ret = ms_write_file(&c, upload, on_progress, NULL, msg, sizeof(msg)); break;
 	case OP_REGISTERS: ret = ms_registers(&c, msg, sizeof(msg)); break;
-	case OP_UNPROTECT: ret = ms_unprotect(&c, msg, sizeof(msg)); break;
+	case OP_UNPROTECT: ms_expect(want_chip, want_size);
+			   ret = ms_unprotect(&c, msg, sizeof(msg)); break;
 	case OP_SELFTEST: {
 		char saved[160];
 
@@ -621,6 +623,28 @@ static void handle(int fd)
 		reply_text(fd, "404 Not Found", "Not found.\n");
 		return;
 	}
+	/* What changes the chip names the chip the user confirmed: "X-MicroSNANDer-Chip:
+	   W25Q128BV;16777216"; without it the request is refused before an upload
+	   takes space, and another chip in the socket by then is refused too */
+	char want[64] = "";
+	long long want_sz = 0;
+	const char *h = find_header(head, "X-MicroSNANDer-Chip:");
+	int confirmed = op == OP_ERASE || op == OP_WRITE || op == OP_SELFTEST || op == OP_UNPROTECT;
+
+	if (h && confirmed) {
+		size_t k = 0;
+
+		for (h += 2 + strlen("X-MicroSNANDer-Chip:"); *h == ' '; h++)
+			;
+		while (*h && *h != ';' && *h != '\r' && k < sizeof(want) - 1)
+			want[k++] = *h++;
+		want[k] = 0;
+		want_sz = *h == ';' ? strtoll(h + 1, NULL, 10) : 0;
+	}
+	if (confirmed && (!want[0] || want_sz <= 0)) {		/* the page always names the chip */
+		reply_text(fd, "400 Bad Request", "This operation needs the chip confirmed: X-MicroSNANDer-Chip: NAME;SIZE.\n");
+		return;
+	}
 	/* an upload holds the slot of the operation it brings: another upload is
 	   refused before it takes space, another operation before it runs */
 	pthread_mutex_lock(&st.lock);
@@ -665,26 +689,6 @@ static void handle(int fd)
 			reply_text(fd, "507 Insufficient Storage", "Cannot store the file in the dump directory.\n");
 			return;
 		}
-	}
-	/* Erase and Write name the chip the user confirmed: "X-MicroSNANDer-Chip:
-	   W25Q128BV;16777216"; another chip in the socket by then is refused */
-	char want[64] = "";
-	long long want_sz = 0;
-	const char *h = find_header(head, "X-MicroSNANDer-Chip:");
-
-	if (h && (op == OP_ERASE || op == OP_WRITE || op == OP_SELFTEST)) {
-		size_t k = 0;
-
-		for (h += 2 + strlen("X-MicroSNANDer-Chip:"); *h == ' '; h++)
-			;
-		while (*h && *h != ';' && *h != '\r' && k < sizeof(want) - 1)
-			want[k++] = *h++;
-		want[k] = 0;
-		want_sz = *h == ';' ? strtoll(h + 1, NULL, 10) : 0;
-	}
-	if (op == OP_SELFTEST && (!want[0] || want_sz <= 0)) {	/* the page always names the chip */
-		reply_text(fd, "400 Bad Request", "A self-test needs the chip confirmed: X-MicroSNANDer-Chip: NAME;SIZE.\n");
-		return;
 	}
 	unsigned int seq;
 
@@ -761,6 +765,8 @@ int web_serve(const char *listen_on, const char *password, const char *dir,
 	getsockname(s, (struct sockaddr *)&sa, &sl);
 	printf("Web mode on http://%s:%d/%s, dumps in %s\n", host, ntohs(sa.sin_port),
 	       web_password ? " (password)" : "", web_dir);
+	if (!web_password && (ntohl(sa.sin_addr.s_addr) >> 24) != 127)
+		printf("No password (-K): anyone who reaches this port can erase or write the chip.\n");
 	fflush(stdout);
 
 	/* a thread for each connection, so a slow client does not hold the others */

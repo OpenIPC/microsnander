@@ -54,8 +54,8 @@ static const char *size_text(char *buf, size_t n, long long size)
 	return buf;
 }
 
-/* the chip the user confirmed for the next operation: Erase and Write go
-   only to it; "" takes any */
+/* the chip the user confirmed for the next operation: Erase, Write, Self-test
+   and Clear protection go only to it; "" takes any */
 static char expect_chip[64];
 static long long expect_size;
 
@@ -65,7 +65,7 @@ void ms_expect(const char *chip, long long size)
 	expect_size = size;
 }
 
-/* confirmed: an Erase or a Write, which goes only to the chip of ms_expect();
+/* confirmed: an operation that changes the chip, only for the chip of ms_expect();
    any other operation drops that expectation */
 static int chip_open(struct ms_chip *c, char *msg, size_t n, int confirmed)
 {
@@ -355,7 +355,7 @@ int ms_unprotect(struct ms_chip *c, char *msg, size_t n)
 {
 	int ret = -1;
 
-	if (chip_open(c, msg, n, 0))
+	if (chip_open(c, msg, n, 1))		/* it changes the status registers */
 		return -1;
 	if (!prog.flash_unprotect)
 		say(msg, n, "Clearing the protection is for SPI NOR through the CH341A or the CH347 only.");

@@ -128,7 +128,10 @@ public class MainActivity extends Activity {
                 .setNegativeButton(android.R.string.cancel, null).show()));
         buttons[3].setOnClickListener(v -> detectThen((a, r) -> a.pickWrite()));
         buttons[4].setOnClickListener(v -> run(R.string.reading_registers, true, (fd, vid, pid, p) -> Native.registers(fd, vid, pid)));
-        buttons[5].setOnClickListener(v -> run(R.string.unprotecting, true, (fd, vid, pid, p) -> Native.unprotect(fd, vid, pid)));
+        buttons[5].setOnClickListener(v -> detectThen((a, r) -> new AlertDialog.Builder(a)
+                .setMessage(a.getString(R.string.unprotect_confirm, r.chip, sizeOf(r.size)))
+                .setPositiveButton(R.string.unprotect, (d, w) -> a.unprotect(r))
+                .setNegativeButton(android.R.string.cancel, null).show()));
         // the self-test erases the first block and writes it back: Detect, then the question
         buttons[6].setOnClickListener(v -> detectThen((a, r) -> new AlertDialog.Builder(a)
                 .setMessage(a.getString(R.string.selftest_confirm, r.chip, sizeOf(r.size)))
@@ -325,6 +328,14 @@ public class MainActivity extends Activity {
             String more = where != null ? app.getString(R.string.dump_is, where) : app.getString(R.string.dump_kept);
             return new Native.Result(t.ok, t.message + "\n" + more, t.programmer, t.chip, t.size, t.sr, t.name,
                     t.voltage, t.warning);
+        });
+    }
+
+    /** the status registers, only if it is still the chip r found */
+    private void unprotect(Native.Result r) {
+        run(R.string.unprotecting, true, (fd, vid, pid, p) -> {
+            Native.expect(r.chip, r.size);
+            return Native.unprotect(fd, vid, pid);
         });
     }
 

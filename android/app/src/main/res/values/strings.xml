@@ -26,6 +26,7 @@
     <string name="no_programmer">No programmer found: plug it into the USB host port (on a TV box, try the other port).</string>
     <string name="no_permission">The USB permission for the programmer was not given.</string>
     <string name="no_storage">Without the storage permission the dump cannot go to Downloads.</string>
+    <string name="unprotect_confirm">Clear the protection bits of the %1$s (%2$s)?</string>
     <string name="erase_confirm">Erase the whole %1$s (%2$s)?</string>
     <string name="write_confirm">Write this file from address 0 into the erased %1$s (%2$s), then verify it? Erase the chip first.</string>
     <string name="programmer_is">PROGRAMMER  %1$s</string>

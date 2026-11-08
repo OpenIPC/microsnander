@@ -359,7 +359,7 @@ bench connects the programmer and the chip, and a specialist elsewhere opens the
 progress and runs the operations.
 
 <p align="center">
-  <img src="screenshots/web-reading.png" alt="MicroSNANDer Web while reading: lamps, progress gauge, display, brass buttons" width="45%">
+  <img src="screenshots/web-reading.png" alt="MicroSNANDer Web while reading: lamps, display, progress bar, brass buttons" width="45%">
   <img src="screenshots/web-registers.png" alt="MicroSNANDer Web after a read: dump link and status register lamps" width="45%">
   <img src="screenshots/web-selftest.png" alt="MicroSNANDer Web after a self-test: SELF-TEST OK, the protection and the verdict" width="45%">
 </p>
@@ -373,9 +373,12 @@ microsnander -P ch347 -W 8080 -o /srv/dumps
 The page:
 
 - **Lamps**: Link (the page reaches the service), Programmer, Chip, Busy.
-- **Gauge and display**: the progress of the operation in percent and its state (Reading,
-  Writing, Verifying, Erasing, Saved, Written, Erased, Failed); under them the programmer,
-  the chip and its size, the last dump and the last message.
+- **Display and bar**: the state of the operation (Reading, Writing, Verifying, Erasing, Saved,
+  Written, Erased, Failed) with its percent, also in the title of the browser tab. The bar of 20
+  segments fills amber, the verify of a write turns the same segments green, an operation with
+  no percentage (Detect, Erase, Registers) runs a light, the end is all green and a failure red
+  on the segment where it stopped. Under them the programmer, the chip and its size, the last
+  dump and the last message.
 - **Detect**: finds the programmer and the chip, and reads the status registers.
 - **Read**: the whole chip into a file in the `-o` directory (the current one by default),
   which the browser downloads too; the link stays on the page. With `-a`/`-l` given at the
@@ -387,7 +390,7 @@ The page:
   free disk space there.
 - **Registers**: a lamp for every bit of status registers 1–3 (bit names as on Winbond-type
   chips; amber: a protection bit, green: another bit) and **Clear protection**, which does
-  what `-u` does: it clears BP, SRP and CMP and keeps QE. SPI NOR through the CH341A or the
+  what `-u` does, after Detect and a question naming the chip found: it clears BP, SRP and CMP and keeps QE. SPI NOR through the CH341A or the
   CH347 only; the EZP programmers cannot read the registers.
 - **Self-test**: `-t` on the first block (see [Usage](#usage)) — Detect first, then the
   question naming the chip found; the verdict (`OK`, `PROTECTED`, `FAILED`) and the protection
@@ -413,13 +416,17 @@ How it works:
 
 Access:
 
-- Without `-K` anyone who reaches the port can erase the chip. With `-K` the browser asks for
+- Without `-K` anyone who reaches the port can erase the chip, and the service says so at the
+  start unless it listens on a 127.x address. With `-K` the browser asks for
   the password (any user name); an empty password is refused.
 - The page is plain HTTP, so the password crosses the network unencrypted: use a trusted
   network, or `-W 127.0.0.1:8080` and an SSH tunnel.
 - Operations need a header that only the page sends, so a page of another site cannot start an
   erase or a write. A request has to name this machine by its IP address, `localhost` or its
   host name (no other names: DNS rebinding).
+- Erase, Write, Self-test and Clear protection go only to the chip the user confirmed: a request
+  that does not name it gets `400`, and another chip in the socket by then is refused. The check
+  is the model and the size, so another chip of the same model passes it.
 - For help over the internet use an SSH tunnel: `microsnander -W 127.0.0.1:8080 -K secret` on the
   machine with the programmer, so that the port stays closed to the network, then
   `ssh -L 8080:127.0.0.1:8080 user@machine` and `http://127.0.0.1:8080/` on the specialist's side.

@@ -311,7 +311,7 @@ microsnander -O security.bin
 现场人员连接编程器和芯片，异地的专家打开页面，查看进度并执行操作。
 
 <p align="center">
-  <img src="screenshots/web-reading.png" alt="MicroSNANDer Web 读取中：指示灯、进度表盘、显示屏、黄铜按钮" width="45%">
+  <img src="screenshots/web-reading.png" alt="MicroSNANDer Web 读取中：指示灯、显示屏、进度条、黄铜按钮" width="45%">
   <img src="screenshots/web-registers.png" alt="MicroSNANDer Web 读取完成：转储链接和状态寄存器各位的指示灯" width="45%">
   <img src="screenshots/web-selftest.png" alt="MicroSNANDer Web 自检之后：SELF-TEST OK、保护状态和结果" width="45%">
 </p>
@@ -325,8 +325,10 @@ microsnander -P ch347 -W 8080 -o /srv/dumps
 页面：
 
 - **指示灯**：Link（页面能连到服务）、Programmer、Chip、Busy。
-- **表盘和显示屏**：操作进度（百分比）和状态（Reading、Writing、Verifying、Erasing、Saved、Written、
-  Erased、Failed）；下方是编程器、芯片及其容量、最近的转储和最近的消息。
+- **显示屏和进度条**：操作状态（Reading、Writing、Verifying、Erasing、Saved、Written、Erased、Failed）及其百分比，
+  同时显示在浏览器标签页的标题中。20 段进度条以琥珀色填充，写入后的校验把同样的段变为绿色；没有百分比的操作
+  （Detect、Erase、Registers）显示流动的灯光，完成时全部为绿色，失败时停止处的段为红色。下方是编程器、芯片及其容量、
+  最近的转储和最近的消息。
 - **Detect**：查找编程器和芯片，并读取状态寄存器。
 - **Read**：将整片芯片读入 `-o` 目录（默认为当前目录）中的文件，浏览器同时下载，链接保留在页面上。
   启动时指定了 `-a`/`-l` 时，读取该区域。
@@ -335,7 +337,7 @@ microsnander -P ch347 -W 8080 -o /srv/dumps
   请先擦除。文件不会保存在内存中：写入前它以无名文件的形式存放在 `-o` 目录中，因此最大 512 MB 的
   镜像需要该目录有同样大小的可用空间。
 - **Registers**：状态寄存器 1–3 的每一位一个指示灯（位名称与 Winbond 类芯片相同；琥珀色为保护位，
-  绿色为其他位），以及 **Clear protection**，与 `-u` 相同：清除 BP、SRP 和 CMP，保留 QE。仅限通过
+  绿色为其他位），以及 **Clear protection**，与 `-u` 相同，先执行 Detect 并询问所找到的芯片：清除 BP、SRP 和 CMP，保留 QE。仅限通过
   CH341A 或 CH347 操作 SPI NOR；EZP 编程器无法读取寄存器。
 - **Self-test**：对第一个块执行 `-t`（见[用法](#用法)）：先 Detect，再弹出写明所找到芯片的确认；结果
   （`OK`、`PROTECTED`、`FAILED`）和保护状态显示在消息中。无法写回的块保存到 `-o` 目录。
@@ -356,12 +358,13 @@ microsnander -P ch347 -W 8080 -o /srv/dumps
 
 访问：
 
-- 不带 `-K` 时，任何能访问该端口的人都可以擦除芯片。带 `-K` 时浏览器会要求输入密码（用户名任意）；
+- 不带 `-K` 时，任何能访问该端口的人都可以擦除芯片；除非监听 127.x 地址，服务启动时会提示这一点。带 `-K` 时浏览器会要求输入密码（用户名任意）；
   空密码会被拒绝。
 - 页面使用普通 HTTP，密码以明文在网络上传输：请在可信网络中使用，或使用 `-W 127.0.0.1:8080` 加
   SSH 隧道。
 - 操作需要一个只有本页面才会发送的请求头，因此其他网站的页面无法发起擦除或写入。请求必须通过 IP
   地址、`localhost` 或本机主机名访问本机（不接受其他名称：防止 DNS rebinding）。
+- Erase、Write、Self-test 和 Clear protection 只作用于用户确认过的芯片：未指明芯片的请求会得到 `400`，此时插座中换成其他芯片也会被拒绝。校验的是型号和容量，因此同型号的另一颗芯片可以通过校验。
 - 通过互联网协助时请使用 SSH 隧道：在连接编程器的机器上运行 `microsnander -W 127.0.0.1:8080 -K secret`，
   使端口不对网络开放，然后在专家一侧运行 `ssh -L 8080:127.0.0.1:8080 user@machine` 并打开
   `http://127.0.0.1:8080/`。隧道是加密的。不使用隧道的普通端口转发则没有加密：密码和固件以明文经过互联网，而且只能通过 IP 地址访问，

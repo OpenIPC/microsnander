@@ -16,6 +16,7 @@ static unsigned char mem[SIM_SIZE];
 static int unprotects, opens, fail_open;
 const char *ms_version = "test";
 static const char *extra = "";		/* more request headers */
+#define CHIP80 "Host: 127.0.0.1:8080\r\nX-MicroSNANDer-Chip: W25Q80;1048576\r\n"
 const char *flash_chip_name;
 static const struct programmer fake = { .key = "ch347", .name = "CH347", .send = (void *)1 };
 static const struct programmer fake341 = { .key = "ch341a", .name = "CH341A", .send = (void *)1 };
@@ -119,7 +120,7 @@ int main(void)
 	check(request("GET", "/", NULL, NULL, 0) == 200 && strstr(body_of(), "<title>MicroSNANDer Web</title>") && strstr(body_of(), "Registers"),
 	      "GET / gives the page");
 	check(strstr(body_of(), "if(s.seq<seen&&s.seq!==0)return") != NULL, "  an older state does not replace a newer one on the page");
-	check(strstr(body_of(), "function detectThen") && strstr(body_of(), "(o==='erase'||o==='write'||o==='selftest')&&!s.chip"),
+	check(strstr(body_of(), "function detectThen") && strstr(body_of(), "(o==='erase'||o==='write'||o==='selftest'||o==='unprotect')&&!s.chip"),
 	      "  Erase and Write wait for a chip: off without one, a Detect before the question");
 
 	web_password = "secret";
@@ -219,6 +220,10 @@ int main(void)
 	check(strstr(body_of(), "-W25Q80-0x1000-0x2000.bin\"") != NULL, "with -a/-l the dump name has the range");
 	web_addr = web_len = 0;
 
+	mem[0] = 0x12;
+	check(request("POST", "/api/erase", NULL, NULL, 0) == 400 && mem[0] == 0x12, "Erase without the chip confirmed: 400, nothing erased");
+	check(request("POST", "/api/write", NULL, img, sizeof(img)) == 400 && !st.uploading, "Write without the chip confirmed: 400, the upload slot is free");
+	extra = CHIP80;
 	check(request("POST", "/api/erase", NULL, NULL, 0) == 202, "Erase starts");
 	wait_idle();
 	request("GET", "/api/state", NULL, NULL, 0);
@@ -246,6 +251,7 @@ int main(void)
 	wait_idle();
 	request("GET", "/api/state", NULL, NULL, 0);
 	check(strstr(body_of(), "\"ok\":false") && strstr(body_of(), "Verify failed"), "  a write that does not take fails the verify");
+	check(strstr(body_of(), "\"phase\":\"verify\"") && !strstr(body_of(), "\"total\":0,"), "  the phase and the progress stay after the failure, for the bar");
 	{
 		int opens_before = opens;
 		struct ms_chip c;
@@ -282,6 +288,7 @@ int main(void)
 	      "  no place for the file in the dump directory: 500, nothing starts");
 	check(!st.uploading, "  and the upload slot is free again");
 	web_dir = dir;
+	extra = "";
 
 	/* the self-test: protected (BP set) stops before any erase; then OK on the first block */
 	memcpy(mem, "loader", 6);
@@ -325,8 +332,18 @@ int main(void)
 	memcpy(mem, "loader", 6);
 	sim_sr1 = 0x1c;
 	check(strstr(web_page, "id=\"b-selftest\" disabled") != NULL, "  the page has the Self-test button, off without a chip");
+	check(strstr(web_page, "id=\"bar\"") && strstr(web_page, "document.title=") && !strstr(web_page, "needle"), "  the page has the bar and the state in the tab title");
+	check(strstr(web_page, ".btn:disabled.engaged{filter:none}") && strstr(web_page, "detectThen(b,function(s){if(confirm('Clear the protection"),
+	      "  the running button keeps its colour; Clear protection asks about the chip found");
 
+	check(request("POST", "/api/unprotect", NULL, NULL, 0) == 400 && unprotects == 0, "Clear protection without the chip confirmed: 400");
+	extra = "Host: 127.0.0.1:8080\r\nX-MicroSNANDer-Chip: W25Q16;2097152\r\n";
+	request("POST", "/api/unprotect", NULL, NULL, 0);
+	wait_idle();
+	check(unprotects == 0, "  for another chip than the one in the socket: refused");
+	extra = CHIP80;
 	check(request("POST", "/api/unprotect", NULL, NULL, 0) == 202, "Clear protection starts");
+	extra = "";
 	wait_idle();
 	request("GET", "/api/state", NULL, NULL, 0);
 	check(unprotects == 1 && strstr(body_of(), "\"sr\":[28,2,96]"), "  unprotect, then the registers again");
