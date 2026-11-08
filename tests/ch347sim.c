@@ -18,7 +18,8 @@ static unsigned int pending_in;			/* SPI_IN bytes still to send */
 static unsigned int max_out, max_in, nout;
 static int cs_while_write_ok = 1;
 static int nout_in, ncmd;
-static int bad = 0;	/* 1: write status 1, 2: read answer with another command, 3: empty read answer, 4: length header too big */
+static int fw_version = -1;		/* INFO_RD answers this; -1: no answer (old firmware) */
+static int bad = 0;	/* 1: write status 1, 2: read answer with another command, 3: empty read answer, 4: length header too big, 5: write frame answered with another command */
 
 static unsigned char pattern(unsigned int i) { return (unsigned char)(i * 29 + (i >> 9)); }
 
@@ -46,7 +47,7 @@ int libusb_bulk_transfer(libusb_device_handle *h, unsigned char ep, unsigned cha
 		unsigned char *c = d + off;
 		unsigned int n;
 		if (len - off < 3) return LIBUSB_ERROR_IO;
-		n = c[1] | (c[2] << 8);
+		n = c[1] | ((c[2] & (c[0] == CH347_CMD_SPI_OUT_IN ? CH347_C2_LEN_HI : 0xff)) << 8);
 		if (off + 3 + (int)n > len) return LIBUSB_ERROR_IO;
 		off += 3 + n;
 		ncmd++;
@@ -65,12 +66,18 @@ int libusb_bulk_transfer(libusb_device_handle *h, unsigned char ep, unsigned cha
 		case CH347_CMD_SPI_IN:
 			pending_in = c[3] | (c[4] << 8) | (c[5] << 16) | ((unsigned int)c[6] << 24);
 			break;
+		case CH347_CMD_INFO_RD:
+			if (fw_version >= 0) { memset(resp, 0, 20); resp[0] = c[0]; resp[1] = 17; resp[3] = fw_version & 0xff; resp[4] = fw_version >> 8; nresp = 20; }
+			break;
 		case CH347_CMD_SPI_OUT_IN:		/* sent bytes go out, the pattern comes in */
+			if (c[2] & CH347_C2_CS_START) { if (fw_version < CH347T_CS_FLAGS_FW && sim_pid != 0x55de) return LIBUSB_ERROR_IO; cs_low = 1; }
 			if (!cs_low) cs_while_write_ok = 0;
 			memcpy(mosi + nmosi, c + 3, n); nmosi += n;
 			resp[0] = c[0]; resp[1] = n & 0xff; resp[2] = n >> 8;
 			for (unsigned int i = 0; i < n; i++) resp[3 + i] = pattern(clocked++);
 			nresp = n + 3; nout_in++;
+			if (bad == 5) resp[0] = CH347_CMD_SPI_OUT;
+			if (c[2] & CH347_C2_CS_STOP) cs_low = 0;
 			break;
 		default: return LIBUSB_ERROR_IO;
 		}
@@ -156,6 +163,46 @@ int main(void)
 	cfg_echo = 0;
 	sim_pid = 0;
 	check(ch347_spi_init() < 0, "no CH347: init fails");
+
+	/* CS in the SPI_OUT_IN frames: CH347T firmware 0341 and newer, and the CH347F */
+	sim_pid = 0x55db; fw_version = 0x0340;
+	check(ch347_spi_init() == 0 && !cs_flags, "CH347T firmware 0340: CS packets as before");
+	nout = 0; nmosi = 0;
+	check(ch347_cs(true) == 0 && ch347_spi_send_command(1, 0, w, NULL) == 0 && ch347_cs(false) == 0 && nout == 2 && !cs_low,
+	      "  a write enable: the command, then CS high on its own");
+	ch347_spi_shutdown();
+	fw_version = 0x0544;
+	check(ch347_spi_init() == 0 && cs_flags, "CH347T firmware 0544: CS in the data frames");
+	for (unsigned i = 0; i < sizeof(w); i++) w[i] = (unsigned char)(i * 7 + 1);
+	nout = 0; nmosi = 0; nout_in = 0; cs_while_write_ok = 1;
+	check(ch347_cs(true) == 0 && ch347_spi_send_command(1, 0, w, NULL) == 0 && nout == 0 &&
+	      ch347_cs(false) == 0 && nout == 1 && nout_in == 1 && !cs_low && nmosi == 1 && mosi[0] == w[0] && cs_while_write_ok,
+	      "  a write enable: one USB transfer, CS low and high in its frame");
+	nout = 0; nmosi = 0;
+	check(ch347_cs(true) == 0 && ch347_spi_send_command(260, 0, w, NULL) == 0 && ch347_cs(false) == 0 &&
+	      nout == 1 && !cs_low && nmosi == 260 && !memcmp(mosi, w, 260), "  a page program, command, address and 256 bytes: one USB transfer");
+	nout = 0; nmosi = 0; max_out = 0;
+	check(ch347_cs(true) == 0 && ch347_spi_send_command(sizeof(w), 0, w, NULL) == 0 && cs_low && ch347_cs(false) == 0 &&
+	      !cs_low && nmosi == sizeof(w) && !memcmp(mosi, w, sizeof(w)) && max_out <= CH347_PACKET_SIZE && cs_while_write_ok,
+	      "  a 3000-byte write: frames of at most 510 bytes, in order, CS high after the last");
+	nmosi = 0; clocked = 4;
+	check(ch347_cs(true) == 0 && ch347_spi_send_command(4, 0, w, NULL) == 0 && ch347_spi_send_command(0, 64, NULL, r) == 0 &&
+	      cs_low && nmosi == 4 && r[0] == pattern(8) && cs_while_write_ok && ch347_cs(false) == 0 && !cs_low,
+	      "  a write, then a read in the same transaction: CS stays low between them");
+	nmosi = 0; nout_in = 0;
+	check(ch347_cs(true) == 0 && ch347_spi_send_command(1, 2, w, st) == 0 && nout_in == 1 && cs_low && ch347_cs(false) == 0 && !cs_low,
+	      "  a short command and its answer: as before, CS high on its own after it");
+	bad = 5;
+	check(ch347_cs(true) == 0 && ch347_spi_send_command(4, 0, w, NULL) == 0 && ch347_cs(false) < 0,
+	      "  a write frame answered wrongly fails at CS high, where it goes out");
+	bad = 0; cs_low = 0;
+	ch347_spi_shutdown();
+	sim_pid = 0x55de; fw_version = -1;
+	check(ch347_spi_init() == 0 && cs_flags, "CH347F: CS in the data frames, whatever the version");
+	ch347_spi_shutdown();
+	sim_pid = 0x55db;
+	check(ch347_spi_init() == 0 && !cs_flags, "CH347T that does not answer INFO_RD: CS packets as before");
+	ch347_spi_shutdown();
 
 	/* Android: the device the USB manager opened, by its file descriptor */
 	ms_usb_fd = 42; ms_usb_vid = 0x1a86; ms_usb_pid = 0x55de; claimed_iface = -1;

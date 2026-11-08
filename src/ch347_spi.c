@@ -11,6 +11,13 @@
  * on endpoint 0x06; the chip answers on 0x86. SPI_OUT and SPI_SET_CFG are
  * answered with a 4-byte status, SPI_IN with packets "cmd, length, data",
  * SPI_OUT_IN with one packet "cmd, length, the bytes clocked in".
+ *
+ * CS in the frames: firmware 0341 and newer of the CH347T, and the CH347F,
+ * take the chip select in the top bits of the length of a SPI_OUT_IN frame:
+ * bit 7 sets CS low before the frame, bit 6 sets it high after it. A write
+ * then goes as SPI_OUT_IN frames, its last frame held until CS high and sent
+ * with it, so a write enable or a page program is one round trip instead of
+ * a round trip and a CS packet. INFO_RD gives the firmware version.
  */
 #include <stdio.h>
 #include <string.h>
@@ -29,6 +36,13 @@
 #define CH347_CMD_SPI_OUT_IN	0xc2	/* full duplex: a byte read for every byte sent */
 #define CH347_CMD_SPI_IN	0xc3
 #define CH347_CMD_SPI_OUT	0xc4
+#define CH347_CMD_INFO_RD	0xca	/* chip information: the firmware version at bytes 3 and 4 */
+
+#define CH347_C2_CS_START	0x80	/* in the length high byte of SPI_OUT_IN: CS low before it */
+#define CH347_C2_CS_STOP	0x40	/* CS high after it */
+#define CH347_C2_LEN_HI		0x0f	/* the length bits of that byte */
+#define CH347T_CS_FLAGS_FW	0x0341	/* the first CH347T firmware that takes them */
+#define CH347_INFO_TIMEOUT	300	/* ms: firmware that does not know INFO_RD does not answer */
 
 #define CH347_CS_ASSERT		0x00
 #define CH347_CS_DEASSERT	0x40
@@ -48,6 +62,12 @@ static int ch347_detached;
    the same USB transfer (one round trip less for every SPI transaction) */
 static int cs_pending;
 static int ch347_divisor = 1;		/* 30 MHz: within the 50 MHz of READ (0x03) of most chips */
+static int cs_flags;			/* the firmware takes CS in the SPI_OUT_IN frames */
+/* with cs_flags: the last frame of a write, held until CS high goes with it,
+   or until the next command */
+static unsigned char wpend[CH347_MAX_DATA];
+static unsigned int wpend_n;
+static int flush_write(int stop);
 
 static const struct { const char *name; int divisor; } ch347_speeds[] = {
 	{ "60M", 0 }, { "30M", 1 }, { "15M", 2 }, { "7.5M", 3 }, { "3.75M", 4 }, { "1.875M", 5 },
@@ -66,10 +86,10 @@ int ch347_set_speed(const char *speed)
 
 const char *ch347_speed_list(void) { return "60M, 30M, 15M, 7.5M, 3.75M, 1.875M, 937.5K, 468.75K"; }
 
-static int bulk(unsigned char ep, unsigned char *buf, int len, int *done)
+static int bulk_t(unsigned char ep, unsigned char *buf, int len, int *done, unsigned int timeout)
 {
 	int n = 0;
-	int ret = libusb_bulk_transfer(ch347, ep, buf, len, &n, CH347_TIMEOUT);
+	int ret = libusb_bulk_transfer(ch347, ep, buf, len, &n, timeout);
 
 	if (done)
 		*done = n;
@@ -82,6 +102,26 @@ static int bulk(unsigned char ep, unsigned char *buf, int len, int *done)
 		return -1;
 	}
 	return 0;
+}
+
+static int bulk(unsigned char ep, unsigned char *buf, int len, int *done)
+{
+	return bulk_t(ep, buf, len, done, CH347_TIMEOUT);
+}
+
+/* The firmware version from INFO_RD, -1 when it does not come; quiet, as old
+   firmware may not answer at all */
+static int ch347_firmware(void)
+{
+	unsigned char cmd[4] = { CH347_CMD_INFO_RD, 1, 0, 0 }, r[CH347_PACKET_SIZE];
+	int n = 0;
+
+	if (bulk(CH347_WRITE_EP, cmd, sizeof(cmd), NULL) ||
+	    libusb_bulk_transfer(ch347, CH347_READ_EP, r, sizeof(r), &n, CH347_INFO_TIMEOUT) < 0)
+		return -1;
+	if (n < 5 || r[0] != CH347_CMD_INFO_RD)
+		return -1;
+	return r[3] | (r[4] << 8);
 }
 
 /* SPI mode 0, MSB first, 8 bits, CS active low, clock 60 MHz >> divisor */
@@ -150,6 +190,14 @@ int ch347_spi_init(void)
 	if (ch347_configure() < 0)
 		goto release;
 	cs_pending = 0;
+	wpend_n = 0;
+	{
+		int fw = ch347_firmware();
+
+		cs_flags = pid == CH347F_PID || fw >= CH347T_CS_FLAGS_FW;
+		if (fw >= 0)
+			printf("CH347 firmware %04x%s\n", fw, cs_flags ? ": CS goes in the data frames" : "");
+	}
 	return 0;
 
 release:
@@ -196,9 +244,13 @@ int ch347_cs(bool low)
 	if (!ch347)
 		return -1;
 	if (low) {
+		if (flush_write(1))	/* not expected: a CS low with no CS high before it */
+			return -1;
 		cs_pending = 1;
 		return 0;
 	}
+	if (wpend_n)			/* CS high in the last frame of the write */
+		return flush_write(1);
 	if (cs_pending) {		/* nothing went out between: CS never went low */
 		cs_pending = 0;
 		return 0;
@@ -227,9 +279,52 @@ static int send_out(const unsigned char *pkt, int len)
 	return bulk(CH347_WRITE_EP, buf, k + len, NULL);
 }
 
+/* With cs_flags: one SPI_OUT_IN frame of a write, with a CS low that is still
+   to go and, when stop, CS high after it; the bytes clocked in are dropped */
+static int c2_write(const unsigned char *data, unsigned int n, int stop)
+{
+	unsigned char pkt[CH347_PACKET_SIZE];
+	int got;
+
+	pkt[0] = CH347_CMD_SPI_OUT_IN;
+	pkt[1] = n & 0xff;
+	pkt[2] = (n >> 8) | (cs_pending ? CH347_C2_CS_START : 0) | (stop ? CH347_C2_CS_STOP : 0);
+	memcpy(pkt + 3, data, n);
+	cs_pending = 0;
+	if (bulk(CH347_WRITE_EP, pkt, n + 3, NULL) || bulk(CH347_READ_EP, pkt, sizeof(pkt), &got))
+		return -1;
+	if (got != (int)n + 3 || pkt[0] != CH347_CMD_SPI_OUT_IN || (pkt[1] | ((pkt[2] & CH347_C2_LEN_HI) << 8)) != n) {
+		printf("CH347: bad answer to a write (%d bytes, command %02x)\n", got, got ? pkt[0] : 0);
+		return -1;
+	}
+	return 0;
+}
+
+/* the held frame of a write goes out: with CS high after it (stop) or not */
+static int flush_write(int stop)
+{
+	unsigned int n = wpend_n;
+
+	if (!n)
+		return 0;
+	wpend_n = 0;
+	return c2_write(wpend, n, stop);
+}
+
 static int ch347_write(unsigned int len, const unsigned char *data)
 {
 	unsigned char pkt[CH347_PACKET_SIZE], resp[4];
+
+	if (cs_flags) {
+		if (flush_write(0))
+			return -1;
+		for (; len > CH347_MAX_DATA; data += CH347_MAX_DATA, len -= CH347_MAX_DATA)
+			if (c2_write(data, CH347_MAX_DATA, 0))
+				return -1;
+		memcpy(wpend, data, len);	/* the last frame: CS high may go with it */
+		wpend_n = len;
+		return 0;
+	}
 
 	while (len) {
 		unsigned int n = len < CH347_MAX_DATA ? len : CH347_MAX_DATA;
@@ -258,7 +353,7 @@ static int ch347_read(unsigned int len, unsigned char *data)
 	unsigned char pkt[CH347_PACKET_SIZE];
 	unsigned int done = 0;
 
-	if (send_out(cmd, sizeof(cmd)))
+	if (flush_write(0) || send_out(cmd, sizeof(cmd)))
 		return -1;
 	while (done < len) {
 		int got;
@@ -290,6 +385,8 @@ static int ch347_out_in(unsigned int writecnt, unsigned int readcnt, const unsig
 	unsigned int n = writecnt + readcnt;
 	int got;
 
+	if (flush_write(0))
+		return -1;
 	pkt[0] = CH347_CMD_SPI_OUT_IN;
 	pkt[1] = n & 0xff;
 	pkt[2] = n >> 8;
