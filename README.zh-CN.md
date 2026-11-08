@@ -175,7 +175,8 @@ microsnander [options]
                 board that boots in quad mode may then not boot
  -t             self-test: protection, then erase, write and read back one block
                 (the first; -a for another) and put its data back
- -v             verify after write on chip; after -e: check that the range reads 0xFF
+ -v             verify after write on chip; after -e: check that the range reads
+                0xFF; after -r: read again, and save only if both reads are the same
  -c <filename>  compare the chip with the file, nothing written (from -a, as long as
                 the file or -l)
  -P <name>      programmer: ch341a, ch347, ezp, auto (default: the one connected)
@@ -205,6 +206,10 @@ W25Q 的三个 256 字节安全寄存器（W25M 则为每个晶片的）保存�
 
 `-r`、`-w` 和 `-v` 按约 64 KB 的分段处理芯片，因此内存很小的开发板也能读写任意大小的芯片；文件仍需放得下
 其磁盘，并与同名的旧转储并存，`-r` 只在结束时才替换它。使用 `-k`、`-d`、EZP 编程器或非普通文件时，整个范围仍保存在内存中：在小型开发板上请配合 `-a` 和 `-l`。
+
+`-r -v` 会第二次读取芯片，并边读边与第一次读取比较；只有两次读取相同时才保存转储，否则不保存，同名的旧转储
+保持不变。两次读取不同说明夹子或插座接触不良、导线过长，或时钟对它们来说过快：在板上读取芯片，或之后要写回的
+芯片，值得这样做。转储必须是普通文件。
 
 `-c` 将芯片与文件比较，不写入任何内容：从 `-a` 开始，长度为文件长度（若 `-l` 更短则取 `-l`）。
 结束时与 `-v` 一样给出 `Status: OK` 或第一个不同之处的地址。在 30 MHz 及以上的 CH347 上，`-v`

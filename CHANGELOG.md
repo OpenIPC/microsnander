@@ -4,6 +4,13 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.35.0 — 2026-11-08
+
+- `-r -v` reads the chip a second time and compares it with the first read as it goes. The
+  dump is saved only when both reads are the same; when they differ, the first difference is
+  printed, nothing is saved and an earlier dump of that name stays. A loose clip or socket,
+  long wires or a clock too fast for them show up this way, before the dump is relied on.
+
 ## 1.34.0 — 2026-11-08
 
 - SPI NOR: `-e` erases in 4 KB and 32 KB blocks where the chip's SFDP table lists those

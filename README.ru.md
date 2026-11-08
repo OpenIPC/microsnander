@@ -198,7 +198,8 @@ microsnander [options]
                 board that boots in quad mode may then not boot
  -t             self-test: protection, then erase, write and read back one block
                 (the first; -a for another) and put its data back
- -v             verify after write on chip; after -e: check that the range reads 0xFF
+ -v             verify after write on chip; after -e: check that the range reads
+                0xFF; after -r: read again, and save only if both reads are the same
  -c <filename>  compare the chip with the file, nothing written (from -a, as long as
                 the file or -l)
  -P <name>      programmer: ch341a, ch347, ezp, auto (default: the one connected)
@@ -236,6 +237,12 @@ microsnander [options]
 рядом с прежним дампом с тем же именем, который `-r` заменяет только в конце.
 Целиком в памяти диапазон держится с `-k`, `-d`, программаторами EZP и файлом, который не является
 обычным файлом: на маленькой плате используйте с ними `-a` и `-l`.
+
+`-r -v` читает микросхему второй раз и по ходу сравнивает с первым чтением; дамп сохраняется,
+только если оба чтения совпали, иначе ничего не сохраняется и прежний дамп с тем же именем
+остаётся. Разные чтения — это плохой контакт клипсы или панельки, длинные провода или слишком
+высокая для них частота: стоит делать для микросхемы, читаемой прямо на плате, и для той,
+которую потом запишут обратно. Дамп должен быть обычным файлом.
 
 `-c` сверяет микросхему с файлом и ничего не пишет: от `-a`, на длину файла (или `-l`, если он
 короче). В конце — `Status: OK` или адрес первого отличия, как у `-v`. Если `-v` или `-c` находит

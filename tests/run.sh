@@ -211,6 +211,11 @@ t 0 "-r full"                         $B -r out.bin
 cmp -s out.bin img.bin && echo "ok   -r gives the written image" || { echo "FAIL -r content"; fail=1; }
 t 1 "-r short read"                  MS_FAIL=shortread $B -r out3.bin
 t 1 "-r read fails"                   MS_FAIL=read $B -r out2.bin
+rm -f twice.bin; $B -r twice.bin -v > twice.log; [ $? = 0 ] && cmp -s twice.bin img.bin && grep -q '^VERIFY:' twice.log && echo "ok   -r -v reads twice and saves the dump" || { echo "FAIL -r -v"; tail -3 twice.log; fail=1; }
+echo keep > twice.bin; MS_FAIL=flaky $B -r twice.bin -v > twice.log; [ $? = 1 ] && [ "$(cat twice.bin)" = keep ] && grep -q 'the two reads differ, first at 0x0000000000002345' twice.log && ! ls twice.bin.* >/dev/null 2>&1 && echo "ok   -r -v: the reads differ, nothing saved, the earlier file stays" || { echo "FAIL -r -v difference"; tail -3 twice.log; fail=1; }
+rm -f twice.bin; MS_FAIL=flaky $B -r twice.bin -v >/dev/null; [ ! -e twice.bin ] && echo "ok   -r -v: no new file when the reads differ" || { echo "FAIL -r -v left a file"; fail=1; }
+t 1 "-r -v into a FIFO-like target"     $B -r /dev/null -v
+t 0 "-r -a -l -v, part of the chip"     $B -r part2.bin -a 0x1000 -l 0x3000 -v
 t 1 "-r unwritable file"              $B -r /nonexistent/dir/out.bin
 [ ! -e out2.bin ] && echo "ok   a read that failed leaves no half dump" || { echo "FAIL half dump left"; fail=1; }
 printf 'earlier' > keep.bin; chmod 640 keep.bin
