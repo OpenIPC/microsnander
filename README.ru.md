@@ -185,13 +185,15 @@ microsnander [options]
  -b             list the blocks with a factory bad mark (SPI NAND; -a, -l: a range);
                 an erase leaves such blocks as they are
  -L             print list support chips
- -i             read the chip ID info
+ -i             read the chip ID info; of an SPI NOR chip also its protection, and
+                the unique ID of a Winbond W25Q
  -e             erase chip (full or use with -a [-l]); -ee: SPI NAND, the blocks with a
                 factory bad mark too (the mark goes for good)
  -l <bytes>     manually set length
  -a <address>   manually set address
  -w <filename>  write chip with data from filename
  -r <filename>  read chip and save data to filename
+ -O <filename>  read the three security registers of a Winbond W25Q into filename
  -u             unprotect chip; -uu: also clear QE (quad enable), a chip of a
                 board that boots in quad mode may then not boot
  -t             self-test: protection, then erase, write and read back one block
@@ -212,10 +214,17 @@ microsnander [options]
  -o <dir>       web mode: where Read saves the dumps (default: the current one)
 ```
 
-За один запуск — одна операция: `-i`, `-e`, `-r`, `-w`, `-c`, `-u`, `-t` или `-b`. Без `-a` и `-l`
+За один запуск — одна операция: `-i`, `-e`, `-r`, `-w`, `-c`, `-O`, `-u`, `-t` или `-b`. Без `-a` и `-l`
 операция идёт по всей микросхеме. Адреса и длины — десятичные или шестнадцатеричные
 с `0x`. Стирание идёт целыми блоками: длина должна быть кратна размеру блока, который
 сообщает микросхема.
+
+`-i` для микросхемы SPI NOR (через CH341A или CH347) показывает ещё и то, какая её часть
+защищена от записи. Для Winbond W25Q это диапазон адресов по таблицам даташита (биты
+защиты блоков, TB, SEC и CMP); для остальных — установлен ли хоть один бит защиты: их
+диапазоны различаются у производителей и у поколений микросхем. У W25Q выводится ещё
+64-битный уникальный ID. `-O` сохраняет в файл три 256-байтных security-регистра W25Q
+(у W25M — каждого кристалла); они только читаются, не пишутся и не блокируются.
 
 `-r`, `-w` и `-v` проходят микросхему частями около 64 КБ, поэтому плата с малым объёмом памяти
 читает и записывает микросхему любого размера; файл всё равно должен поместиться на её диске

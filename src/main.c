@@ -42,7 +42,7 @@
 struct flash_cmd prog;
 extern unsigned int bsize;
 
-#define _VER	"1.32.0"
+#define _VER	"1.33.0"
 
 const char *ms_version = _VER;
 
@@ -79,13 +79,15 @@ void usage(int code)
 		" -b             list the blocks with a factory bad mark (SPI NAND; -a, -l: a range);\n"\
 		"                an erase leaves such blocks as they are\n"\
 		" -L             print list support chips\n"\
-		" -i             read the chip ID info\n"\
+		" -i             read the chip ID info; of an SPI NOR chip also its protection, and\n"\
+		"                the unique ID of a Winbond W25Q\n"\
 		" -e             erase chip (full or use with -a [-l]); -ee: SPI NAND, the blocks with a\n"\
 		"                factory bad mark too (the mark goes for good)\n"\
 		" -l <bytes>     manually set length\n"\
 		" -a <address>   manually set address\n"\
 		" -w <filename>  write chip with data from filename\n"\
 		" -r <filename>  read chip and save data to filename\n"\
+		" -O <filename>  read the three security registers of a Winbond W25Q into filename\n"\
 		" -u             unprotect chip; -uu: also clear QE (quad enable), a chip of a\n"\
 		"                board that boots in quad mode may then not boot\n"\
 		" -t             self-test: protection, then erase, write and read back one block\n"\
@@ -284,7 +286,7 @@ int main(int argc, char* argv[])
 
 	title();
 
-	while ((c = getopt(argc, argv, "diIhveutbkqLl:a:w:r:c:P:S:W:K:o:m:")) != -1)
+	while ((c = getopt(argc, argv, "diIhveutbkqLl:a:w:r:c:O:P:S:W:K:o:m:")) != -1)
 	{
 		switch(c)
 		{
@@ -361,6 +363,7 @@ int main(int argc, char* argv[])
 			case 'r':
 			case 'w':
 			case 'c':
+			case 'O':
 				if(!op) {
 					op = c;
 					fname = strdup(optarg);
@@ -393,7 +396,7 @@ int main(int argc, char* argv[])
 		/* the page writes whole files from 0 with ECC on: no raw NAND
 		   (-d), no ECC ignore (-I), no BAD page skipping (-k) */
 		if (op || scan || vr || speed_set || !ECC_fcheck || ECC_ignore || Skip_BAD_page || sigmastar_on()) {
-			printf("-W runs the web mode: give no -i, -r, -w, -c, -e, -u, -t, -b, -q, -v, -S, -m, -d, -I or -k with it.\n\n");
+			printf("-W runs the web mode: give no -i, -r, -w, -c, -O, -e, -u, -t, -b, -q, -v, -S, -m, -d, -I or -k with it.\n\n");
 			return 1;
 		}
 		return web_serve(web, web_key, web_dir, addr, len);
@@ -455,6 +458,42 @@ int main(int argc, char* argv[])
 	}
 
 	if (op == 'i') {
+		if (prog.kind == FLASH_NOR && programmer->send)
+			snor_info();
+		rc = 0;
+		goto out;
+	}
+
+	if (op == 'O') {
+		long n = prog.kind == FLASH_NOR && programmer->send ? snor_security_size() : 0;
+		unsigned char *sec;
+
+		printf("SECURITY REGISTERS:\n");
+		if (!n) {
+			printf("Reading the security registers is supported for Winbond W25Q chips only "
+			       "(SPI NOR through CH341A or CH347).\n");
+			goto out;
+		}
+		if (!(sec = malloc(n))) {
+			printf("Malloc failed for read buffer.\n");
+			goto out;
+		}
+		ret = snor_read_security(sec);
+		if (!ret && ms_stop)
+			ret = -1;
+		if (ret) {
+			printf("Status: BAD(%d)\n", ret);
+			free(sec);
+			goto out;
+		}
+		if (!(fp = fopen(fname, "wb")) || fwrite(sec, 1, n, fp) != (size_t)n || fclose(fp)) {
+			printf("Error writing file [%s]\n", fname);
+			free(sec);
+			goto out;
+		}
+		free(sec);
+		printf("Read %ld bytes: %ld registers of 256 bytes into %s\n", n, n / 256, fname);
+		printf("Status: OK\n");
 		rc = 0;
 		goto out;
 	}

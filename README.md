@@ -182,13 +182,15 @@ microsnander [options]
  -b             list the blocks with a factory bad mark (SPI NAND; -a, -l: a range);
                 an erase leaves such blocks as they are
  -L             print list support chips
- -i             read the chip ID info
+ -i             read the chip ID info; of an SPI NOR chip also its protection, and
+                the unique ID of a Winbond W25Q
  -e             erase chip (full or use with -a [-l]); -ee: SPI NAND, the blocks with a
                 factory bad mark too (the mark goes for good)
  -l <bytes>     manually set length
  -a <address>   manually set address
  -w <filename>  write chip with data from filename
  -r <filename>  read chip and save data to filename
+ -O <filename>  read the three security registers of a Winbond W25Q into filename
  -u             unprotect chip; -uu: also clear QE (quad enable), a chip of a
                 board that boots in quad mode may then not boot
  -t             self-test: protection, then erase, write and read back one block
@@ -209,10 +211,18 @@ microsnander [options]
  -o <dir>       web mode: where Read saves the dumps (default: the current one)
 ```
 
-One operation per run: `-i`, `-e`, `-r`, `-w`, `-c`, `-u`, `-t` or `-b`. Without `-a` and `-l` the
+One operation per run: `-i`, `-e`, `-r`, `-w`, `-c`, `-O`, `-u`, `-t` or `-b`. Without `-a` and `-l` the
 operation covers the whole chip. Addresses and lengths are decimal or hex with
 `0x`. Erase works on whole blocks: the length must be a multiple of the block size
 the chip reports.
+
+`-i` of an SPI NOR chip (through the CH341A or the CH347) also says what of it is
+read-only. For a Winbond W25Q that is the address range from the tables of its datasheet
+(block protect bits, TB, SEC and CMP); for the other chips it says whether a block
+protect bit is set, as their ranges differ from maker to maker and between chip
+generations. A W25Q also shows its 64-bit unique ID. `-O` saves the three 256-byte
+security registers of a W25Q (of each die of a W25M) into a file; they are only read,
+never written or locked.
 
 `-r`, `-w` and `-v` go through the chip in parts of about 64 KB, so a board with little memory
 reads and writes a chip of any size; the file still has to fit its disk, next to an earlier

@@ -4,6 +4,19 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.33.0 — 2026-11-08
+
+- `-i` of an SPI NOR chip says what of it is read-only. For a Winbond W25Q (and the W25M of
+  W25Q dies) it gives the address range from the tables of the datasheet: block protect bits,
+  TB, SEC (4 KB steps) and CMP, the 4-bit layout of the chips of 32 MB and more, and the
+  blocks locked one by one with WPS. For the other chips it says whether a block protect bit
+  is set; for SST26 that its blocks are locked at power-up.
+- `-i` of a W25Q shows its 64-bit unique ID (4Bh), of each die on a W25M.
+- `-O <file>` saves the three 256-byte security registers of a W25Q (48h; 768 bytes, of each
+  die on a W25M). A chip over 16 MB is taken out of the 4-byte address mode first, as the
+  commands have another format there. Nothing is written to the registers and their lock bits
+  are not touched.
+
 ## 1.32.0 — 2026-11-08
 
 - SPI NAND: a page with an ECC error the chip cannot correct is read from the array up to

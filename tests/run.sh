@@ -96,6 +96,16 @@ MS_PROGRAMMER=1 $B -P ch347 -i | grep -q '^programmer: ch347' && MS_PROGRAMMER=1
 $B -h | grep -q '^ -P ' && $B -h | grep -q '^ -S ' && echo "ok   -h lists -P and -S" || { echo "FAIL -h without -P/-S"; fail=1; }
 $B -h | grep -q '^ -k ' && echo "ok   -h lists -k" || { echo "FAIL -h without -k"; fail=1; }
 t 0 "-i detected"                     $B -i
+$B -i | grep -q '^Protection: none' && echo "ok   -i of a NOR chip shows its protection" || { echo "FAIL -i protection"; fail=1; }
+MS_CHIP=nand $B -i | grep -q '^Protection' && { echo "FAIL -i NAND protection line"; fail=1; } || echo "ok   -i of a NAND chip has no NOR protection line"
+rm -f sec.bin; t 0 "-O reads the security registers" $B -O sec.bin
+[ "$(wc -c < sec.bin 2>/dev/null)" = 768 ] && echo "ok   -O writes 768 bytes" || { echo "FAIL -O file size"; fail=1; }
+rm -f sec.bin; t 1 "-O on a chip without known registers" MS_SECURITY=0 $B -O sec.bin
+[ ! -e sec.bin ] && echo "ok   -O writes no file for such a chip" || { echo "FAIL -O file for a chip without registers"; fail=1; }
+t 1 "-O read fails"                    MS_SECURITY=fail $B -O sec.bin
+t 1 "-O NAND"                          MS_CHIP=nand $B -O sec.bin
+t 1 "-O through the EZP"               $B -P ezp -O sec.bin
+t 1 "conflict -O -r"                   $B -O sec.bin -r x.bin
 # -t: the self-test of the first block (or -a), its data put back
 head -c 65536 /dev/urandom > chip.img; cp chip.img before.img
 t 0 "-t on a good chip"               $B -t

@@ -110,6 +110,10 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Read_NByte(u8 *d, u32 len, SPI_CONTROLLER_SP
 			d[i] = mem[at(addr() + nread)];
 			if (stop_reads > 0 && !--stop_reads) ms_stop = 1;
 			break;
+		/* W25Q: 4Bh with four dummy bytes, 48h with an address and one; in
+		   the 4-byte mode one byte more each, a read without it is wrong */
+		case OPCODE_RDUID: d[i] = ncmd == 1 + 4 + four[die] ? (u8)(0xa0 + die * 0x10 + nread) : 0xee; break;
+		case OPCODE_RDSCUR_W: d[i] = ncmd == 1 + alen() + 1 ? (u8)((addr() >> 12) * 0x11 + die * 0x80 + nread) : 0xee; break;
 		default: d[i] = 0;
 		}
 	}
@@ -450,6 +454,60 @@ int main(void)
 		busy = 1 << 30;
 		check(snor_erase(0, 65536) != 0, "W25Q32BV: a chip that never gets ready fails the erase");
 		busy = 0;
+	}
+
+	/* the read-only range of a W25Q: rows of the tables of the datasheets */
+	{
+		static const struct { unsigned long size; u8 sr1, sr2; int ret; unsigned long from, len; const char *what; } rows[] = {
+			{ 16UL << 20, 0x00, 0x00, 0, 0, 0, "W25Q128JV: BP 000, none" },
+			{ 16UL << 20, 0x04, 0x00, 0, 0xFC0000, 256 << 10, "W25Q128JV: TB 0 BP 001, FC0000h-FFFFFFh" },
+			{ 16UL << 20, 0x38, 0x00, 0, 0, 8UL << 20, "W25Q128JV: TB 1 BP 110, 000000h-7FFFFFh" },
+			{ 16UL << 20, 0x1c, 0x00, 0, 0, 16UL << 20, "W25Q128JV: BP 111, all" },
+			{ 16UL << 20, 0x44, 0x00, 0, 0xFFF000, 4 << 10, "W25Q128JV: SEC 1 TB 0 BP 001, FFF000h-FFFFFFh" },
+			{ 16UL << 20, 0x74, 0x00, 0, 0, 32 << 10, "W25Q128JV: SEC 1 TB 1 BP 101, 000000h-007FFFh" },
+			{ 16UL << 20, 0x58, 0x00, -1, 0, 0, "W25Q128JV: SEC 1 BP 110 is not in the table" },
+			{ 16UL << 20, 0x04, 0x40, 0, 0, 16128UL << 10, "W25Q128JV: CMP 1 TB 0 BP 001, 000000h-FBFFFFh" },
+			{ 16UL << 20, 0x6c, 0x40, 0, 0x004000, 16368UL << 10, "W25Q128JV: CMP 1 SEC 1 TB 1 BP 011, 004000h-FFFFFFh" },
+			{ 16UL << 20, 0x00, 0x40, 0, 0, 16UL << 20, "W25Q128JV: CMP 1 BP 000, all" },
+			{ 16UL << 20, 0x1c, 0x40, 0, 0, 0, "W25Q128JV: CMP 1 BP 111, none" },
+			{ 16UL << 20, 0x00, 0xff, 0, 0, 0, "no status register 2: no CMP" },
+			{ 4UL << 20, 0x04, 0x00, 0, 0x3F0000, 64 << 10, "W25Q32JV: TB 0 BP 001, 3F0000h-3FFFFFh" },
+			{ 4UL << 20, 0x28, 0x00, 0, 0, 128 << 10, "W25Q32JV: TB 1 BP 010, 000000h-01FFFFh" },
+			{ 32UL << 20, 0x04, 0x00, 0, 0x1FF0000, 64 << 10, "W25Q256JV: TB 0 BP 0001, 01FF0000h-01FFFFFFh" },
+			{ 32UL << 20, 0x60, 0x00, 0, 0, 8UL << 20, "W25Q256JV: TB 1 BP 1000, 00000000h-007FFFFFh" },
+			{ 32UL << 20, 0x24, 0x00, 0, 0x1000000, 16UL << 20, "W25Q256JV: TB 0 BP 1001, 01000000h-01FFFFFFh" },
+			{ 32UL << 20, 0x28, 0x00, 0, 0, 32UL << 20, "W25Q256JV: BP 1010, all" },
+		};
+		for (unsigned i = 0; i < sizeof(rows) / sizeof(rows[0]); i++) {
+			u8 r[3] = { rows[i].sr1, rows[i].sr2, 0 };
+			unsigned long from = 1, len = 1;
+			int ret = w25q_protected(r, rows[i].size, &from, &len);
+			check(ret == rows[i].ret && (ret || (from == rows[i].from && len == rows[i].len)), rows[i].what);
+		}
+	}
+
+	/* the unique ID and the security registers of a W25Q */
+	{
+		static unsigned char sec[2 * 768];
+		u8 uid[8];
+		chip(find("W25Q128BV"), ORDINARY);
+		snor_init();
+		check(snor_read_uid(0, uid) == 0 && uid[0] == 0xa0 && uid[7] == 0xa7, "W25Q128BV: 4Bh and four dummy bytes, then the ID");
+		check(snor_security_size() == 768 && snor_read_security(sec) == 0 &&
+		      sec[0] == 0x11 && sec[255] == (u8)(0x11 + 255) && sec[256] == 0x22 && sec[512] == 0x33,
+		      "W25Q128BV: 48h reads the registers at 001000h, 002000h, 003000h");
+		chip(find("W25Q256FV"), FOURB);
+		snor_init();
+		four[0] = 1;			/* left in the 4-byte mode */
+		check(snor_read_uid(0, uid) == 0 && uid[0] == 0xa0 && !four[0], "W25Q256FV: out of the 4-byte mode before 4Bh");
+		chip(find("W25M512JV"), DIES);
+		snor_init();
+		check(snor_security_size() == 2 * 768 && snor_read_security(sec) == 0 &&
+		      sec[0] == 0x11 && sec[768] == 0x91 && die == 0, "W25M512JV: the registers of both dies, die 0 selected after");
+		check(snor_read_uid(1, uid) == 0 && uid[0] == 0xb0 && die == 0, "W25M512JV: the ID of die 1");
+		chip(find("MX25L12805D"), QE_SR1);
+		snor_init();
+		check(snor_security_size() == 0 && snor_read_security(sec) == -2, "Macronix: no security registers known");
 	}
 
 	/* an AAI command that fails on the wire stops the write with the bytes written so far */
