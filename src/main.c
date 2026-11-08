@@ -815,7 +815,11 @@ int main(int argc, char* argv[])
 		int ok, kept = 0, have = !lstat(fname, &st);
 
 		printf("READ:\n");
-		/* a link, a FIFO or a device is written as it is */
+		/* a link to a regular file goes like the file: through a temporary
+		   file and copied into the target, the link stays */
+		if (have && S_ISLNK(st.st_mode) && stat(fname, &st))
+			st.st_mode = S_IFLNK;
+		/* a dangling link, a FIFO or a device is written as it is */
 		if (!have || S_ISREG(st.st_mode)) {
 			int fd = have ? open(fname, O_WRONLY) : -1;	/* not truncated */
 

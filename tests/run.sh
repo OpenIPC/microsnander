@@ -236,6 +236,11 @@ if [ "$(id -u)" != 0 ]; then
 fi
 ln -s keep.bin link.bin; t 0 "-r into a link" $B -r link.bin
 [ -L link.bin ] && echo "ok   a link stays a link" || { echo "FAIL link replaced"; fail=1; }
+t 0 "-r -v into a link"               $B -r link.bin -v
+[ -L link.bin ] && cmp -s keep.bin img.bin && echo "ok   -v writes through the link too" || { echo "FAIL -r -v link"; fail=1; }
+printf 'earlier' > keep.bin
+t 1 "-r -v into a link, reads differ"  MS_FAIL=flaky $B -r link.bin -v
+[ -L link.bin ] && [ "$(cat keep.bin)" = earlier ] && [ "$(ls keep.bin.* link.bin.* 2>/dev/null)" = "" ] && echo "ok   the target keeps the earlier dump" || { echo "FAIL -r -v link mismatch"; fail=1; }
 t 0 "-w of a file of size 0 with data" $B -w /proc/self/status -l 8
 # a range goes in parts of whole blocks, 64 KiB here; in one piece where parts would not do
 dd if=/dev/urandom of=big.bin bs=1024 count=1024 2>/dev/null
