@@ -4,6 +4,14 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.29.0 — 2026-11-08
+
+- A SPI NOR chip that is not in the table is found by its SFDP table (JESD216), when it has
+  one: the size, the sector erase (64 KB, or the largest type below it, with its command) and
+  the 4-byte mode (entered with B7, left with E9) come from the chip. It is named `SFDP-` and its
+  ID. A chip over 16 MB without both B7 and E9 in its table is used up to 16 MB; a chip that takes
+  4-byte addresses only is not used.
+
 ## 1.28.0 — 2026-11-08
 
 - `-c <file>` compares the chip with a file and writes nothing: from `-a`, as long as the file

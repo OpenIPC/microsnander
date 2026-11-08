@@ -71,6 +71,7 @@
 #define OPCODE_BRRD			0x16
 #define OPCODE_BRWR			0x17
 #define OPCODE_DIE_SELECT		0xC2	/* stacked dies (W25M): the active die, 0, 1 */
+#define OPCODE_RDSFDP			0x5A	/* read the SFDP table (JESD216) */
 
 /* Status Register bits. */
 #define SR_WIP				1	/* Write in progress */
@@ -115,6 +116,10 @@ struct chip_info {
 };
 
 struct chip_info *spi_chip_info;
+
+/* the sector erase command: 0xD8 (64 KB), or what the SFDP table of a chip
+   found by it gives with its sector size */
+static u8 snor_erase_op = OPCODE_SE;
 
 /* Stacked dies (W25M512JV): each die is a chip of its own, with its own
    registers and address mode; the commands go to the die selected last. */
@@ -556,7 +561,7 @@ static int snor_erase_sector(unsigned long offset)
 
 	SPI_CONTROLLER_Chip_Select_Low();
 
-	SPI_CONTROLLER_Write_One_Byte(snor_is_sst26() ? OPCODE_P4E : OPCODE_SE);
+	SPI_CONTROLLER_Write_One_Byte(snor_is_sst26() ? OPCODE_P4E : snor_erase_op);
 	if (spi_chip_info->addr4b)
 		SPI_CONTROLLER_Write_One_Byte((offset >> 24) & 0xff);
 	SPI_CONTROLLER_Write_One_Byte((offset >> 16) & 0xff);
@@ -978,6 +983,112 @@ static int snor_write_sr(u8 opcode, u8 *val)
 	return 0;
 }
 
+static int snor_read_sfdp(u32 addr, u8 *buf, int len)
+{
+	int err = SPI_CONTROLLER_Chip_Select_Low();
+
+	err |= SPI_CONTROLLER_Write_One_Byte(OPCODE_RDSFDP);
+	err |= SPI_CONTROLLER_Write_One_Byte((addr >> 16) & 0xff);
+	err |= SPI_CONTROLLER_Write_One_Byte((addr >> 8) & 0xff);
+	err |= SPI_CONTROLLER_Write_One_Byte(addr & 0xff);
+	err |= SPI_CONTROLLER_Write_One_Byte(0xff);	/* dummy byte */
+	err |= SPI_CONTROLLER_Read_NByte(buf, len, SPI_CONTROLLER_SPEED_SINGLE);
+	err |= SPI_CONTROLLER_Chip_Select_High();
+	return err ? -1 : 0;
+}
+
+/* A chip whose ID is not in the table: its size, sector erase and address mode
+   from its own SFDP table (JESD216), the basic flash parameters. NULL when it
+   has none or they do not fit. */
+static struct chip_info *chip_sfdp(const u8 id[5])
+{
+	static struct chip_info info;
+	static char name[24];
+	u8 h[16], p[64];
+	u32 dw[16], n, ptr, i, enter = 0, leave = 0;
+	unsigned long long size;
+	int best = -1;
+	u8 op = 0;
+
+	if (snor_read_sfdp(0, h, sizeof(h)) || memcmp(h, "SFDP", 4))
+		return NULL;
+	/* the first parameter header is that of the basic table: ID FF00, version 1.x */
+	if (h[8] != 0x00 || h[15] != 0xff || h[10] != 1)
+		return NULL;
+	n = h[11];			/* its length in 32-bit words */
+	if (n < 9)
+		return NULL;
+	if (n > 16)
+		n = 16;
+	ptr = h[12] | (h[13] << 8) | (h[14] << 16);
+	if (snor_read_sfdp(ptr, p, n * 4))
+		return NULL;
+	for (i = 0; i < n; i++)
+		dw[i] = p[4 * i] | (p[4 * i + 1] << 8) | (p[4 * i + 2] << 16) | ((u32)p[4 * i + 3] << 24);
+
+	/* word 2: the size in bits, as N - 1 or as 2^N */
+	if (dw[1] & 0x80000000) {
+		u32 e = dw[1] & 0x7fffffff;
+
+		if (e < 19 || e > 31)
+			return NULL;
+		size = 1ULL << (e - 3);
+	} else
+		size = ((unsigned long long)dw[1] + 1) / 8;
+	if (size < 64 * 1024 || size > 256ULL << 20)
+		return NULL;
+
+	/* words 8 and 9: up to four erase types, size 2^N and command; the
+	   64 KB one (0xD8 if there are two), else the largest below it */
+	for (i = 0; i < 4; i++) {
+		u8 e = p[28 + 2 * i], c = p[29 + 2 * i];
+
+		if (e < 12 || e > 16 || !c)
+			continue;
+		if ((int)e > best || ((int)e == best && c == OPCODE_SE)) {
+			best = e;
+			op = c;
+		}
+	}
+	if (best < 0)
+		return NULL;
+
+	/* word 1, bits 18:17: 4-byte addresses only; this driver sends 3 address
+	   bytes out of the 4-byte mode, whatever the size */
+	if (((dw[0] >> 17) & 3) == 2) {
+		printf("SFDP: the chip takes 4-byte addresses only, which this program does not send.\n");
+		return NULL;
+	}
+	info.addr4b = size > 16 << 20;
+	if (info.addr4b) {
+		/* word 16: how to enter the 4-byte mode, B7 (bit 24) or a write enable
+		   then B7 (bit 25), and how to leave it, E9 (bit 14) or a write enable
+		   then E9 (bit 15): what this driver sends. A chip left in that mode
+		   would not boot. */
+		if (n >= 16) {
+			enter = dw[15] >> 24;
+			leave = (dw[15] >> 14) & 0x3ff;
+		}
+		if (!(enter & 0x03) || !(leave & 0x03)) {
+			printf("SFDP: %llu MB, but no B7 and E9 for the 4-byte mode: only the first 16 MB.\n", size >> 20);
+			size = 16 << 20;
+			info.addr4b = 0;
+		}
+	}
+
+	snprintf(name, sizeof(name), "SFDP-%02X%02X%02X", id[0], id[1], id[2]);
+	info.name = name;
+	info.id = id[0];
+	info.jedec_id = (u32)(id[1] << 24) | (id[2] << 16) | (id[3] << 8) | id[4];
+	info.sector_size = 1UL << best;
+	info.n_sectors = size >> best;
+	info.dies = 0;
+	snor_erase_op = op;
+	printf("Detected SPI NOR Flash by its SFDP table: %s, Flash Size: %llu MB, erase %lu KB (0x%02x)%s\n",
+	       name, size >> 20, info.sector_size >> 10, op, info.addr4b ? ", 4-byte addresses" : "");
+	return &info;
+}
+
 struct chip_info *chip_prob(void)
 {
 	struct chip_info *info = NULL, *match = NULL;
@@ -985,6 +1096,7 @@ struct chip_info *chip_prob(void)
 	u32 jedec, jedec_strip, weight;
 	int i;
 
+	snor_erase_op = OPCODE_SE;
 	memset(buf, 0, sizeof(buf));
 	if (snor_read_devid(buf, 5)) {
 		printf("SPI NOR Flash Not Detected: the ID read failed on USB.\n");
@@ -1022,6 +1134,10 @@ struct chip_info *chip_prob(void)
 			}
 		}
 	}
+	/* not in the table: the chip may still describe itself */
+	if (!(buf[0] == buf[1] && buf[1] == buf[2] && (buf[0] == 0xff || buf[0] == 0x00)) &&
+	    (match = chip_sfdp(buf)) != NULL)
+		return match;
 	printf("SPI NOR Flash Not Detected!\n");
 	/* the same byte three times is the data line, not a chip */
 	if (buf[0] == buf[1] && buf[1] == buf[2] && (buf[0] == 0xff || buf[0] == 0x00))

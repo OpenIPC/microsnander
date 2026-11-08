@@ -46,7 +46,9 @@ static long stop_reads;			/* Ctrl+C after this many bytes read */
 static long stop_pages;			/* Ctrl+C after this many pages programmed */
 static int stop_chip_erase;		/* Ctrl+C during a chip erase */
 static int die_reads = -1;
-static int nprogs;			/* page programs (02) */		/* the die of the last read of status register 3 */
+static int nprogs;			/* page programs (02) */
+static unsigned char sfdp[256];		/* the SFDP table the chip answers 5A with */
+static int nerase20;			/* 4 KB erases (20) */		/* the die of the last read of status register 3 */
 static unsigned char cmd[300];
 static int ncmd, nread;
 static int wel, aai, locked;
@@ -96,6 +98,11 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Read_NByte(u8 *d, u32 len, SPI_CONTROLLER_SP
 	for (u32 i = 0; i < len; i++, nread++) {
 		switch (cmd[0]) {
 		case OPCODE_RDID: d[i] = nread < 5 ? id[nread] : 0; break;
+		case OPCODE_RDSFDP: {		/* 3 address bytes, a dummy byte, then the table */
+			unsigned long a = ((unsigned long)cmd[1] << 16) | (cmd[2] << 8) | cmd[3];
+			d[i] = a + nread < sizeof(sfdp) ? sfdp[a + nread] : 0xff;
+			break;
+		}
 		case OPCODE_RDSR: d[i] = sr | (wel ? SR_WEL : 0) | (aai ? 0x40 : 0) | (busy ? SR_WIP : 0); if (busy) busy--; break;
 		case OPCODE_RDSR2: d[i] = kind == NO_SR23 || kind == QE_SR1 ? 0xff : sr2; sr2_reads++; break;
 		case OPCODE_RDSR3: die_reads = die; d[i] = kind == NO_SR23 ? 0xff : kind == QE_SR1 ? 0x07 : 0; break;	/* another register on Macronix */
@@ -155,7 +162,7 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Chip_Select_High(void)
 			program(aai_addr, cmd + 1, 2);
 		aai_addr += 2;
 		break;
-	case OPCODE_P4E: if (writable()) erase(addr(), 4096); wel = 0; break;
+	case OPCODE_P4E: if (writable()) { erase(addr(), 4096); nerase20++; } wel = 0; break;
 	case OPCODE_SE:
 		/* SST26: the first 32 KB are 8 KB blocks, so a 64 KB erase there takes one 8 KB block */
 		if (writable()) {
@@ -193,6 +200,26 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Xfer_NByte(u8 *in, u32 len_in, u8 *out, u32 
 
 static int fail;
 static void check(int ok, const char *what) { printf("%s %s\n", ok ? "ok  " : "FAIL", what); if (!ok) fail = 1; }
+
+/* an SFDP table: header, one parameter header (basic table, version 1.6, n words
+   at 0x30), then the words: density, erase types (size 2^N and command) in words
+   8 and 9, the 4-byte mode entry in the top byte of word 16 */
+static int sfdp_leave = 1;		/* make_sfdp: the table lists E9 to leave the 4-byte mode */
+static void make_sfdp(unsigned long size, int e1, int c1, int e2, int c2, int enter, int n)
+{
+	unsigned char *t = sfdp + 0x30;
+	unsigned long bits = size * 8 - 1;
+
+	memset(sfdp, 0xff, sizeof(sfdp));
+	memcpy(sfdp, "SFDP", 4);
+	sfdp[4] = 6; sfdp[5] = 1; sfdp[6] = 0; sfdp[7] = 0xff;
+	sfdp[8] = 0x00; sfdp[9] = 6; sfdp[10] = 1; sfdp[11] = n; sfdp[12] = 0x30; sfdp[13] = 0; sfdp[14] = 0; sfdp[15] = 0xff;
+	memset(t, 0, n * 4);
+	t[0] = 0xe5; t[1] = 0x20; t[2] = size > 16 << 20 ? 0x02 : 0x00;	/* address bytes: 3 or 4 when large */
+	t[4] = bits; t[5] = bits >> 8; t[6] = bits >> 16; t[7] = bits >> 24;
+	t[28] = e1; t[29] = c1; t[30] = e2; t[31] = c2;
+	if (n >= 16) { t[63] = enter; if (sfdp_leave) t[61] = 0x40; }	/* exit with E9: bit 14 of word 16 */
+}
 
 static const struct chip_info *find(const char *name)
 {
@@ -547,6 +574,56 @@ int main(void)
 	check(snor_init() < 0, "an ID read that fails on USB: no chip detected");
 	rdid_fail = 0;
 	check(snor_init() == 16 << 20, "  the next read finds it");
+
+	/* a chip that is not in the table: its SFDP table gives size, erase and 4-byte mode */
+	{
+		static const struct chip_info unknown = { "unknown", 0x9d, 0x60990000, 64 * 1024, 256, 0 };
+		static unsigned char buf[4096], got[4096];
+
+		chip(&unknown, ORDINARY);
+		memset(sfdp, 0xff, sizeof(sfdp));
+		check(snor_init() < 0, "SFDP: an unknown ID with no SFDP table is not detected");
+		make_sfdp(16 << 20, 12, 0x20, 16, 0xd8, 0, 16);
+		long size = snor_init();
+		check(size == 16 << 20 && spi_chip_info->sector_size == 65536 && !spi_chip_info->addr4b &&
+		      !strcmp(flash_chip_name, "SFDP-9D6099"), "SFDP: 16 MB, 64 KB sectors (D8), named by its ID");
+		memset(mem, 0, 3 * 65536);
+		check(snor_erase(65536, 65536) == 0 && mem[65536] == 0xff && mem[2 * 65536 - 1] == 0xff && mem[0] == 0 &&
+		      mem[2 * 65536] == 0, "  a sector erase takes 64 KB with D8");
+		make_sfdp(8 << 20, 12, 0x20, 0, 0, 0, 9);
+		check(snor_init() == 8 << 20 && spi_chip_info->sector_size == 4096, "SFDP: only 4 KB erase (20): 4 KB sectors");
+		memset(mem, 0, 3 * 4096);
+		nerase20 = 0;
+		check(snor_erase(4096, 4096) == 0 && mem[4096] == 0xff && mem[8191] == 0xff && mem[4095] == 0 && mem[8192] == 0 && nerase20 == 1,
+		      "  erased with 20");
+		chip(&unknown, FOURB_WREN);
+		make_sfdp(32 << 20, 12, 0x20, 16, 0xd8, 0x02, 16);	/* write enable, then B7 */
+		check(snor_init() == 32 << 20 && spi_chip_info->addr4b, "SFDP: 32 MB with B7 after a write enable: 4-byte addresses");
+		for (unsigned i = 0; i < sizeof(buf); i++) buf[i] = (unsigned char)(i * 7 + 3);
+		memset(mem, 0, 4096);
+		snor_erase((16 << 20) + 65536, 65536);
+		check(snor_write(buf, (16 << 20) + 65536, sizeof(buf)) == (int)sizeof(buf) && snor_read(got, (16 << 20) + 65536, sizeof(got)) == (int)sizeof(got) &&
+		      !memcmp(got, buf, sizeof(buf)) && mem[0] == 0 && !four[0], "  written and read above 16 MB, nothing at 0, back in 3-byte mode");
+		sfdp_leave = 0;
+		make_sfdp(32 << 20, 12, 0x20, 16, 0xd8, 0x01, 16);	/* B7, but no E9 to leave */
+		check(snor_init() == 16 << 20 && !spi_chip_info->addr4b, "SFDP: 32 MB with B7 but no E9: the first 16 MB only");
+		sfdp_leave = 1;
+		make_sfdp(32 << 20, 12, 0x20, 16, 0xd8, 0x01, 16);
+		sfdp[0x30 + 2] = 0x04;					/* 4-byte addresses only */
+		check(snor_init() < 0, "SFDP: a chip of 4-byte addresses only is not detected");
+		make_sfdp(32 << 20, 12, 0x20, 16, 0xd8, 0, 9);		/* an old table: no word 16 */
+		check(snor_init() == 16 << 20 && !spi_chip_info->addr4b, "SFDP: 32 MB without the 4-byte mode entry: the first 16 MB only");
+		make_sfdp(16 << 20, 0, 0, 0, 0, 0, 9);
+		check(snor_init() < 0, "SFDP: no erase type: not detected");
+		make_sfdp(16 << 20, 12, 0x20, 16, 0xd8, 0, 16);
+		sfdp[0] = 'X';
+		check(snor_init() < 0, "SFDP: a wrong signature: not detected");
+		make_sfdp(16 << 20, 12, 0x20, 16, 0xd8, 0, 16);
+		check(snor_init() == 16 << 20 && snor_init() > 0, "  and a known chip next is found by the table again");
+		chip(find("W25Q128BV"), ORDINARY);
+		check(snor_init() == 16 << 20 && !strcmp(flash_chip_name, "W25Q128BV"), "  W25Q128BV from the table, not from SFDP");
+		memset(sfdp, 0xff, sizeof(sfdp));
+	}
 
 	if (!fail) printf("all norsim checks passed\n");
 	return fail;
