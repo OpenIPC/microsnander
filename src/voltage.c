@@ -44,6 +44,9 @@ static const struct series series[] = {
 	{ "SST25WF*",		MS_VOLTAGE_18 },	/* Microchip SST25WF */
 	{ "MX25R*",		MS_VOLTAGE_WIDE },	/* Macronix MX25R (low power) */
 	{ "DS25M*",		MS_VOLTAGE_18 },	/* Dosilicon */
+	{ "XT25Q*",		MS_VOLTAGE_18 },	/* XTX; XT25F is 3.3 V */
+	{ "XT25W*",		MS_VOLTAGE_WIDE },
+	{ "PY25F*L*",		MS_VOLTAGE_18 },	/* Puya; PY25Q..H is 3.3 V */
 	/* SPI NAND */
 	{ "GD5F*[QM][0-9]R*",	MS_VOLTAGE_18 },	/* GigaDevice: ..U.. is 3.3 V, ..R.. 1.8 V */
 	{ "W25N*W",		MS_VOLTAGE_18 },	/* Winbond W25N..GW, KW */
@@ -56,6 +59,7 @@ static const struct series series[] = {
 	{ "MT29F*ADB*",		MS_VOLTAGE_18 },	/* Micron 8 Gbit; ..ADA.. is 3.3 V */
 	{ "EM78*",		MS_VOLTAGE_18 },	/* Etron; EM73 is 3.3 V */
 	{ "XT26Q*",		MS_VOLTAGE_18 },	/* XTX; XT26G is 3.3 V */
+	{ "FM25LG*",		MS_VOLTAGE_18 },	/* Fudan; FM25G is 3.3 V */
 };
 
 int ms_voltage(const char *chip)

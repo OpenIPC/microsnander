@@ -190,6 +190,9 @@
 #define _SPI_NAND_DEVICE_ID_FM25G02B		0xD2
 #define _SPI_NAND_DEVICE_ID_FM25G02		0xF2
 #define _SPI_NAND_DEVICE_ID_FM25G02C		0x92
+#define _SPI_NAND_DEVICE_ID_FM25G04C		0x93
+#define _SPI_NAND_DEVICE_ID_FM25LG01B		0xB1
+#define _SPI_NAND_DEVICE_ID_FM25LG02B		0xB2
 #define _SPI_NAND_DEVICE_ID_XT26G02B		0xF2
 #define _SPI_NAND_DEVICE_ID_XT26G01C		0x11
 #define _SPI_NAND_DEVICE_ID_XT26G01A		0xE1
@@ -2241,6 +2244,51 @@ static const struct SPI_NAND_FLASH_INFO_T spi_nand_flash_tables[] = {
 
 	{
 		mfr_id:					_SPI_NAND_MANUFACTURER_ID_FM,
+		dev_id:					_SPI_NAND_DEVICE_ID_FM25G04C,
+		ptr_name:				"FM FM25G04C",
+		device_size:				_SPI_NAND_CHIP_SIZE_4GBIT,
+		page_size:				_SPI_NAND_PAGE_SIZE_2KBYTE,
+		oob_size:				_SPI_NAND_OOB_SIZE_64BYTE,
+		erase_size:				_SPI_NAND_BLOCK_SIZE_128KBYTE,
+		dummy_mode:				SPI_NAND_FLASH_READ_DUMMY_BYTE_APPEND,
+		read_mode:				SPI_NAND_FLASH_READ_SPEED_MODE_DUAL,
+		write_mode:				SPI_NAND_FLASH_WRITE_SPEED_MODE_SINGLE,
+		oob_free_layout:			&ooblayout_spi_controller_ecc_64,
+		feature:				SPI_NAND_FLASH_FEATURE_NONE,
+	},
+
+	{
+		mfr_id:					_SPI_NAND_MANUFACTURER_ID_FM,
+		dev_id:					_SPI_NAND_DEVICE_ID_FM25LG01B,
+		ptr_name:				"FM FM25LG01B",
+		device_size:				_SPI_NAND_CHIP_SIZE_1GBIT,
+		page_size:				_SPI_NAND_PAGE_SIZE_2KBYTE,
+		oob_size:				_SPI_NAND_OOB_SIZE_128BYTE,
+		erase_size:				_SPI_NAND_BLOCK_SIZE_128KBYTE,
+		dummy_mode:				SPI_NAND_FLASH_READ_DUMMY_BYTE_APPEND,
+		read_mode:				SPI_NAND_FLASH_READ_SPEED_MODE_DUAL,
+		write_mode:				SPI_NAND_FLASH_WRITE_SPEED_MODE_SINGLE,
+		oob_free_layout:			&ooblayout_fm,
+		feature:				SPI_NAND_FLASH_FEATURE_NONE,
+	},
+
+	{
+		mfr_id:					_SPI_NAND_MANUFACTURER_ID_FM,
+		dev_id:					_SPI_NAND_DEVICE_ID_FM25LG02B,
+		ptr_name:				"FM FM25LG02B",
+		device_size:				_SPI_NAND_CHIP_SIZE_2GBIT,
+		page_size:				_SPI_NAND_PAGE_SIZE_2KBYTE,
+		oob_size:				_SPI_NAND_OOB_SIZE_128BYTE,
+		erase_size:				_SPI_NAND_BLOCK_SIZE_128KBYTE,
+		dummy_mode:				SPI_NAND_FLASH_READ_DUMMY_BYTE_APPEND,
+		read_mode:				SPI_NAND_FLASH_READ_SPEED_MODE_DUAL,
+		write_mode:				SPI_NAND_FLASH_WRITE_SPEED_MODE_SINGLE,
+		oob_free_layout:			&ooblayout_fm,
+		feature:				SPI_NAND_FLASH_FEATURE_NONE,
+	},
+
+	{
+		mfr_id:					_SPI_NAND_MANUFACTURER_ID_FM,
 		dev_id:					_SPI_NAND_DEVICE_ID_FM25G02,
 		ptr_name:				"FM FM25G02",
 		device_size:				_SPI_NAND_CHIP_SIZE_2GBIT,
@@ -4177,7 +4225,10 @@ static SPI_NAND_FLASH_RTN_T ecc_fail_check( u32 page_number, u8 status )
 	}
 	else if(((ptr_dev_info_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_FM) && (ptr_dev_info_t->dev_id == _SPI_NAND_DEVICE_ID_FM25G01B)) ||
 		((ptr_dev_info_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_FM) && (ptr_dev_info_t->dev_id == _SPI_NAND_DEVICE_ID_FM25G02B)) ||
-		((ptr_dev_info_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_FM) && (ptr_dev_info_t->dev_id == _SPI_NAND_DEVICE_ID_FM25G02C)))
+		((ptr_dev_info_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_FM) && (ptr_dev_info_t->dev_id == _SPI_NAND_DEVICE_ID_FM25G02C)) ||
+		((ptr_dev_info_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_FM) && (ptr_dev_info_t->dev_id == _SPI_NAND_DEVICE_ID_FM25G04C)) ||
+		((ptr_dev_info_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_FM) && (ptr_dev_info_t->dev_id == _SPI_NAND_DEVICE_ID_FM25LG01B)) ||
+		((ptr_dev_info_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_FM) && (ptr_dev_info_t->dev_id == _SPI_NAND_DEVICE_ID_FM25LG02B)))
 	{
 		if(((status & 0x70) >> 4) == 0x7)
 		{
@@ -5616,7 +5667,10 @@ static void spi_nand_manufacute_init( struct SPI_NAND_FLASH_INFO_T *ptr_device_t
 	}
 	else if(((ptr_device_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_FM) && (ptr_device_t->dev_id == _SPI_NAND_DEVICE_ID_FM25G01B)) ||
 			((ptr_device_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_FM) && (ptr_device_t->dev_id == _SPI_NAND_DEVICE_ID_FM25G02B)) ||
-			((ptr_device_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_FM) && (ptr_device_t->dev_id == _SPI_NAND_DEVICE_ID_FM25G02C)))
+			((ptr_device_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_FM) && (ptr_device_t->dev_id == _SPI_NAND_DEVICE_ID_FM25G02C)) ||
+			((ptr_device_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_FM) && (ptr_device_t->dev_id == _SPI_NAND_DEVICE_ID_FM25G04C)) ||
+			((ptr_device_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_FM) && (ptr_device_t->dev_id == _SPI_NAND_DEVICE_ID_FM25LG01B)) ||
+			((ptr_device_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_FM) && (ptr_device_t->dev_id == _SPI_NAND_DEVICE_ID_FM25LG02B)))
 	{
 		/* 1. Unlock All block */
 		spi_nand_protocol_get_status_reg_1(&feature);
@@ -6370,8 +6424,17 @@ SPI_NAND_FLASH_RTN_T SPI_NAND_Flash_Enable_OnDie_ECC( void )
 			rtn_status = spi_nand_set_ondie_ecc(_SPI_NAND_ADDR_FEATURE);
 		}
 	} else {
-		if( ((ptr_dev_info_t->mfr_id) == _SPI_NAND_MANUFACTURER_ID_PN) ||
-			((ptr_dev_info_t->mfr_id) == _SPI_NAND_MANUFACTURER_ID_FM) ||
+		/* the FM25G01B, FM25G02B, FM25LG01B and FM25LG02B have ECC_EN in the
+		   feature register (B0h), off at power up, not in 90h like the other
+		   chips of maker A1h (Fudan and Paragon) here */
+		int fm_b0 = ptr_dev_info_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_FM &&
+			    (ptr_dev_info_t->dev_id == _SPI_NAND_DEVICE_ID_FM25G01B ||
+			     ptr_dev_info_t->dev_id == _SPI_NAND_DEVICE_ID_FM25G02B ||
+			     ptr_dev_info_t->dev_id == _SPI_NAND_DEVICE_ID_FM25LG01B ||
+			     ptr_dev_info_t->dev_id == _SPI_NAND_DEVICE_ID_FM25LG02B);
+
+		if( (((ptr_dev_info_t->mfr_id) == _SPI_NAND_MANUFACTURER_ID_PN) && !fm_b0) ||
+			(((ptr_dev_info_t->mfr_id) == _SPI_NAND_MANUFACTURER_ID_FM) && !fm_b0) ||
 			((ptr_dev_info_t->mfr_id) == _SPI_NAND_MANUFACTURER_ID_FORESEE) ||
 			(((ptr_dev_info_t->mfr_id) == _SPI_NAND_MANUFACTURER_ID_XTX) && ((ptr_dev_info_t->dev_id) == _SPI_NAND_DEVICE_ID_XT26G02B)) )
 			rtn_status = spi_nand_set_ondie_ecc(_SPI_NAND_ADDR_ECC);

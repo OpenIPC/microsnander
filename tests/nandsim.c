@@ -243,7 +243,7 @@ int main(void)
 			"TOSHIBA TC58CYG2S0H", "KIOXIA TC58CYG0S3HRAIJ", "KIOXIA TC58CYG1S3HRAIJ", "KIOXIA TC58CYG2S0HRAIJ",
 			"KIOXIA TH58CYG3S0HRAIJ", "MICRON MT29F8G01ADBFD", "GIGADEVICE GD5F1GQ4RExxH", "GIGADEVICE GD5F2GQ4RE",
 			"GIGADEVICE GD5F2GQ5RExxH", "GIGADEVICE GD5F4GQ4RC", "GIGADEVICE GD5F4GM8RE", "XTX XT26Q01D",
-			"ETRON EM78D044VCF", "ETRON EM78E044VCA", "ETRON EM78F044VCA",
+			"ETRON EM78D044VCF", "ETRON EM78E044VCA", "ETRON EM78F044VCA", "FM FM25LG01B", "FM FM25LG02B",
 		};
 		int wrong = 0, n18 = 0;
 		for (int i = 0; i < n; i++) {
@@ -483,6 +483,19 @@ int main(void)
 	check(snand_write(buf, 100, PAGE + OOB) < 0, "raw write that does not start on a page fails");
 	ECC_fcheck = 1;
 	snand_init();
+
+	/* the on-die ECC bit: in 90h on the FM25G02C, in the feature register B0h on
+	   the FM25G01B, FM25G02B, FM25LG01B and FM25LG02B (their datasheets) */
+	chip(0xa1, 0x92, 0x00);
+	check(snand_init() > 0 && (feat[0x90] & 0x10) && !(feat[0xb0] & 0x10), "FM25G02C: the on-die ECC is turned on in 90h");
+	chip(0xa1, 0xd1, 0x00);
+	check(snand_init() > 0 && (feat[0xb0] & 0x10) && !(feat[0x90] & 0x10), "FM25G01B: the on-die ECC is turned on in B0h");
+	chip(0xa1, 0xd2, 0x00);
+	check(snand_init() > 0 && (feat[0xb0] & 0x10) && !(feat[0x90] & 0x10), "FM25G02B: the on-die ECC is turned on in B0h");
+	chip(0xa1, 0xb1, 0x00);
+	check(snand_init() > 0 && (feat[0xb0] & 0x10) && !(feat[0x90] & 0x10), "FM25LG01B: the on-die ECC is turned on in B0h");
+	chip(0xa1, 0xb2, 0x00);
+	check(snand_init() > 0 && (feat[0xb0] & 0x10), "FM25LG02B: the on-die ECC is turned on in B0h");
 
 	/* a block that fails to erase fails the erase, wherever it is in the range */
 	chip(0xef, 0xaa, 0x21);
