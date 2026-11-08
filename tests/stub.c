@@ -1,7 +1,7 @@
 /* tests/stub.c — test double for main.c: the programmer and a 64 KiB chip in chip.img.
    MS_BIG=1 makes it 1 MiB, MS_LARGEST=1 prints the longest read or write,
    MS_CHIP=nor|nand|none, MS_CORRUPT=<offset> flips a byte on write,
-   MS_FAIL=erase|read|shortread|write|partial|unprotect makes that operation fail. */
+   MS_FAIL=erase|erasebyte|read|shortread|write|partial|unprotect makes that operation fail. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,7 +18,7 @@ static const char *env(const char *n) { const char *v = getenv(n); return v ? v 
 static int r(unsigned char *b, unsigned long f, unsigned long l) { note(l); if (!strcmp(env("MS_FAIL"),"stopread") && ++stops == 2) ms_stop = 1; if (!strcmp(env("MS_FAIL"),"read")) return -1; if (!strcmp(env("MS_FAIL"),"shortread")) { memcpy(b, chip + f, l / 2); return l / 2; } memcpy(b, chip + f, l); return l; }
 static int w(unsigned char *b, unsigned long t, unsigned long l) { note(l); if (ms_stop) return -1; if (*env("MS_PROTECT")) return l; if (!strcmp(env("MS_FAIL"),"write")) return -1; if (!strcmp(env("MS_FAIL"),"stopwrite")) { memcpy(chip + t, b, l); ms_stop = 1; return l; } if (!strcmp(env("MS_FAIL"),"partial")) { memcpy(chip + t, b, l / 2); return l / 2; } memcpy(chip + t, b, l); if (*env("MS_CORRUPT")) { unsigned long x = atol(env("MS_CORRUPT")); if (x >= t && x < t + l) chip[x] ^= 0x5a; } return l; }
 /* MS_FAIL=stop: Ctrl+C comes during the first erase, which then stops after it erased */
-static int e(unsigned long o, unsigned long l) { if (*env("MS_PROTECT")) return 0; if (!strcmp(env("MS_FAIL"),"erase")) return -2; if (ms_stop) return -1; memset(chip + o, 0xff, l); if (!strcmp(env("MS_FAIL"),"stop") && !stops++) { ms_stop = 1; return -1; } if (!strcmp(env("MS_FAIL"),"stoprestore") && stops++ == 1) raise(SIGINT); return 0; }
+static int e(unsigned long o, unsigned long l) { if (*env("MS_PROTECT")) return 0; if (!strcmp(env("MS_FAIL"),"erase")) return -2; if (ms_stop) return -1; memset(chip + o, 0xff, l); if (!strcmp(env("MS_FAIL"),"erasebyte") && l > 0x1234) chip[o + 0x1234] = 0x5a; if (!strcmp(env("MS_FAIL"),"stop") && !stops++) { ms_stop = 1; return -1; } if (!strcmp(env("MS_FAIL"),"stoprestore") && stops++ == 1) raise(SIGINT); return 0; }
 static int u(void) { return strcmp(env("MS_FAIL"),"unprotect") ? 0 : -3; }
 static int q(void) { printf("clear QE\n"); return strcmp(env("MS_FAIL"),"qe") ? 0 : -2; }
 #include <strings.h>

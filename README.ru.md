@@ -198,7 +198,7 @@ microsnander [options]
                 board that boots in quad mode may then not boot
  -t             self-test: protection, then erase, write and read back one block
                 (the first; -a for another) and put its data back
- -v             verify after write on chip
+ -v             verify after write on chip; after -e: check that the range reads 0xFF
  -c <filename>  compare the chip with the file, nothing written (from -a, as long as
                 the file or -l)
  -P <name>      programmer: ch341a, ch347, ezp, auto (default: the one connected)
@@ -216,8 +216,13 @@ microsnander [options]
 
 За один запуск — одна операция: `-i`, `-e`, `-r`, `-w`, `-c`, `-O`, `-u`, `-t` или `-b`. Без `-a` и `-l`
 операция идёт по всей микросхеме. Адреса и длины — десятичные или шестнадцатеричные
-с `0x`. Стирание идёт целыми блоками: длина должна быть кратна размеру блока, который
-сообщает микросхема.
+с `0x`. Стирание идёт целыми блоками: адрес и длина должны быть кратны блоку стирания.
+У микросхемы SPI NOR, в таблице SFDP которой есть команды стирания 4 КБ и 32 КБ (так у
+большинства микросхем последних пятнадцати лет), этот блок — 4 КБ: диапазон стирается
+командами 64 КБ там, где он покрывает целые секторы, и командами 32 КБ и 4 КБ по краям,
+а найденные блоки выводятся при определении. Без такой таблицы блок — сектор из таблицы
+микросхем, обычно 64 КБ. `-e -v` читает стёртый диапазон и проверяет, что каждый байт
+равен 0xFF (SPI NOR и программаторы EZP).
 
 `-i` для микросхемы SPI NOR (через CH341A или CH347) показывает ещё и то, какая её часть
 защищена от записи. Для Winbond W25Q от 1 МБ это диапазон адресов по таблицам даташита (биты

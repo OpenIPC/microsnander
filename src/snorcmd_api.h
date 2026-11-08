@@ -17,6 +17,7 @@
 
 int snor_read(unsigned char *buf, unsigned long from, unsigned long len);
 int snor_erase(unsigned long offs, unsigned long len);
+unsigned long snor_erase_unit(void);	/* the smallest erase block: 4 KB, 32 KB or the sector */
 int snor_write(unsigned char *buf, unsigned long to, unsigned long len);
 int snor_block_locks(void);	/* 1: the chip locks its blocks at power-up (SST26), its own way */
 int snor_unprotect(void);	/* 0; -1: the chip does not answer; -2: a register stays (snor_unprotect_why) */

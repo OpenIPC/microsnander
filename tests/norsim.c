@@ -48,7 +48,8 @@ static long stop_pages;			/* Ctrl+C after this many pages programmed */
 static int stop_chip_erase;		/* Ctrl+C during a chip erase */
 static int die_reads = -1;
 static int nprogs;			/* page programs (02) */
-static unsigned char sfdp[256];		/* the SFDP table the chip answers 5A with */
+static unsigned char sfdp[256];
+static int nerase52, nerased8;		/* 32 KB and 64 KB erase commands */		/* the SFDP table the chip answers 5A with */
 static int nerase20;			/* 4 KB erases (20) */		/* the die of the last read of status register 3 */
 static unsigned char cmd[300];
 static int ncmd, nread;
@@ -169,10 +170,12 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Chip_Select_High(void)
 		aai_addr += 2;
 		break;
 	case OPCODE_P4E: if (writable()) { erase(addr(), 4096); nerase20++; } wel = 0; break;
+	case 0x52: if (writable()) { erase(addr(), 32768); nerase52++; } wel = 0; break;	/* 32 KB block erase */
 	case OPCODE_SE:
 		/* SST26: the first 32 KB are 8 KB blocks, so a 64 KB erase there takes one 8 KB block */
 		if (writable()) {
 			erase(addr(), kind == SST26 && addr() < 32768 ? 8192 : 65536);
+			nerased8++;
 			if (kind == QE_SR1) busy = 5;
 		}
 		wel = 0;
@@ -737,6 +740,41 @@ int main(void)
 		check(snor_init() == 16 << 20 && snor_init() > 0, "  and a known chip next is found by the table again");
 		chip(find("W25Q128BV"), ORDINARY);
 		check(snor_init() == 16 << 20 && !strcmp(flash_chip_name, "W25Q128BV"), "  W25Q128BV from the table, not from SFDP");
+		memset(sfdp, 0xff, sizeof(sfdp));
+	}
+
+	/* 4 KB and 32 KB erase blocks of a known chip, where its SFDP table lists them */
+	{
+		chip(find("W25Q128BV"), ORDINARY);
+		make_sfdp(16 << 20, 12, 0x20, 16, 0xd8, 0, 16);
+		sfdp[0x30 + 32] = 15; sfdp[0x30 + 33] = 0x52;	/* a third type: 32 KB, 52 */
+		check(snor_init() == 16 << 20 && snor_erase_unit() == 4096 && spi_chip_info->sector_size == 65536,
+		      "W25Q128BV with 4 KB and 32 KB in its SFDP table: -e takes 4 KB blocks");
+		memset(mem, 0, 0x30000);
+		nerase20 = nerase52 = nerased8 = 0;
+		check(snor_erase(0x1000, 0x1000) == 0 && mem[0x1000] == 0xff && mem[0x1fff] == 0xff && mem[0xfff] == 0 &&
+		      mem[0x2000] == 0 && nerase20 == 1 && !nerase52 && !nerased8, "  4 KB at 0x1000: one 20, nothing around it");
+		memset(mem, 0, 0x30000);
+		nerase20 = nerase52 = nerased8 = 0;
+		check(snor_erase(0x8000, 0x19000) == 0 && mem[0x7fff] == 0 && mem[0x8000] == 0xff && mem[0x20fff] == 0xff &&
+		      mem[0x21000] == 0 && nerase52 == 1 && nerased8 == 1 && nerase20 == 1,
+		      "  0x8000-0x20FFF: 32 KB with 52, 64 KB with D8, 4 KB with 20");
+		memset(mem, 0, 0x30000);
+		check(snor_erase(0x800, 0x1000) < 0 && mem[0] == 0 && mem[0x1fff] == 0, "  a range off the 4 KB blocks is refused, nothing erased");
+		memset(sfdp, 0xff, sizeof(sfdp));
+		check(snor_init() == 16 << 20 && snor_erase_unit() == 65536 && snor_erase(0x1000, 0x1000) < 0,
+		      "  without an SFDP table: 64 KB blocks only, a 4 KB range refused");
+		make_sfdp(16 << 20, 16, 0xd8, 0, 0, 0, 16);
+		check(snor_init() == 16 << 20 && snor_erase_unit() == 65536, "  a table with 64 KB only (as M25P): 64 KB blocks");
+		make_sfdp(16 << 20, 15, 0x52, 16, 0xd8, 0, 16);
+		check(snor_init() == 16 << 20 && snor_erase_unit() == 32768, "  32 KB and 64 KB in the table: 32 KB blocks");
+		chip(find("W25Q256FV"), FOURB);
+		make_sfdp(32 << 20, 12, 0x20, 16, 0xd8, 0x01, 16);
+		snor_init();
+		memset(mem, 0, sizeof(mem));
+		nerase20 = 0;
+		check(snor_erase((16 << 20) + 0x1000, 0x1000) == 0 && mem[at((16 << 20) + 0x1000)] == 0xff && nerase20 == 1 &&
+		      mem[0x1000] == 0 && !four[0], "W25Q256FV: 4 KB above 16 MB with a 4-byte address, back in 3-byte mode");
 		memset(sfdp, 0xff, sizeof(sfdp));
 	}
 

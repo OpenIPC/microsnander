@@ -26,6 +26,7 @@ struct flash_cmd {
 	int (*flash_clear_qe)(void);	/* -uu: the unprotect and QE; set together with flash_unprotect */
 	int kind;		/* FLASH_NOR, FLASH_NAND, FLASH_FIRMWARE (the EZP runs the chip itself) */
 	int lock;		/* SPI NAND: its block lock register (A0) when found, -1: not known */
+	unsigned long erase_unit;	/* the smallest erase of -e; 0: the block size (bsize) */
 };
 
 enum { FLASH_NOR, FLASH_NAND, FLASH_FIRMWARE };

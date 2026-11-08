@@ -183,6 +183,13 @@ $B -uu | grep -q 'clear QE' && echo "ok     -uu clears QE" || { echo "FAIL -uu w
 t 0 "-e full"                         $B -e
 t 1 "-e fails"                        MS_FAIL=erase $B -e
 t 1 "-e len not block multiple"       $B -e -a 0 -l 100
+t 1 "-e addr not on a block"          $B -e -a 0x800 -l 0x1000
+$B -e -v | grep -q 'Status: OK, all 0xFF' && echo "ok   -e -v reads the erased range back" || { echo "FAIL -e -v"; fail=1; }
+t 1 "-e -v: a byte that is not 0xFF"   MS_FAIL=erasebyte $B -e -v
+MS_FAIL=erasebyte $B -e -v | grep -q 'not erased at 0x0000000000001234: read 0x5A' && echo "ok   -e -v names the first byte that is not erased" || { echo "FAIL -e -v message"; fail=1; }
+t 1 "-e -v: the read fails"            MS_FAIL=read $B -e -v
+t 1 "-e -v on NAND"                     MS_CHIP=nand $B -e -v
+t 0 "-e -a -l -v, part of the chip"     $B -e -a 0x1000 -l 0x2000 -v
 t 0 "-w -v ok"                        $B -w img.bin -v
 t 1 "-w -v mismatch at 0x1234"        MS_CORRUPT=4660 $B -w img.bin -v
 $B -w img.bin -v >/dev/null; MS_CORRUPT=4660 $B -w img.bin -v | grep -q 'first difference at 0x0000000000001234' && echo "ok   mismatch address reported" || { echo "FAIL mismatch address"; fail=1; }
