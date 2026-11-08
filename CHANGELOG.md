@@ -8,8 +8,10 @@ from every push to `main`; this file is the change history.
 
 - SPI NOR: `-e` erases in 4 KB and 32 KB blocks where the chip's SFDP table lists those
   erase commands: a range goes with 64 KB commands where it covers whole sectors and with
-  32 KB and 4 KB ones at its ends, so `-a` and `-l` can be multiples of 4 KB. A chip without
-  such a table (M25P has 64 KB sectors only) erases as before. Detection prints the erase
+  32 KB and 4 KB ones at its ends, so `-a` and `-l` can be multiples of 4 KB. Only where the
+  table says 4 KB erase works all over the chip: a chip without such a table (M25P has 64 KB
+  sectors only), with mixed sectors (a sector map table) or a Spansion part (S25FL-S has 4 KB
+  parameter sectors at one end) erases as before. Detection prints the erase
   blocks found.
 - `-e` refuses an address that is not on an erase block, as it did a length: before, the
   whole sector around it was erased, past the start of the range.

@@ -766,8 +766,18 @@ int main(void)
 		      "  without an SFDP table: 64 KB blocks only, a 4 KB range refused");
 		make_sfdp(16 << 20, 16, 0xd8, 0, 0, 0, 16);
 		check(snor_init() == 16 << 20 && snor_erase_unit() == 65536, "  a table with 64 KB only (as M25P): 64 KB blocks");
+		make_sfdp(16 << 20, 12, 0x20, 16, 0xd8, 0, 16);
+		sfdp[0x30] = 0xe6;				/* word 1: 4 KB erase not all over the chip */
+		check(snor_init() == 16 << 20 && snor_erase_unit() == 65536, "  4 KB erase not uniform (word 1): 64 KB blocks");
+		make_sfdp(16 << 20, 12, 0x20, 16, 0xd8, 0, 16);
+		sfdp[6] = 1;					/* two parameter headers, the second a sector map */
+		sfdp[16] = 0x81; sfdp[17] = 0; sfdp[18] = 1; sfdp[19] = 2; sfdp[20] = 0x80; sfdp[21] = 0; sfdp[22] = 0; sfdp[23] = 0xff;
+		check(snor_init() == 16 << 20 && snor_erase_unit() == 65536, "  a sector map table (mixed sectors): 64 KB blocks");
 		make_sfdp(16 << 20, 15, 0x52, 16, 0xd8, 0, 16);
 		check(snor_init() == 16 << 20 && snor_erase_unit() == 32768, "  32 KB and 64 KB in the table: 32 KB blocks");
+		chip(find("S25FL256S"), ORDINARY);
+		make_sfdp(32 << 20, 12, 0x20, 16, 0xd8, 0x01, 16);
+		check(snor_init() == 32 << 20 && snor_erase_unit() == 65536, "  Spansion S25FL256S (4 KB parameter sectors at one end): 64 KB blocks");
 		chip(find("W25Q256FV"), FOURB);
 		make_sfdp(32 << 20, 12, 0x20, 16, 0xd8, 0x01, 16);
 		snor_init();

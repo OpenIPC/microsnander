@@ -1165,6 +1165,25 @@ static u32 sfdp_basic(u8 p[64])
 	return n;
 }
 
+/* 1: the SFDP lists a sector map table (ID FF81): sectors of more than one size */
+static int sfdp_sector_map(void)
+{
+	u8 h[8 + 8 * 8];
+	int n;
+
+	if (snor_read_sfdp(0, h, 8) || memcmp(h, "SFDP", 4))
+		return 0;
+	n = h[6] + 1;			/* parameter headers */
+	if (n > 8)
+		n = 8;
+	if (snor_read_sfdp(8, h + 8, 8 * n))
+		return 1;		/* not known: as if it had one */
+	for (int i = 0; i < n; i++)
+		if (h[8 + 8 * i] == 0x81 && h[8 + 8 * i + 7] == 0xff)
+			return 1;
+	return 0;
+}
+
 /* The erase commands of 4 KB and 32 KB that the SFDP table lists (words 8
    and 9: up to four types, size 2^N and command); 0: not listed */
 static u8 snor_op_4k, snor_op_32k;
@@ -1579,10 +1598,13 @@ long snor_init(void)
 	/* Smaller erase blocks only where the chip's own SFDP table lists them:
 	   not every chip has them (M25P: 64 KB only), and the table has the
 	   commands. SST26 erases in 4 KB sectors already, its own way. */
-	if (spi_chip_info->sector_size > 4096 && !snor_is_sst26()) {
+	if (spi_chip_info->sector_size > 4096 && !snor_is_sst26() && spi_chip_info->id != 0x01) {
 		u8 p[64];
 
-		if (sfdp_basic(p))
+		/* only where 4 KB erase works all over the chip: word 1, bits 1:0 = 01,
+		   and no sector map table (a chip of mixed sectors, as Spansion S25FL-S
+		   with 4 KB parameter sectors at one end, which is left out too) */
+		if (sfdp_basic(p) && (p[0] & 0x03) == 0x01 && !sfdp_sector_map())
 			sfdp_small_erase(p);
 		if (snor_op_32k && spi_chip_info->sector_size <= 32768)
 			snor_op_32k = 0;
