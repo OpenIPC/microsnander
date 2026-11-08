@@ -42,7 +42,7 @@
 struct flash_cmd prog;
 extern unsigned int bsize;
 
-#define _VER	"1.34.0"
+#define _VER	"1.35.0"
 
 const char *ms_version = _VER;
 
@@ -92,7 +92,8 @@ void usage(int code)
 		"                board that boots in quad mode may then not boot\n"\
 		" -t             self-test: protection, then erase, write and read back one block\n"\
 		"                (the first; -a for another) and put its data back\n"\
-		" -v             verify after write on chip; after -e: check that the range reads 0xFF\n"\
+		" -v             verify after write on chip; after -e: check that the range reads\n"\
+		"                0xFF; after -r: read again, and save only if both reads are the same\n"\
 		" -c <filename>  compare the chip with the file, nothing written (from -a, as long as\n"\
 		"                the file or -l)\n"\
 		" -P <name>      programmer: ch341a, ch347, ezp, auto (default: the one connected)\n"\
@@ -198,7 +199,9 @@ static int dump_copy(FILE *from, FILE *to, unsigned char *buf, size_t n)
 }
 
 /* Read the range back and compare it with the file, which holds exactly the bytes
-   written (its first len bytes), in small chunks: 0 when they are the same */
+   written (its first len bytes), in small chunks: 0 when they are the same.
+   compare: 0 after a write (-w -v), 1 the chip against a file (-c), 2 a second
+   read against the dump of the first (-r -v) */
 /* a CH347 at 30 MHz or more: a difference may be bits lost on the wires */
 static int clock_hint;
 
@@ -239,9 +242,13 @@ static int verify(unsigned char *buf, const char *fname, long long addr, long lo
 			for (i = 0; i < n; i++)
 				if (cmp[i] != buf[off + i]) {
 					parts_end(NULL, 0, 0);
-					printf(compare ? "Status: BAD, first difference at 0x%016llX: file 0x%02X, chip 0x%02X\n" :
+					printf(compare == 2 ? "Status: BAD, the two reads differ, first at 0x%016llX: first 0x%02X, second 0x%02X\n" :
+					       compare ? "Status: BAD, first difference at 0x%016llX: file 0x%02X, chip 0x%02X\n" :
 					       "Status: BAD, first difference at 0x%016llX: wrote 0x%02X, read 0x%02X\n",
 					       addr + done + off + i, cmp[i], buf[off + i]);
+					if (compare == 2)
+						printf("The chip does not read the same twice: a loose clip or socket, long wires, "
+						       "or a clock too fast for them. Nothing is saved.\n");
 					if (clock_hint)
 						printf("Some CH347T boards lose bits at 30 MHz and more: if the chip should "
 						       "hold this data, try again with -S 15M.\n");
@@ -808,7 +815,11 @@ int main(int argc, char* argv[])
 		int ok, kept = 0, have = !lstat(fname, &st);
 
 		printf("READ:\n");
-		/* a link, a FIFO or a device is written as it is */
+		/* a link to a regular file goes like the file: through a temporary
+		   file and copied into the target, the link stays */
+		if (have && S_ISLNK(st.st_mode) && stat(fname, &st))
+			st.st_mode = S_IFLNK;
+		/* a dangling link, a FIFO or a device is written as it is */
 		if (!have || S_ISREG(st.st_mode)) {
 			int fd = have ? open(fname, O_WRONLY) : -1;	/* not truncated */
 
@@ -820,6 +831,16 @@ int main(int argc, char* argv[])
 				goto out;
 			}
 			tmp = dump_temp(fname, &fp);
+		}
+		/* -v reads the chip again against the dump, which is then only in the
+		   new file: a FIFO or a device cannot be read back */
+		if (vr && !tmp) {
+			printf("-r -v needs a regular file to hold the first read until the second one: %s is not one, "
+			       "or no file can be made next to it.\n", fname);
+			if (old)
+				fclose(old);
+			free(buf);
+			goto out;
 		}
 		if (!tmp) {
 			if (old)
@@ -855,6 +876,17 @@ int main(int argc, char* argv[])
 		if (done == len)
 			parts_end("Read", len, len);
 		ok = done == len;
+		/* -v: the chip read again and compared with the dump so far; the dump goes
+		   into place only when both reads are the same */
+		if (ok && vr) {
+			if (fflush(fp)) {
+				printf("Error writing file [%s]\n", fname);
+				ok = 0;
+			} else {
+				printf("VERIFY:\n");
+				ok = !verify(buf, tmp, addr, len, 2);
+			}
+		}
 		/* fflush and fclose: their results count as much as that of fwrite() */
 		if (old) {
 			if (ok && !fflush(fp)) {

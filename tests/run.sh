@@ -211,6 +211,11 @@ t 0 "-r full"                         $B -r out.bin
 cmp -s out.bin img.bin && echo "ok   -r gives the written image" || { echo "FAIL -r content"; fail=1; }
 t 1 "-r short read"                  MS_FAIL=shortread $B -r out3.bin
 t 1 "-r read fails"                   MS_FAIL=read $B -r out2.bin
+rm -f twice.bin; $B -r twice.bin -v > twice.log; [ $? = 0 ] && cmp -s twice.bin img.bin && grep -q '^VERIFY:' twice.log && echo "ok   -r -v reads twice and saves the dump" || { echo "FAIL -r -v"; tail -3 twice.log; fail=1; }
+echo keep > twice.bin; MS_FAIL=flaky $B -r twice.bin -v > twice.log; [ $? = 1 ] && [ "$(cat twice.bin)" = keep ] && grep -q 'the two reads differ, first at 0x0000000000002345' twice.log && ! ls twice.bin.* >/dev/null 2>&1 && echo "ok   -r -v: the reads differ, nothing saved, the earlier file stays" || { echo "FAIL -r -v difference"; tail -3 twice.log; fail=1; }
+rm -f twice.bin; MS_FAIL=flaky $B -r twice.bin -v >/dev/null; [ ! -e twice.bin ] && echo "ok   -r -v: no new file when the reads differ" || { echo "FAIL -r -v left a file"; fail=1; }
+t 1 "-r -v into a FIFO-like target"     $B -r /dev/null -v
+t 0 "-r -a -l -v, part of the chip"     $B -r part2.bin -a 0x1000 -l 0x3000 -v
 t 1 "-r unwritable file"              $B -r /nonexistent/dir/out.bin
 [ ! -e out2.bin ] && echo "ok   a read that failed leaves no half dump" || { echo "FAIL half dump left"; fail=1; }
 printf 'earlier' > keep.bin; chmod 640 keep.bin
@@ -231,6 +236,11 @@ if [ "$(id -u)" != 0 ]; then
 fi
 ln -s keep.bin link.bin; t 0 "-r into a link" $B -r link.bin
 [ -L link.bin ] && echo "ok   a link stays a link" || { echo "FAIL link replaced"; fail=1; }
+t 0 "-r -v into a link"               $B -r link.bin -v
+[ -L link.bin ] && cmp -s keep.bin img.bin && echo "ok   -v writes through the link too" || { echo "FAIL -r -v link"; fail=1; }
+printf 'earlier' > keep.bin
+t 1 "-r -v into a link, reads differ"  MS_FAIL=flaky $B -r link.bin -v
+[ -L link.bin ] && [ "$(cat keep.bin)" = earlier ] && [ "$(ls keep.bin.* link.bin.* 2>/dev/null)" = "" ] && echo "ok   the target keeps the earlier dump" || { echo "FAIL -r -v link mismatch"; fail=1; }
 t 0 "-w of a file of size 0 with data" $B -w /proc/self/status -l 8
 # a range goes in parts of whole blocks, 64 KiB here; in one piece where parts would not do
 dd if=/dev/urandom of=big.bin bs=1024 count=1024 2>/dev/null

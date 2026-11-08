@@ -195,7 +195,8 @@ microsnander [options]
                 board that boots in quad mode may then not boot
  -t             self-test: protection, then erase, write and read back one block
                 (the first; -a for another) and put its data back
- -v             verify after write on chip; after -e: check that the range reads 0xFF
+ -v             verify after write on chip; after -e: check that the range reads
+                0xFF; after -r: read again, and save only if both reads are the same
  -c <filename>  compare the chip with the file, nothing written (from -a, as long as
                 the file or -l)
  -P <name>      programmer: ch341a, ch347, ezp, auto (default: the one connected)
@@ -234,6 +235,12 @@ reads and writes a chip of any size; the file still has to fit its disk, next to
 dump of that name, which `-r` replaces only at the end. The range is held in
 memory as one piece with `-k`, `-d`, the EZP programmers and a file that is no regular file: on
 a small board use `-a` and `-l` with them.
+
+`-r -v` reads the chip a second time and compares it with the first read as it goes; the dump
+is saved only when both reads are the same, otherwise nothing is saved and an earlier dump of
+that name stays. Two reads that differ point to a loose clip or socket, long wires or a clock
+too fast for them: worth it for a chip read on its board, or one that will be written back.
+The dump must be a regular file.
 
 `-c` compares the chip with a file and writes nothing: from `-a`, as long as the file (or `-l`,
 if that is shorter). It ends with `Status: OK` or the address of the first difference, as `-v`.
@@ -299,6 +306,9 @@ microsnander -t
 
 # Full backup
 microsnander -r full.bin
+
+# Full backup read twice, saved only if both reads are the same (a chip on its board, a clip)
+microsnander -r full.bin -v
 
 # 1 MiB from 0x50000 (for example, a kernel partition)
 microsnander -r kernel.bin -a 0x50000 -l 0x100000
