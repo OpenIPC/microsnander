@@ -13,6 +13,7 @@
    to the wrong place, as on a real one. The driver is built into this file,
    so the checks can walk its chip table. */
 #include <stdio.h>
+#include <unistd.h>
 #include <string.h>
 #include <time.h>
 #include "../src/types.h"
@@ -52,6 +53,7 @@ static int nerase20;			/* 4 KB erases (20) */		/* the die of the last read of st
 static unsigned char cmd[300];
 static int ncmd, nread;
 static int wel, aai, locked;
+static unsigned char sr3;		/* status register 3: WPS 0x04 */
 static int busy;			/* status reads that still show WIP after WRSR or ULBPR */
 static unsigned char sr;			/* BP bits */
 static unsigned long aai_addr;
@@ -105,7 +107,7 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Read_NByte(u8 *d, u32 len, SPI_CONTROLLER_SP
 		}
 		case OPCODE_RDSR: d[i] = sr | (wel ? SR_WEL : 0) | (aai ? 0x40 : 0) | (busy ? SR_WIP : 0); if (busy) busy--; break;
 		case OPCODE_RDSR2: d[i] = kind == NO_SR23 || kind == QE_SR1 ? 0xff : sr2; sr2_reads++; break;
-		case OPCODE_RDSR3: die_reads = die; d[i] = kind == NO_SR23 ? 0xff : kind == QE_SR1 ? 0x07 : 0; break;	/* another register on Macronix */
+		case OPCODE_RDSR3: die_reads = die; d[i] = kind == NO_SR23 ? 0xff : kind == QE_SR1 ? 0x07 : sr3; break;	/* another register on Macronix */
 		case OPCODE_READ:
 			d[i] = mem[at(addr() + nread)];
 			if (stop_reads > 0 && !--stop_reads) ms_stop = 1;
@@ -202,6 +204,27 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Xfer_NByte(u8 *in, u32 len_in, u8 *out, u32 
 	return SPI_CONTROLLER_Chip_Select_High();
 }
 
+/* what snor_info() prints, and its result in *ret */
+static const char *info_out(int *ret)
+{
+	static char out[1024];
+	FILE *f = tmpfile();
+	int saved = dup(1);
+	size_t n;
+
+	fflush(stdout);
+	dup2(fileno(f), 1);
+	*ret = snor_info();
+	fflush(stdout);
+	dup2(saved, 1);
+	close(saved);
+	rewind(f);
+	n = fread(out, 1, sizeof(out) - 1, f);
+	out[n] = 0;
+	fclose(f);
+	return out;
+}
+
 static int fail;
 static void check(int ok, const char *what) { printf("%s %s\n", ok ? "ok  " : "FAIL", what); if (!ok) fail = 1; }
 
@@ -237,6 +260,7 @@ static void chip(const struct chip_info *e, int k)
 	id[0] = e->id;
 	id[1] = e->jedec_id >> 24; id[2] = e->jedec_id >> 16; id[3] = e->jedec_id >> 8; id[4] = e->jedec_id;
 	kind = k; wel = aai = busy = busy_cmds = sr2_writes = 0;
+	sr3 = 0;
 	four[0] = four[1] = die = 0; stop_reads = stop_pages = stop_chip_erase = 0; ms_stop = 0;
 	sr2 = k == QE_FIXED ? 0x02 : 0;
 	locked = k == SST26;
@@ -484,6 +508,33 @@ int main(void)
 			int ret = w25q_protected(r, rows[i].size, &from, &len);
 			check(ret == rows[i].ret && (ret || (from == rows[i].from && len == rows[i].len)), rows[i].what);
 		}
+	}
+
+	/* what -i says */
+	{
+		int ret;
+		chip(find("W25Q128BV"), ORDINARY);
+		snor_init();
+		sr = 0x04; sr2 = 0;
+		check(strstr(info_out(&ret), "0xFC0000-0xFFFFFF (256 KB, the top) is read-only") && !ret, "-i: W25Q128BV with BP 001, the top 256 KB");
+		sr3 = 0x04;
+		check(strstr(info_out(&ret), "individual block locks are on (WPS = 1); which blocks are locked is not read") != NULL,
+		      "-i: WPS says the block locks are on, not which");
+		sr3 = 0;
+		chip(find("W25Q20CL"), ORDINARY);
+		snor_init();
+		sr = 0x04;
+		check(strstr(info_out(&ret), "the range is not known for this chip") != NULL, "-i: a W25Q under 1 MB: no range from the tables");
+		chip(find("N25Q128A13"), ORDINARY);
+		snor_init();
+		sr = 0x40;			/* BP3 in bit 6 */
+		check(strstr(info_out(&ret), "protect bits are set (status register 1: 0x40)") != NULL, "-i: Micron with BP3 alone is not called unprotected");
+		chip(find("W25M512JV"), DIES);
+		snor_init();
+		sr = 0x28;			/* 4-bit BP 1010: all of a W25Q256JV die */
+		const char *o = info_out(&ret);
+		check(strstr(o, "Protection (die 0): the whole die is read-only") && !strstr(o, "whole chip"), "-i: W25M: the whole die, not the whole chip");
+		sr = 0;
 	}
 
 	/* the unique ID and the security registers of a W25Q */

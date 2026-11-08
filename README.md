@@ -217,8 +217,8 @@ operation covers the whole chip. Addresses and lengths are decimal or hex with
 the chip reports.
 
 `-i` of an SPI NOR chip (through the CH341A or the CH347) also says what of it is
-read-only. For a Winbond W25Q that is the address range from the tables of its datasheet
-(block protect bits, TB, SEC and CMP); for the other chips it says whether a block
+read-only. For a Winbond W25Q of 1 MB and more that is the address range from the tables of
+its datasheet (block protect bits, TB, SEC and CMP); for the other chips it says whether a
 protect bit is set, as their ranges differ from maker to maker and between chip
 generations. A W25Q also shows its 64-bit unique ID. `-O` saves the three 256-byte
 security registers of a W25Q (of each die of a W25M) into a file; they are only read,

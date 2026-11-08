@@ -458,9 +458,8 @@ int main(int argc, char* argv[])
 	}
 
 	if (op == 'i') {
-		if (prog.kind == FLASH_NOR && programmer->send)
-			snor_info();
-		rc = 0;
+		/* a read of the protection or the unique ID that fails fails -i */
+		rc = prog.kind == FLASH_NOR && programmer->send && snor_info() < 0;
 		goto out;
 	}
 
@@ -486,12 +485,39 @@ int main(int argc, char* argv[])
 			free(sec);
 			goto out;
 		}
-		if (!(fp = fopen(fname, "wb")) || fwrite(sec, 1, n, fp) != (size_t)n || fclose(fp)) {
-			printf("Error writing file [%s]\n", fname);
+		/* as a dump of -r: into a new file next to fname, put in place at the end, so
+		   a write that fails leaves an earlier file as it was (a link, a FIFO or a
+		   device is written as it is) */
+		{
+			char *tmp = NULL;
+			int ok, have = !lstat(fname, &st);
+
+			if (!have || S_ISREG(st.st_mode))
+				tmp = dump_temp(fname, &fp);
+			if (!tmp)
+				fp = fopen(fname, "wb");
+			ok = fp && fwrite(sec, 1, n, fp) == (size_t)n;
+			if (fp && fclose(fp))
+				ok = 0;
+			fp = NULL;
+			if (tmp) {
+				if (ok) {
+					mode_t mask = umask(0);
+
+					umask(mask);
+					if (chmod(tmp, 0666 & ~mask) || rename(tmp, fname))
+						ok = 0;
+				}
+				if (!ok)
+					unlink(tmp);
+				free(tmp);
+			}
 			free(sec);
-			goto out;
+			if (!ok) {
+				printf("Error writing file [%s]\n", fname);
+				goto out;
+			}
 		}
-		free(sec);
 		printf("Read %ld bytes: %ld registers of 256 bytes into %s\n", n, n / 256, fname);
 		printf("Status: OK\n");
 		rc = 0;

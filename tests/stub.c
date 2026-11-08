@@ -61,7 +61,7 @@ int snor_read_status(unsigned char sr[3]) { return snor_read_status_at(0, sr); }
 int snor_read_status_at(unsigned long a, unsigned char sr[3]) { (void)a; unsigned long v = strtoul(*env("MS_SR") ? env("MS_SR") : "000200", NULL, 16); sr[0] = v >> 16; sr[1] = v >> 8; sr[2] = v; return 0; }
 int snor_block_locks(void) { return *env("MS_SST26") != 0; }
 /* -i and -O: MS_SECURITY=0 a chip without known security registers, =fail a read that fails */
-void snor_info(void) { printf("Protection: none.\n"); }
+int snor_info(void) { printf("Protection: none.\n"); return !strcmp(env("MS_INFO"), "fail") ? -1 : 0; }
 long snor_security_size(void) { return !strcmp(env("MS_SECURITY"), "0") ? 0 : 768; }
 int snor_read_security(unsigned char *b) { if (!strcmp(env("MS_SECURITY"), "fail")) return -1; for (int i = 0; i < 768; i++) b[i] = (unsigned char)i; return 0; }
 int snor_sr1_macronix(void) { return *env("MS_MACRONIX") != 0; }

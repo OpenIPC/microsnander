@@ -1466,7 +1466,7 @@ int snor_read_security(unsigned char *buf)
 
 /* -i: what of the chip is read-only, and its unique ID where the datasheet
    gives one; a line each */
-void snor_info(void)
+int snor_info(void)
 {
 	const unsigned dies = spi_chip_info->dies > 1 ? spi_chip_info->dies : 1;
 	const unsigned long dsize = snor_die_size();
@@ -1474,40 +1474,45 @@ void snor_info(void)
 
 	if (snor_is_sst26()) {
 		printf("Protection: every block is locked at power-up; -u, an erase or a write unlocks them.\n");
-		return;
+		return 0;
 	}
 	for (unsigned d = 0; d < dies; d++) {
 		u8 sr[3];
 		unsigned long from, len;
 		char die[16] = "";
-		u8 bp_mask = snor_is_sst25_aai() ? 0x3c : (SR_BP0 | SR_BP1 | SR_BP2) | (snor_is_macronix() ? 0x20 : 0);
+		/* bits 2-5 hold BP0-BP3 on most chips, bit 6 BP3 or BP4 on some (Micron,
+		   GigaDevice); on Macronix bit 6 is QE */
+		u8 bp_mask = snor_is_sst25_aai() ? 0x3c : snor_is_macronix() ? 0x3c : 0x7c;
 
 		if (dies > 1)
 			snprintf(die, sizeof(die), " (die %u)", d);
 		if (snor_read_status_at(d * dsize, sr) < 0) {
 			printf("Protection%s: the status registers did not come back.\n", die);
-			return;
+			return -1;
 		}
-		if (snor_is_w25q()) {
+		/* the tables of the datasheets from 1 MB up; the smaller W25Q have steps of their own */
+		if (snor_is_w25q() && dsize >= (1UL << 20)) {
 			if (sr[2] != 0xff && (sr[2] & SR3_WPS))
-				printf("Protection%s: blocks locked one by one (WPS = 1); -u clears WPS.\n", die);
+				printf("Protection%s: individual block locks are on (WPS = 1); which blocks are locked "
+				       "is not read; -u clears WPS.\n", die);
 			else if (w25q_protected(sr, dsize, &from, &len) < 0)
 				printf("Protection%s: status register 1 is 0x%02x, a setting the datasheet does not list; -u clears it.\n", die, sr[0]);
 			else if (!len)
 				printf("Protection%s: none.\n", die);
 			else if (len == dsize)
-				printf("Protection%s: the whole chip is read-only; -u clears it.\n", die);
+				printf("Protection%s: the whole %s is read-only; -u clears it.\n", die, dies > 1 ? "die" : "chip");
 			else
 				printf("Protection%s: 0x%06lX-0x%06lX (%s, the %s) is read-only; -u clears it.\n", die,
 				       d * dsize + from, d * dsize + from + len - 1, snor_kb(len, a, sizeof(a)),
 				       from ? "top" : "bottom");
 			continue;
 		}
-		/* other makers: whether a BP bit is set; the ranges differ */
+		/* other makers: whether a protect bit is set; the ranges differ */
 		if (!(sr[0] & bp_mask) && (snor_is_macronix() || sr[1] == 0xff || !(sr[1] & SR2_CMP)))
 			printf("Protection%s: none.\n", die);
 		else
-			printf("Protection%s: block protect bits are set (status register 1: 0x%02x); -u clears them.\n", die, sr[0]);
+			printf("Protection%s: protect bits are set (status register 1: 0x%02x), the range is not known "
+			       "for this chip; -u clears them.\n", die, sr[0]);
 	}
 
 	if (snor_is_w25q()) {
@@ -1519,12 +1524,13 @@ void snor_info(void)
 				snprintf(die, sizeof(die), " (die %u)", d);
 			if (snor_read_uid(d, uid) < 0) {
 				printf("Unique ID%s: the read failed.\n", die);
-				break;
+				return -1;
 			}
 			printf("Unique ID%s: %02x%02x%02x%02x%02x%02x%02x%02x\n", die,
 			       uid[0], uid[1], uid[2], uid[3], uid[4], uid[5], uid[6], uid[7]);
 		}
 	}
+	return 0;
 }
 
 long snor_init(void)

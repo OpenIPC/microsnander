@@ -6,11 +6,12 @@ from every push to `main`; this file is the change history.
 
 ## 1.33.0 — 2026-11-08
 
-- `-i` of an SPI NOR chip says what of it is read-only. For a Winbond W25Q (and the W25M of
-  W25Q dies) it gives the address range from the tables of the datasheet: block protect bits,
-  TB, SEC (4 KB steps) and CMP, the 4-bit layout of the chips of 32 MB and more, and the
-  blocks locked one by one with WPS. For the other chips it says whether a block protect bit
-  is set; for SST26 that its blocks are locked at power-up.
+- `-i` of an SPI NOR chip says what of it is read-only. For a Winbond W25Q of 1 MB and more
+  (and the W25M of W25Q dies) it gives the address range from the tables of the datasheet:
+  block protect bits, TB, SEC (4 KB steps) and CMP, the 4-bit layout of the chips of 32 MB and
+  more; with WPS set, that the individual block locks are on. For the other chips it says
+  whether a protect bit is set; for SST26 that its blocks are locked at power-up. A read that
+  fails fails `-i`.
 - `-i` of a W25Q shows its 64-bit unique ID (4Bh), of each die on a W25M.
 - `-O <file>` saves the three 256-byte security registers of a W25Q (48h; 768 bytes, of each
   die on a W25M). A chip over 16 MB is taken out of the 4-byte address mode first, as the
