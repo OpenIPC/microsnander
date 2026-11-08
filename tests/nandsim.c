@@ -390,7 +390,8 @@ int main(void)
 			chip(ids[i][0], ids[i][1], ids[i][2]);
 			if (snand_init() <= 0) { printf("     %02x %02x %02x: not detected\n", ids[i][0], ids[i][1], ids[i][2]); missed++; continue; }
 			ecc_bad[0] = 3;
-			if (snand_read(got, 3L * PAGE, 16) >= 0) {
+			/* page 3 of the chip's own page size */
+			if (snand_read(got, 3L * (_SPI_NAND_GET_DEVICE_INFO_PTR)->page_size, 16) >= 0 || loaded != 3) {
 				printf("     %s: the ECC failure is not seen\n", (_SPI_NAND_GET_DEVICE_INFO_PTR)->ptr_name);
 				missed++;
 			}
@@ -399,7 +400,9 @@ int main(void)
 		chip(0xc8, 0xa4, 0x68);			/* GD5F4GQ4RC: 3-bit status, only 111 is uncorrectable */
 		snand_init();
 		ecc_bad[0] = 3;
-		check(snand_read(got, 3L * PAGE, 16) == 16, "  GD5F4GQ4RC: 010 is a corrected error, not a failure");
+		check((_SPI_NAND_GET_DEVICE_INFO_PTR)->page_size == 4096 &&
+		      snand_read(got, 3L * (_SPI_NAND_GET_DEVICE_INFO_PTR)->page_size, 16) == 16 && loaded == 3,
+		      "  GD5F4GQ4RC: 010 on page 3 is a corrected error, not a failure");
 	}
 
 	/* a page with an ECC error is not served from the driver cache on the next read */
