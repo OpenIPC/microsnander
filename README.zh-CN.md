@@ -174,8 +174,11 @@ microsnander [options]
  -t             self-test: protection, then erase, write and read back one block
                 (the first; -a for another) and put its data back
  -v             verify after write on chip
+ -c <filename>  compare the chip with the file, nothing written (from -a, as long as
+                the file or -l)
  -P <name>      programmer: ch341a, ch347, ezp, auto (default: the one connected)
- -S <speed>     SPI clock of the CH347: 60M, 30M (default), 15M, 7.5M, 3.75M, 1.875M;
+ -S <speed>     SPI clock of the CH347: 60M, 30M (default), 15M, 7.5M, 3.75M, 1.875M,
+                937.5K, 468.75K;
                 with -m sigmastar the I2C clock: 20K, 100K (default), 400K, 750K
  -m sigmastar   the flash of a SigmaStar board through the ISP of its SoC: the SoC's UART
                 (TX to SDA, RX to SCL, GND) on the I2C of the CH341A or the CH347
@@ -186,12 +189,19 @@ microsnander [options]
  -o <dir>       web mode: where Read saves the dumps (default: the current one)
 ```
 
-每次运行只执行一个操作：`-i`、`-e`、`-r`、`-w`、`-u`、`-t` 或 `-b`。不指定 `-a` 和 `-l` 时，
+每次运行只执行一个操作：`-i`、`-e`、`-r`、`-w`、`-c`、`-u`、`-t` 或 `-b`。不指定 `-a` 和 `-l` 时，
 操作覆盖整片芯片。地址和长度可以是十进制，或带 `0x` 的十六进制。擦除按整块进行：
 长度必须是芯片报告的块大小的整数倍。
 
 `-r`、`-w` 和 `-v` 按约 64 KB 的分段处理芯片，因此内存很小的开发板也能读写任意大小的芯片；文件仍需放得下
 其磁盘，并与同名的旧转储并存，`-r` 只在结束时才替换它。使用 `-k`、`-d`、EZP 编程器或非普通文件时，整个范围仍保存在内存中：在小型开发板上请配合 `-a` 和 `-l`。
+
+`-c` 将芯片与文件比较，不写入任何内容：从 `-a` 开始，长度为文件长度（若 `-l` 更短则取 `-l`）。
+结束时与 `-v` 一样给出 `Status: OK` 或第一个不同之处的地址。在 30 MHz 及以上的 CH347 上，`-v`
+或 `-c` 发现不同时会提示使用 `-S 15M`：部分 CH347T 板在该频率下会丢失数据位。
+
+如果芯片 ID 读出为 `ff ff ff` 或 `00 00 00`，说明没有芯片应答：提示信息会说明需要检查的内容
+（夹子或插座及第 1 脚、供电、占用总线的 SoC）。
 
 SPI NAND 芯片默认使用片内 ECC 读写：文件中只有数据页。使用 `-d` 时关闭 ECC，每页
 连同 OOB（spare）区一起读写，用于原始转储。
@@ -302,7 +312,7 @@ microsnander -P ch347 -W 8080 -o /srv/dumps
 - 只使用一个编程器，选择方式与不带 `-W` 时相同；连接了多个时请用 `-P`。
 - 每个操作开始时打开编程器、结束后关闭，因此两次操作之间可以重新插拔，或用普通方式运行 microsnander。
 - 每次只运行一个操作；操作进行中的请求会得到 `409`。操作进行时页面每秒查询两次状态。
-- `-W` 不接受自身的操作（`-i`、`-r`、`-w`、`-e`、`-u`、`-t`、`-b`），也不接受 `-q`、`-m`、`-v`、`-S`、`-d`、`-I` 或 `-k`：
+- `-W` 不接受自身的操作（`-i`、`-r`、`-w`、`-c`、`-e`、`-u`、`-t`、`-b`），也不接受 `-q`、`-m`、`-v`、`-S`、`-d`、`-I` 或 `-k`：
   操作由页面完成，在开启 ECC 的情况下从地址 0 写入完整文件，并始终校验。`-K` 和 `-o` 只能与 `-W` 一起使用。
 - 客户端断开时服务继续运行；慢速客户端不会阻塞其他客户端（最多同时 16 个连接）。
 

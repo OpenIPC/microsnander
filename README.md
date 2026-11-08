@@ -194,8 +194,11 @@ microsnander [options]
  -t             self-test: protection, then erase, write and read back one block
                 (the first; -a for another) and put its data back
  -v             verify after write on chip
+ -c <filename>  compare the chip with the file, nothing written (from -a, as long as
+                the file or -l)
  -P <name>      programmer: ch341a, ch347, ezp, auto (default: the one connected)
- -S <speed>     SPI clock of the CH347: 60M, 30M (default), 15M, 7.5M, 3.75M, 1.875M;
+ -S <speed>     SPI clock of the CH347: 60M, 30M (default), 15M, 7.5M, 3.75M, 1.875M,
+                937.5K, 468.75K;
                 with -m sigmastar the I2C clock: 20K, 100K (default), 400K, 750K
  -m sigmastar   the flash of a SigmaStar board through the ISP of its SoC: the SoC's UART
                 (TX to SDA, RX to SCL, GND) on the I2C of the CH341A or the CH347
@@ -206,7 +209,7 @@ microsnander [options]
  -o <dir>       web mode: where Read saves the dumps (default: the current one)
 ```
 
-One operation per run: `-i`, `-e`, `-r`, `-w`, `-u`, `-t` or `-b`. Without `-a` and `-l` the
+One operation per run: `-i`, `-e`, `-r`, `-w`, `-c`, `-u`, `-t` or `-b`. Without `-a` and `-l` the
 operation covers the whole chip. Addresses and lengths are decimal or hex with
 `0x`. Erase works on whole blocks: the length must be a multiple of the block size
 the chip reports.
@@ -216,6 +219,14 @@ reads and writes a chip of any size; the file still has to fit its disk, next to
 dump of that name, which `-r` replaces only at the end. The range is held in
 memory as one piece with `-k`, `-d`, the EZP programmers and a file that is no regular file: on
 a small board use `-a` and `-l` with them.
+
+`-c` compares the chip with a file and writes nothing: from `-a`, as long as the file (or `-l`,
+if that is shorter). It ends with `Status: OK` or the address of the first difference, as `-v`.
+When `-v` or `-c` finds a difference on a CH347 at 30 MHz or more, the message suggests
+`-S 15M`: some CH347T boards lose bits at that clock.
+
+When the chip's ID reads `ff ff ff` or `00 00 00`, no chip answered: the message says what to
+check (the clip or socket and pin 1, the power, a SoC that holds the bus).
 
 SPI NAND chips are read and written with their internal ECC by default: the file
 holds the data pages only. With `-d` the ECC is off and every page is read and
@@ -346,7 +357,7 @@ How it works:
   can be replugged, or used by a normal microsnander run.
 - One operation runs at a time; a request while one runs gets `409`. The page polls the state
   twice a second while an operation runs.
-- `-W` takes no operation of its own (`-i`, `-r`, `-w`, `-e`, `-u`, `-t`, `-b`) and no `-q`, `-m`, `-v`,
+- `-W` takes no operation of its own (`-i`, `-r`, `-w`, `-c`, `-e`, `-u`, `-t`, `-b`) and no `-q`, `-m`, `-v`,
   `-S`, `-d`, `-I` or `-k`: the page does the operations, writes whole files from address 0 with ECC on
   and always verifies. `-K` and `-o` go with `-W` only.
 - The service keeps running when a client disconnects; a slow client does not hold the others

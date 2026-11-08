@@ -51,6 +51,7 @@ static int ch347_divisor = 1;		/* 30 MHz: within the 50 MHz of READ (0x03) of mo
 
 static const struct { const char *name; int divisor; } ch347_speeds[] = {
 	{ "60M", 0 }, { "30M", 1 }, { "15M", 2 }, { "7.5M", 3 }, { "3.75M", 4 }, { "1.875M", 5 },
+	{ "937.5K", 6 }, { "468.75K", 7 },
 };
 
 int ch347_set_speed(const char *speed)
@@ -63,7 +64,7 @@ int ch347_set_speed(const char *speed)
 	return -1;
 }
 
-const char *ch347_speed_list(void) { return "60M, 30M, 15M, 7.5M, 3.75M, 1.875M"; }
+const char *ch347_speed_list(void) { return "60M, 30M, 15M, 7.5M, 3.75M, 1.875M, 937.5K, 468.75K"; }
 
 static int bulk(unsigned char ep, unsigned char *buf, int len, int *done)
 {
@@ -97,13 +98,16 @@ static int ch347_configure(void)
 		[14] = 2,
 		[19] = 7,
 	};
-	unsigned char resp[4];
+	/* the answer is 4 bytes (command, length, status); some firmware sends
+	   the whole configuration back: room for it, or the rest would come
+	   with the next read */
+	unsigned char resp[sizeof(cfg)];
 	int n;
 
 	cfg[15] = (ch347_divisor & 7) << 3;
 	if (bulk(CH347_WRITE_EP, cfg, sizeof(cfg), NULL) || bulk(CH347_READ_EP, resp, sizeof(resp), &n))
 		return -1;
-	if (n != 4 || resp[3] != 0) {
+	if (n < 4 || resp[0] != CH347_CMD_SPI_SET_CFG || resp[3] != 0) {
 		printf("CH347: SPI configuration refused\n");
 		return -1;
 	}

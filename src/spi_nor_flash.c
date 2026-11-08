@@ -928,7 +928,9 @@ static int snor_read_devid(u8 *rxbuf, int n_rx)
 	SPI_CONTROLLER_Write_One_Byte(OPCODE_RDID);
 
 	retval = SPI_CONTROLLER_Read_NByte(rxbuf, n_rx, SPI_CONTROLLER_SPEED_SINGLE);
-	SPI_CONTROLLER_Chip_Select_High();
+	/* a failure of a held command comes with CS high */
+	if (SPI_CONTROLLER_Chip_Select_High())
+		retval = -1;
 	if (retval) {
 		printf("%s: ret: %x\n", __func__, retval);
 		return retval;
@@ -983,7 +985,11 @@ struct chip_info *chip_prob(void)
 	u32 jedec, jedec_strip, weight;
 	int i;
 
-	snor_read_devid(buf, 5);
+	memset(buf, 0, sizeof(buf));
+	if (snor_read_devid(buf, 5)) {
+		printf("SPI NOR Flash Not Detected: the ID read failed on USB.\n");
+		return NULL;
+	}
 	jedec = (u32)((u32)(buf[1] << 24) | ((u32)buf[2] << 16) | ((u32)buf[3] <<8) | (u32)buf[4]);
 	jedec_strip = jedec & 0xffff0000;
 
@@ -1017,6 +1023,13 @@ struct chip_info *chip_prob(void)
 		}
 	}
 	printf("SPI NOR Flash Not Detected!\n");
+	/* the same byte three times is the data line, not a chip */
+	if (buf[0] == buf[1] && buf[1] == buf[2] && (buf[0] == 0xff || buf[0] == 0x00))
+		printf("ID %02x %02x %02x: %s\n", buf[0], buf[1], buf[2], buf[0] ?
+		       "no chip answers (the data line stays high). Check the clip or the socket and pin 1, "
+		       "the chip's power and voltage; on a board, keep its SoC off the bus (in reset or unpowered)" :
+		       "the data line stays low. The chip may have no power, the clip may be the wrong way round, "
+		       "or something on the board holds the line");
 	match = NULL; /* Not support JEDEC calculate info */
 
 	return match;
@@ -1326,6 +1339,14 @@ fail:
 	return plen - len;
 }
 
+static int all_ff(const unsigned char *p, unsigned long len)
+{
+	while (len--)
+		if (*p++ != 0xff)
+			return 0;
+	return 1;
+}
+
 static int snor_write_die(unsigned char *buf, unsigned long to, unsigned long len)
 {
 	u32 page_offset, page_size;
@@ -1372,6 +1393,15 @@ static int snor_write_die(unsigned char *buf, unsigned long to, unsigned long le
 		page_offset = 0;
 		/* write the next page to flash */
 
+		/* programming only clears bits: a page of all 0xFF changes nothing,
+		   and no wait for the chip is needed for it */
+		if (all_ff(buf, page_size)) {
+			retlen += page_size;
+			len -= page_size;
+			to += page_size;
+			buf += page_size;
+			continue;
+		}
 		/* the page before is not written until the chip is ready */
 		if (snor_wait_ready(3)) {
 			retlen -= rc;
@@ -1379,6 +1409,7 @@ static int snor_write_die(unsigned char *buf, unsigned long to, unsigned long le
 		}
 		if (ms_stop)	/* Ctrl+C: the pages so far are written */
 			break;
+
 		snor_write_enable();
 
 		SPI_CONTROLLER_Chip_Select_Low();

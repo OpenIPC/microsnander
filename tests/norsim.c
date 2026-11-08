@@ -45,13 +45,15 @@ static int four[2], die;		/* 4-byte address mode of each die; the selected die (
 static long stop_reads;			/* Ctrl+C after this many bytes read */
 static long stop_pages;			/* Ctrl+C after this many pages programmed */
 static int stop_chip_erase;		/* Ctrl+C during a chip erase */
-static int die_reads = -1;		/* the die of the last read of status register 3 */
+static int die_reads = -1;
+static int nprogs;			/* page programs (02) */		/* the die of the last read of status register 3 */
 static unsigned char cmd[300];
 static int ncmd, nread;
 static int wel, aai, locked;
 static int busy;			/* status reads that still show WIP after WRSR or ULBPR */
 static unsigned char sr;			/* BP bits */
 static unsigned long aai_addr;
+static int rdid_fail;			/* the read of the ID fails on USB */
 static int spi_fail_at = -1;		/* the Nth AAI command fails on the wire */
 static int naai;
 static unsigned char sr2;		/* status register 2: CMP 0x40, QE 0x02, SRP1 0x01 */
@@ -90,6 +92,7 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Write_One_Byte(u8 data) { return SPI_CONTROL
 SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Read_NByte(u8 *d, u32 len, SPI_CONTROLLER_SPEED_T speed)
 {
 	(void)speed;
+	if (rdid_fail && cmd[0] == OPCODE_RDID) return SPI_CONTROLLER_RTN_DEF_NO;
 	for (u32 i = 0; i < len; i++, nread++) {
 		switch (cmd[0]) {
 		case OPCODE_RDID: d[i] = nread < 5 ? id[nread] : 0; break;
@@ -137,6 +140,7 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Chip_Select_High(void)
 	case OPCODE_PP:
 		if (writable() && ncmd > 1 + alen()) {
 			program(addr(), cmd + 1 + alen(), kind == SST25 ? 1 : ncmd - 1 - alen());	/* SST25: one byte only */
+			nprogs++;
 			if (kind == QE_SR1) busy = 2;
 			if (stop_pages > 0 && !--stop_pages) ms_stop = 1;
 		}
@@ -517,6 +521,32 @@ int main(void)
 		die = 1;
 		check(snor_init() == 64 << 20 && die == 0, "  a die left selected by a stopped run: die 0 again at the start");
 	}
+
+	/* pages of all 0xFF are not programmed: nothing on the chip would change */
+	{
+		static unsigned char buf[4 * 256];
+
+		chip(find("W25Q128BV"), ORDINARY);
+		snor_init();
+		memset(mem, 0xff, sizeof(buf) + 256);
+		memset(buf, 0xff, sizeof(buf));
+		buf[2 * 256 + 5] = 0x12;
+		nprogs = 0;
+		check(snor_write(buf, 0, sizeof(buf)) == (int)sizeof(buf) && nprogs == 1 && mem[2 * 256 + 5] == 0x12 &&
+		      mem[2 * 256 + 4] == 0xff, "NOR: a write of 4 pages, 3 of them 0xFF, programs one page");
+		nprogs = 0;
+		memset(buf, 0xff, sizeof(buf));
+		check(snor_write(buf, 100, 300) == 300 && nprogs == 0 && !wel, "  a write of 0xFF only programs nothing");
+		buf[0] = 0x34;
+		check(snor_write(buf, 1000, 2) == 2 && nprogs == 1 && mem[1000] == 0x34, "  a short write with data is programmed");
+	}
+
+	/* an ID read that fails on USB is no chip, and no ID is guessed from it */
+	chip(find("W25Q128BV"), ORDINARY);
+	rdid_fail = 1;
+	check(snor_init() < 0, "an ID read that fails on USB: no chip detected");
+	rdid_fail = 0;
+	check(snor_init() == 16 << 20, "  the next read finds it");
 
 	if (!fail) printf("all norsim checks passed\n");
 	return fail;

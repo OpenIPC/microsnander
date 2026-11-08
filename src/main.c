@@ -21,6 +21,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <strings.h>
 #include <getopt.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -41,7 +42,7 @@
 struct flash_cmd prog;
 extern unsigned int bsize;
 
-#define _VER	"1.27.0"
+#define _VER	"1.28.0"
 
 const char *ms_version = _VER;
 
@@ -90,8 +91,11 @@ void usage(int code)
 		" -t             self-test: protection, then erase, write and read back one block\n"\
 		"                (the first; -a for another) and put its data back\n"\
 		" -v             verify after write on chip\n"\
+		" -c <filename>  compare the chip with the file, nothing written (from -a, as long as\n"\
+		"                the file or -l)\n"\
 		" -P <name>      programmer: ch341a, ch347, ezp, auto (default: the one connected)\n"\
-		" -S <speed>     SPI clock of the CH347: 60M, 30M (default), 15M, 7.5M, 3.75M, 1.875M;\n"\
+		" -S <speed>     SPI clock of the CH347: 60M, 30M (default), 15M, 7.5M, 3.75M, 1.875M,\n"\
+		"                937.5K, 468.75K;\n"\
 		"                with -m sigmastar the I2C clock: 20K, 100K (default), 400K, 750K\n"\
 		" -m sigmastar   the flash of a SigmaStar board through the ISP of its SoC: the SoC's UART\n"\
 		"                (TX to SDA, RX to SCL, GND) on the I2C of the CH341A or the CH347\n"\
@@ -193,7 +197,10 @@ static int dump_copy(FILE *from, FILE *to, unsigned char *buf, size_t n)
 
 /* Read the range back and compare it with the file, which holds exactly the bytes
    written (its first len bytes), in small chunks: 0 when they are the same */
-static int verify(unsigned char *buf, const char *fname, long long addr, long long len)
+/* a CH347 at 30 MHz or more: a difference may be bits lost on the wires */
+static int clock_hint;
+
+static int verify(unsigned char *buf, const char *fname, long long addr, long long len, int compare)
 {
 	static unsigned char cmp[65536];
 	long long done, k, off;
@@ -230,8 +237,12 @@ static int verify(unsigned char *buf, const char *fname, long long addr, long lo
 			for (i = 0; i < n; i++)
 				if (cmp[i] != buf[off + i]) {
 					parts_end(NULL, 0, 0);
-					printf("Status: BAD, first difference at 0x%016llX: wrote 0x%02X, read 0x%02X\n",
+					printf(compare ? "Status: BAD, first difference at 0x%016llX: file 0x%02X, chip 0x%02X\n" :
+					       "Status: BAD, first difference at 0x%016llX: wrote 0x%02X, read 0x%02X\n",
 					       addr + done + off + i, cmp[i], buf[off + i]);
+					if (clock_hint)
+						printf("Some CH347T boards lose bits at 30 MHz and more: if the chip should "
+						       "hold this data, try again with -S 15M.\n");
 					fclose(fp);
 					return 1;
 				}
@@ -265,7 +276,7 @@ int main(int argc, char* argv[])
 	char *fname = NULL, op = 0, *web = NULL, *web_key = NULL, *web_dir = NULL;
 	unsigned char *buf;
 	int long long len = 0, addr = 0, flen = 0, wlen = 0, done = 0, k = 0;
-	int regular;
+	int regular, len_given;
 	struct stat st;
 	int unlock = 0;		/* how many -u: 2 also clears QE */
 	int erase_marked = 0;	/* how many -e: 2 also erases the blocks with a factory bad mark */
@@ -273,7 +284,7 @@ int main(int argc, char* argv[])
 
 	title();
 
-	while ((c = getopt(argc, argv, "diIhveutbkqLl:a:w:r:P:S:W:K:o:m:")) != -1)
+	while ((c = getopt(argc, argv, "diIhveutbkqLl:a:w:r:c:P:S:W:K:o:m:")) != -1)
 	{
 		switch(c)
 		{
@@ -349,6 +360,7 @@ int main(int argc, char* argv[])
 				break;
 			case 'r':
 			case 'w':
+			case 'c':
 				if(!op) {
 					op = c;
 					fname = strdup(optarg);
@@ -381,7 +393,7 @@ int main(int argc, char* argv[])
 		/* the page writes whole files from 0 with ECC on: no raw NAND
 		   (-d), no ECC ignore (-I), no BAD page skipping (-k) */
 		if (op || scan || vr || speed_set || !ECC_fcheck || ECC_ignore || Skip_BAD_page || sigmastar_on()) {
-			printf("-W runs the web mode: give no -i, -r, -w, -e, -u, -t, -b, -q, -v, -S, -m, -d, -I or -k with it.\n\n");
+			printf("-W runs the web mode: give no -i, -r, -w, -c, -e, -u, -t, -b, -q, -v, -S, -m, -d, -I or -k with it.\n\n");
 			return 1;
 		}
 		return web_serve(web, web_key, web_dir, addr, len);
@@ -407,6 +419,8 @@ int main(int argc, char* argv[])
 
 	/* in the SigmaStar mode -S is the I2C clock, not the SPI one */
 	ret = programmer_init(speed_set && !sigmastar_on());
+	clock_hint = ret >= 0 && programmer && programmer->clock && !sigmastar_on() &&
+		     (!speed || !strcasecmp(speed, "60M") || !strcasecmp(speed, "30M"));
 	if (ret < 0) {
 		if (ret == -1)
 			printf("Programmer device not found!\n\n");
@@ -527,6 +541,36 @@ int main(int argc, char* argv[])
 		goto out;
 	}
 
+	len_given = len != 0;
+	/* -c: the range is that of the file, known before anything is read; a file
+	   that is no regular file is refused before it is opened for reading (a
+	   FIFO would wait for a writer) */
+	if (op == 'c') {
+		int fd = open(fname, O_RDONLY | O_NONBLOCK);
+
+		printf("COMPARE:\n");
+		if (fd < 0) {
+			printf("Couldn't open file %s for reading.\n", fname);
+			goto out;
+		}
+		if (fstat(fd, &st) || !S_ISREG(st.st_mode) || st.st_size <= 0) {
+			close(fd);
+			printf("-c compares with a regular file that is not empty: %s is not one.\n", fname);
+			goto out;
+		}
+		close(fd);
+		if (!len_given) {
+			if (st.st_size > flen - addr) {
+				printf("File %s (0x%llX bytes) is longer than the chip from 0x%llX (0x%llX bytes); "
+				       "-l compares its start.\n", fname, (long long)st.st_size, addr, flen - addr);
+				goto out;
+			}
+			len = st.st_size;
+		} else if (st.st_size < len) {
+			printf("File %s is shorter than -l: comparing its 0x%llX bytes.\n", fname, (long long)st.st_size);
+			len = st.st_size;
+		}
+	}
 	if(addr && !len)
 		len = flen - addr;
 	else if(!addr && !len)
@@ -556,6 +600,14 @@ int main(int argc, char* argv[])
 		printf("Malloc failed for read buffer.\n");
 		if (fp)
 			fclose(fp);
+		goto out;
+	}
+
+	if (op == 'c') {
+		/* the chip against the file, nothing written: from -a, as long as the
+		   file (or -l, if that is shorter) */
+		rc = verify(buf, fname, addr, len, 1);
+		free(buf);
 		goto out;
 	}
 
@@ -634,7 +686,7 @@ int main(int argc, char* argv[])
 		printf("Status: OK\n");
 		if (vr) {
 			printf("VERIFY:\n");
-			rc = verify(buf, fname, addr, len);
+			rc = verify(buf, fname, addr, len, 0);
 		} else
 			rc = 0;
 		free(buf);
