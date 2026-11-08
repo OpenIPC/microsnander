@@ -4,6 +4,13 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.32.0 — 2026-11-08
+
+- SPI NAND: a page with an ECC error the chip cannot correct is read from the array up to
+  three times before the read fails. An error that the next read does not have, as from a
+  weak cell or noise on the lines, no longer stops a read; the page is printed. With `-k` a
+  page is skipped only after the third read; `-I` still reads each page once.
+
 ## 1.31.0 — 2026-11-08
 
 - 32 SPI NAND chips more, 167 in all: Macronix MX35UF1GE4AC, MX35UF1G24AD, MX35UF2GE4AC,
