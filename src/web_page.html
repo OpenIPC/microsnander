@@ -162,7 +162,7 @@ function render(s){
  if(s.busy&&!timer)timer=setInterval(poll,500);
  if(!s.busy&&timer){clearInterval(timer);timer=null}
 }
-function offline(){bulb('l-link','bad');$('t-link').textContent='No link';show('Link offline','bad');$('bar').className='bg'}
+function offline(){bulb('l-link','bad');$('t-link').textContent='No link';show('Link offline','bad');$('bar').className='bg';[].forEach.call($('bar').children,function(e){e.className=''})}
 function poll(){fetch(base+'/api/state',{cache:'no-store'}).then(function(r){return r.json()}).then(render).catch(offline)}
 /* accepted(n): the operation started as number n ("Started n."); chip: the
    one confirmed for what changes it, the server refuses another one */

@@ -333,6 +333,8 @@ int main(void)
 	sim_sr1 = 0x1c;
 	check(strstr(web_page, "id=\"b-selftest\" disabled") != NULL, "  the page has the Self-test button, off without a chip");
 	check(strstr(web_page, "id=\"bar\"") && strstr(web_page, "document.title=") && !strstr(web_page, "needle"), "  the page has the bar and the state in the tab title");
+	check(strstr(web_page, "show('Link offline','bad');$('bar').className='bg';[].forEach.call($('bar').children,function(e){e.className=''})") != NULL,
+	      "  no link: the bar goes dark, it does not keep the last result");
 	check(strstr(web_page, ".btn:disabled.engaged{filter:none}") && strstr(web_page, "detectThen(b,function(s){if(confirm('Clear the protection"),
 	      "  the running button keeps its colour; Clear protection asks about the chip found");
 
