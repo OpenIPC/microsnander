@@ -6424,11 +6424,13 @@ SPI_NAND_FLASH_RTN_T SPI_NAND_Flash_Enable_OnDie_ECC( void )
 			rtn_status = spi_nand_set_ondie_ecc(_SPI_NAND_ADDR_FEATURE);
 		}
 	} else {
-		/* the FM25LG01B and FM25LG02B have ECC_EN in the feature register
-		   (B0h), not in 90h like the other chips of maker A1h (Fudan and
-		   Paragon) here */
+		/* the FM25G01B, FM25G02B, FM25LG01B and FM25LG02B have ECC_EN in the
+		   feature register (B0h), off at power up, not in 90h like the other
+		   chips of maker A1h (Fudan and Paragon) here */
 		int fm_b0 = ptr_dev_info_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_FM &&
-			    (ptr_dev_info_t->dev_id == _SPI_NAND_DEVICE_ID_FM25LG01B ||
+			    (ptr_dev_info_t->dev_id == _SPI_NAND_DEVICE_ID_FM25G01B ||
+			     ptr_dev_info_t->dev_id == _SPI_NAND_DEVICE_ID_FM25G02B ||
+			     ptr_dev_info_t->dev_id == _SPI_NAND_DEVICE_ID_FM25LG01B ||
 			     ptr_dev_info_t->dev_id == _SPI_NAND_DEVICE_ID_FM25LG02B);
 
 		if( (((ptr_dev_info_t->mfr_id) == _SPI_NAND_MANUFACTURER_ID_PN) && !fm_b0) ||

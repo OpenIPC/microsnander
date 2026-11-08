@@ -13,8 +13,10 @@ from every push to `main`; this file is the change history.
 - The 1.8 V warning now covers the XTX XT25Q series and the Puya PY25F..L series; the XT25W
   series is shown as 1.65-3.6 V.
 - SPI NAND: Fudan FM25G04C, FM25LG01B and FM25LG02B added from their datasheets. The two
-  FM25LG chips are 1.8 V and keep the on-die ECC switch in the feature register B0h, not in
-  90h like the other Fudan chips here.
+  FM25LG chips are 1.8 V.
+- SPI NAND: on the Fudan FM25G01B and FM25G02B, and on the new FM25LG01B and FM25LG02B, the
+  on-die ECC is turned on in the feature register B0h, where their datasheets put it, not in
+  90h. It is off after power up, so on the FM25G01B and FM25G02B the on-die ECC was never on.
 
 ## 1.36.0 — 2026-11-08
 

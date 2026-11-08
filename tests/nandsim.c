@@ -485,9 +485,13 @@ int main(void)
 	snand_init();
 
 	/* the on-die ECC bit: in 90h on the FM25G02C, in the feature register B0h on
-	   the FM25LG01B and FM25LG02B (their datasheets) */
+	   the FM25G01B, FM25G02B, FM25LG01B and FM25LG02B (their datasheets) */
 	chip(0xa1, 0x92, 0x00);
 	check(snand_init() > 0 && (feat[0x90] & 0x10) && !(feat[0xb0] & 0x10), "FM25G02C: the on-die ECC is turned on in 90h");
+	chip(0xa1, 0xd1, 0x00);
+	check(snand_init() > 0 && (feat[0xb0] & 0x10) && !(feat[0x90] & 0x10), "FM25G01B: the on-die ECC is turned on in B0h");
+	chip(0xa1, 0xd2, 0x00);
+	check(snand_init() > 0 && (feat[0xb0] & 0x10) && !(feat[0x90] & 0x10), "FM25G02B: the on-die ECC is turned on in B0h");
 	chip(0xa1, 0xb1, 0x00);
 	check(snand_init() > 0 && (feat[0xb0] & 0x10) && !(feat[0x90] & 0x10), "FM25LG01B: the on-die ECC is turned on in B0h");
 	chip(0xa1, 0xb2, 0x00);
