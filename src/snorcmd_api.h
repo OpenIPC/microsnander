@@ -24,6 +24,9 @@ int snor_clear_qe(void);	/* -uu: snor_unprotect(), then QE; the same results */
 extern char snor_unprotect_why[200];
 int snor_read_status(unsigned char sr[3]);
 int snor_read_status_at(unsigned long addr, unsigned char sr[3]);	/* of the die that holds addr */
+int snor_info(void);		/* -i: the read-only range and the unique ID; 0, -1 a read failed */
+long snor_security_size(void);	/* -O: bytes of the security registers; 0: none known */
+int snor_read_security(unsigned char *buf);	/* 0; -1 failed; -2 none known */
 int snor_sr1_macronix(void);	/* 1: only SR1 is a status register, with the bits of Macronix */
 extern const char *flash_chip_name;	/* name of the chip found, for file names */
 const char *snor_lookup(const unsigned char id[3], unsigned long *size, unsigned long *sector, int *addr4b);

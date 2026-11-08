@@ -162,13 +162,15 @@ microsnander [options]
  -b             list the blocks with a factory bad mark (SPI NAND; -a, -l: a range);
                 an erase leaves such blocks as they are
  -L             print list support chips
- -i             read the chip ID info
+ -i             read the chip ID info; of an SPI NOR chip also its protection, and
+                the unique ID of a Winbond W25Q
  -e             erase chip (full or use with -a [-l]); -ee: SPI NAND, the blocks with a
                 factory bad mark too (the mark goes for good)
  -l <bytes>     manually set length
  -a <address>   manually set address
  -w <filename>  write chip with data from filename
  -r <filename>  read chip and save data to filename
+ -O <filename>  read the three security registers of a Winbond W25Q into filename
  -u             unprotect chip; -uu: also clear QE (quad enable), a chip of a
                 board that boots in quad mode may then not boot
  -t             self-test: protection, then erase, write and read back one block
@@ -189,9 +191,14 @@ microsnander [options]
  -o <dir>       web mode: where Read saves the dumps (default: the current one)
 ```
 
-每次运行只执行一个操作：`-i`、`-e`、`-r`、`-w`、`-c`、`-u`、`-t` 或 `-b`。不指定 `-a` 和 `-l` 时，
+每次运行只执行一个操作：`-i`、`-e`、`-r`、`-w`、`-c`、`-O`、`-u`、`-t` 或 `-b`。不指定 `-a` 和 `-l` 时，
 操作覆盖整片芯片。地址和长度可以是十进制，或带 `0x` 的十六进制。擦除按整块进行：
 长度必须是芯片报告的块大小的整数倍。
+
+对 SPI NOR 芯片（通过 CH341A 或 CH347），`-i` 还会显示芯片中哪一部分处于写保护状态。对 1 MB 及以上的 Winbond
+W25Q，按其数据手册中的表格给出地址范围（块保护位、TB、SEC 和 CMP）；对其他芯片，只显示是否有
+块保护位被置位，因为不同厂商和不同代芯片的范围各不相同。W25Q 还会显示其 64 位唯一 ID。`-O` 把
+W25Q 的三个 256 字节安全寄存器（W25M 则为每个晶片的）保存到文件；只读取，从不写入或锁定。
 
 `-r`、`-w` 和 `-v` 按约 64 KB 的分段处理芯片，因此内存很小的开发板也能读写任意大小的芯片；文件仍需放得下
 其磁盘，并与同名的旧转储并存，`-r` 只在结束时才替换它。使用 `-k`、`-d`、EZP 编程器或非普通文件时，整个范围仍保存在内存中：在小型开发板上请配合 `-a` 和 `-l`。

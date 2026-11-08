@@ -70,6 +70,8 @@
 
 #define OPCODE_BRRD			0x16
 #define OPCODE_BRWR			0x17
+#define OPCODE_RDUID			0x4B	/* W25Q: read the unique ID */
+#define OPCODE_RDSCUR_W			0x48	/* W25Q: read a security register */
 #define OPCODE_DIE_SELECT		0xC2	/* stacked dies (W25M): the active die, 0, 1 */
 #define OPCODE_RDSFDP			0x5A	/* read the SFDP table (JESD216) */
 
@@ -1331,6 +1333,204 @@ int snor_read_status_at(unsigned long addr, unsigned char sr[3])
 int snor_read_status(unsigned char sr[3])
 {
 	return snor_read_status_at(0, sr);
+}
+
+/* Winbond W25Q, and the W25M of W25Q dies: the protection table, the unique
+   ID (4Bh) and the security registers (48h) of their datasheets */
+static int snor_is_w25q(void)
+{
+	u8 type = spi_chip_info->jedec_id >> 24;
+
+	/* 40h, 70h: 3 V; 50h, 60h, 80h: 1.8 V; 71h: W25M */
+	return spi_chip_info->id == 0xef && (type == 0x40 || type == 0x50 || type == 0x60 ||
+					      type == 0x70 || type == 0x71 || type == 0x80);
+}
+
+static const char *snor_kb(unsigned long n, char *out, size_t size)
+{
+	if (n >= (1UL << 20) && !(n & ((1UL << 20) - 1)))
+		snprintf(out, size, "%lu MB", n >> 20);
+	else
+		snprintf(out, size, "%lu KB", n >> 10);
+	return out;
+}
+
+/* The read-only part of a W25Q die from its status registers: the tables of
+   the datasheets. Up to 16 MB: BP2-0 in bits 4:2, TB in bit 5, SEC (4 KB
+   steps) in bit 6; from 32 MB: BP3-0 in bits 5:2, TB in bit 6. BP 1 is one
+   64 KB block, or more where the BP values are too few to reach the whole
+   chip in steps that double (with 3 bits: the size / 64 from 8 MB up); each
+   BP step doubles it. CMP in register 2 protects the rest instead. 0: decoded into *from, *len (len 0:
+   none); -1: a setting the tables do not have. */
+static int w25q_protected(const u8 sr[3], unsigned long size, unsigned long *from, unsigned long *len)
+{
+	const int bits4 = size >= (32UL << 20);
+	const unsigned bp_max = bits4 ? 15 : 7;
+	unsigned bp = bits4 ? (sr[0] >> 2) & 0x0f : (sr[0] >> 2) & 0x07;
+	int tb = bits4 ? (sr[0] >> 6) & 1 : (sr[0] >> 5) & 1;
+	int sec = !bits4 && (sr[0] & 0x40);
+	int cmp = sr[1] != 0xff && (sr[1] & SR2_CMP);
+	unsigned long part;
+
+	if (!bp)
+		part = 0;
+	else if (bp == bp_max && !bits4)
+		part = size;
+	else if (sec) {
+		if (bp > 5)
+			return -1;
+		part = 4096UL << (bp > 4 ? 3 : bp - 1);
+	} else {
+		/* blocks of 64 KB, with BP slots for all but none and all */
+		unsigned long min = 64 * 1024;
+		unsigned slots = bits4 ? 14 : 6, need = 0;
+
+		while ((64UL * 1024 << need) < size)
+			need++;
+		if (need > slots)
+			min <<= need - slots;
+		part = bp - 1 >= 31 ? size : min << (bp - 1);
+		if (part > size)
+			part = size;
+	}
+	if (cmp)
+		part = size - part;
+	/* CMP=0: the part at the top (TB=0) or the bottom; CMP=1: the rest, at
+	   the other end */
+	*len = part;
+	*from = (tb ^ cmp) || !part ? 0 : size - part;
+	return 0;
+}
+
+/* A W25Q takes 4Bh and 48h with 3 address bytes only out of the 4-byte
+   address mode (in it they have one byte more): a chip over 16 MB is taken
+   out of it first. */
+static int w25q_cmd(int die, u8 code, unsigned long addr, int dummy, u8 *buf, unsigned long len)
+{
+	u8 c[8];
+	int n = 0, err = 0;
+
+	if (snor_select_die(die) < 0 || snor_wait_ready(1) ||
+	    (spi_chip_info->addr4b && snor_4byte_mode(0) < 0)) {
+		snor_select_die(0);
+		return -1;
+	}
+	c[n++] = code;
+	c[n++] = addr >> 16;
+	c[n++] = addr >> 8;
+	c[n++] = addr;
+	while (dummy-- > 0)
+		c[n++] = 0;
+	err |= SPI_CONTROLLER_Chip_Select_Low();
+	err |= SPI_CONTROLLER_Write_NByte(c, n, SPI_CONTROLLER_SPEED_SINGLE);
+	err |= SPI_CONTROLLER_Read_NByte(buf, len, SPI_CONTROLLER_SPEED_SINGLE);
+	err |= SPI_CONTROLLER_Chip_Select_High();
+	if (snor_select_die(0) < 0)
+		err = -1;
+	return err ? -1 : 0;
+}
+
+/* 4Bh and four dummy bytes (the first three take the place of an address),
+   then the 64-bit ID */
+static int snor_read_uid(int die, u8 uid[8])
+{
+	return w25q_cmd(die, OPCODE_RDUID, 0, 1, uid, 8);
+}
+
+/* -O: the three 256-byte security registers of each die (W25Q only), into
+   buf of snor_security_size() bytes. 0; -1: the read failed; -2: the chip
+   has none that the program knows. */
+long snor_security_size(void)
+{
+	unsigned dies = spi_chip_info->dies > 1 ? spi_chip_info->dies : 1;
+
+	return snor_is_w25q() ? dies * 3 * 256L : 0;
+}
+
+int snor_read_security(unsigned char *buf)
+{
+	unsigned dies = spi_chip_info->dies > 1 ? spi_chip_info->dies : 1;
+
+	if (!snor_is_w25q())
+		return -2;
+	for (unsigned d = 0; d < dies; d++)
+		for (unsigned r = 1; r <= 3; r++) {
+			if (ms_stop)
+				return -1;
+			/* register r at 0x00r000, a dummy byte before the data */
+			if (w25q_cmd(d, OPCODE_RDSCUR_W, r << 12, 1, buf + (d * 3 + r - 1) * 256, 256) < 0)
+				return -1;
+		}
+	return 0;
+}
+
+/* -i: what of the chip is read-only, and its unique ID where the datasheet
+   gives one; a line each */
+int snor_info(void)
+{
+	const unsigned dies = spi_chip_info->dies > 1 ? spi_chip_info->dies : 1;
+	const unsigned long dsize = snor_die_size();
+	char a[32];
+
+	if (snor_is_sst26()) {
+		printf("Protection: every block is locked at power-up; -u, an erase or a write unlocks them.\n");
+		return 0;
+	}
+	for (unsigned d = 0; d < dies; d++) {
+		u8 sr[3];
+		unsigned long from, len;
+		char die[16] = "";
+		/* bits 2-5 hold BP0-BP3 on most chips, bit 6 BP3 or BP4 on some (Micron,
+		   GigaDevice); on Macronix bit 6 is QE */
+		u8 bp_mask = snor_is_sst25_aai() ? 0x3c : snor_is_macronix() ? 0x3c : 0x7c;
+
+		if (dies > 1)
+			snprintf(die, sizeof(die), " (die %u)", d);
+		if (snor_read_status_at(d * dsize, sr) < 0) {
+			printf("Protection%s: the status registers did not come back.\n", die);
+			return -1;
+		}
+		/* the tables of the datasheets from 1 MB up; the smaller W25Q have steps of their own */
+		if (snor_is_w25q() && dsize >= (1UL << 20)) {
+			if (sr[2] != 0xff && (sr[2] & SR3_WPS))
+				printf("Protection%s: individual block locks are on (WPS = 1); which blocks are locked "
+				       "is not read; -u clears WPS.\n", die);
+			else if (w25q_protected(sr, dsize, &from, &len) < 0)
+				printf("Protection%s: status register 1 is 0x%02x, a setting the datasheet does not list; -u clears it.\n", die, sr[0]);
+			else if (!len)
+				printf("Protection%s: none.\n", die);
+			else if (len == dsize)
+				printf("Protection%s: the whole %s is read-only; -u clears it.\n", die, dies > 1 ? "die" : "chip");
+			else
+				printf("Protection%s: 0x%06lX-0x%06lX (%s, the %s) is read-only; -u clears it.\n", die,
+				       d * dsize + from, d * dsize + from + len - 1, snor_kb(len, a, sizeof(a)),
+				       from ? "top" : "bottom");
+			continue;
+		}
+		/* other makers: whether a protect bit is set; the ranges differ */
+		if (!(sr[0] & bp_mask) && (snor_is_macronix() || sr[1] == 0xff || !(sr[1] & SR2_CMP)))
+			printf("Protection%s: none.\n", die);
+		else
+			printf("Protection%s: protect bits are set (status register 1: 0x%02x), the range is not known "
+			       "for this chip; -u clears them.\n", die, sr[0]);
+	}
+
+	if (snor_is_w25q()) {
+		for (unsigned d = 0; d < dies; d++) {
+			u8 uid[8];
+			char die[16] = "";
+
+			if (dies > 1)
+				snprintf(die, sizeof(die), " (die %u)", d);
+			if (snor_read_uid(d, uid) < 0) {
+				printf("Unique ID%s: the read failed.\n", die);
+				return -1;
+			}
+			printf("Unique ID%s: %02x%02x%02x%02x%02x%02x%02x%02x\n", die,
+			       uid[0], uid[1], uid[2], uid[3], uid[4], uid[5], uid[6], uid[7]);
+		}
+	}
+	return 0;
 }
 
 long snor_init(void)
