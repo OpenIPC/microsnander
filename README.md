@@ -152,6 +152,11 @@ write, the EZP programmers read the range to check that it is erased.
 | Read 16 MB                         | 136 s       | 7.2 s (5.2 s at 60 MHz)                | 136 s                                   |
 | Write 16 MB                        | 256 s       | 152 s                                  | 275 s (of them 136 s: the erased check) |
 
+Since 1.36.0 a CH347T with firmware 0341 or newer, and a CH347F, take the chip select inside
+the data frames: a write enable or a page program is one USB round trip instead of two
+transfers, and writes are about 30 % faster. On a W25Q128BV, 16 MB of random data writes in
+170 s instead of 240 s. The firmware version is printed at the start.
+
 ## Releases and permanent links
 
 There is one release, [`latest`](https://github.com/OpenIPC/microsnander/releases/latest).

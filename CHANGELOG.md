@@ -4,6 +4,15 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.36.0 — 2026-11-08
+
+- CH347: the chip select goes inside the SPI data frames on the CH347T with firmware 0341 or
+  newer and on the CH347F. A write goes as full-duplex frames, its last frame held until CS
+  high and sent with it, so a write enable or a page program is one USB round trip instead of
+  a round trip and a separate CS packet. Writes are about 30 % faster: 16 MB of random data on
+  a W25Q128BV in 170 s instead of 240 s. The firmware version is read at the start and
+  printed; older CH347T firmware, or one that does not answer, keeps the CS packets.
+
 ## 1.35.0 — 2026-11-08
 
 - `-r -v` reads the chip a second time and compares it with the first read as it goes. The
