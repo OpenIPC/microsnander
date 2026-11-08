@@ -314,6 +314,10 @@ int main(void)
 			{ "BY25Q64AL", MS_VOLTAGE_18 }, { "BY25Q64AS", MS_VOLTAGE_33 }, { "XM25QU256C", MS_VOLTAGE_18 },
 			{ "XM25QW64C", MS_VOLTAGE_WIDE }, { "XM25QH128C", MS_VOLTAGE_33 }, { "IS25WP128F", MS_VOLTAGE_18 },
 			{ "IS25LP256D", MS_VOLTAGE_33 }, { "FM25W128", MS_VOLTAGE_WIDE }, { "ZB25LQ128", MS_VOLTAGE_18 },
+			{ "EN25S64", MS_VOLTAGE_18 }, { "EN25QH32", MS_VOLTAGE_33 }, { "IS25WQ040", MS_VOLTAGE_18 },
+			{ "AT25DL161", MS_VOLTAGE_18 }, { "AT25DF021A", MS_VOLTAGE_WIDE }, { "AT25DF021", MS_VOLTAGE_33 },
+			{ "SST25WF080", MS_VOLTAGE_18 }, { "MX25R6435F", MS_VOLTAGE_WIDE }, { "FM25M4AA", MS_VOLTAGE_18 },
+			{ "DS25M4AB", MS_VOLTAGE_18 }, { "W25Q128JW-M", MS_VOLTAGE_18 }, { "W25Q128JV-M", MS_VOLTAGE_33 },
 		};
 		int wrong = 0, n18 = 0, nwide = 0;
 		char w[320];
@@ -338,6 +342,8 @@ int main(void)
 	write_read_erase("W25Q32BV", ORDINARY);
 	write_read_erase("PCT25VF016B", SST25);
 	write_read_erase("PCT26VF016", SST26);
+	write_read_erase("SST26VF016B", SST26);
+	write_read_erase("SST26VF064B", SST26);
 	write_read_erase("XM25QH64A", NO_SR23);
 	write_read_erase("MX25L3205D", QE_SR1);
 	write_read_erase("W25Q128BV", QE_FIXED);

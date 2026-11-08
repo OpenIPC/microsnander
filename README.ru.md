@@ -14,7 +14,7 @@ MicroSNANDer — программатор микросхем флеш-памят
 USB-программаторов CH341A, CH347 и EZP, всего шесть моделей: консольная программа со
 встроенной веб-страницей и приложение для Android. Он читает, записывает, стирает и проверяет
 флеш камер, роутеров и других плат, снимает защиту от записи с микросхем SPI NOR и
-знает 291 микросхему SPI NOR и 135 микросхем SPI NAND. Каждый файл релиза занимает около
+знает 434 микросхемы SPI NOR и 135 микросхем SPI NAND. Каждый файл релиза занимает около
 200–270 КБ.
 
 Это урезанная, дополненная, глубоко модифицированная и оптимизированная версия
@@ -463,7 +463,7 @@ microsnander -m sigmastar -w u-boot.bin -v       # рабочий загрузч
 
 ## Поддерживаемые микросхемы
 
-`microsnander -L` выводит список: 291 микросхему SPI NOR (Winbond, Eon, Fudan
+`microsnander -L` выводит список: 434 микросхемы SPI NOR (Winbond, Eon, Fudan
 Microelectronics FM25Q, GigaDevice, Macronix, Spansion, XMC, XTX, Zbit, Giantec
 GM25Q, ISSI, Micron, Boya, Puya и другие) и 135 микросхем SPI NAND (Etron, GigaDevice, Heyang, Foresee, ESMT, Dosilicon, XTX,
 Micron, Toshiba/Kioxia, Winbond, Macronix и другие). Микросхема SPI NOR не из списка,
@@ -476,12 +476,13 @@ Micron, Toshiba/Kioxia, Winbond, Macronix и другие). Микросхема
 ## Напряжение микросхем
 
 Программаторы работают на 3,3 В. Напряжение программатор не измеряет, поэтому microsnander
-узнаёт его по названию микросхемы: 56 микросхем SPI NOR из списка рассчитаны на 1,8 В
+узнаёт его по названию микросхемы: 107 микросхем SPI NOR из списка рассчитаны на 1,8 В
 (GigaDevice GD25L, Macronix MX25U, Winbond W25Q..W, Micron N25Q..A11 и MT25QU, XMC XM25QU и
-XM25LU, Zbit ZB25LQ, Boya BY25Q..L, ISSI IS25WP), и 20 микросхем SPI NAND тоже (GigaDevice
+XM25LU, Zbit ZB25LQ, Boya BY25Q..L, ISSI IS25WP и IS25WQ, Eon EN25S, Fudan FM25M, Adesto AT25DL,
+Microchip SST25WF, Dosilicon DS25M), и 20 микросхем SPI NAND тоже (GigaDevice
 GD5F..R, Winbond W25N..W, Macronix MX35UF, Micron MT29F..ABB, ESMT F50D, Dosilicon DS35M).
 Их подключают через переходник на 1,8 В: на 3,3 В чтение ненадёжно, а микросхема может
-повредиться. GigaDevice GD25W, XMC XM25QW и Fudan FM25W работают от 1,65–3,6 В и подключаются
+повредиться. GigaDevice GD25W, XMC XM25QW, Fudan FM25W, Macronix MX25R и Adesto AT25DF021A работают от 1,65–3,6 В и подключаются
 как есть.
 
 Когда найдена микросхема на 1,8 В, консоль выводит предупреждение, веб-страница зажигает

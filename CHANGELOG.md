@@ -4,6 +4,18 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.30.0 — 2026-11-08
+
+- 143 SPI NOR chips more, 434 in all: each one checked in at least two independent chip
+  databases, with the same size, a 64 KB erase with D8, and B7 for the 4-byte mode of the
+  chips over 16 MB. Among them Eon EN25P, EN25F, EN25S, Adesto AT25DF and
+  AT25SF, Macronix MX25R, MX25V and MX25U, GigaDevice GD25D, GD25LD and GD25LF, Winbond
+  W25Q..JV-M and W25P, XMC XM25QH64B and XM25QH128B, Fudan FM25M4AA, Dosilicon DS25M4AB.
+- The supply voltage by the name for the new series: 1.8 V for Eon EN25S, ISSI IS25WQ, Adesto
+  AT25DL, Microchip SST25WF, Dosilicon DS25M and Fudan FM25M; 1.65-3.6 V for Macronix MX25R and
+  AT25DF021A. Fudan FM25M04A, FM25M08A, FM25M16A, FM25M32B and FM25M64A, already in the list,
+  were shown as 3.3 V chips; they are 1.8 V parts.
+
 ## 1.29.0 — 2026-11-08
 
 - A SPI NOR chip that is not in the table is found by its SFDP table (JESD216), when it has

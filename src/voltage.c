@@ -36,6 +36,14 @@ static const struct series series[] = {
 	{ "BY25Q*L",		MS_VOLTAGE_18 },	/* Boya */
 	{ "IS25WP*",		MS_VOLTAGE_18 },	/* ISSI */
 	{ "FM25W*",		MS_VOLTAGE_WIDE },	/* Fudan */
+	{ "FM25M*",		MS_VOLTAGE_18 },	/* Fudan FM25M4AA, FM25M64C */
+	{ "EN25S*",		MS_VOLTAGE_18 },	/* Eon EN25S, EN25SE */
+	{ "IS25WQ*",		MS_VOLTAGE_18 },	/* ISSI */
+	{ "AT25DL*",		MS_VOLTAGE_18 },	/* Adesto */
+	{ "AT25DF021A",		MS_VOLTAGE_WIDE },
+	{ "SST25WF*",		MS_VOLTAGE_18 },	/* Microchip SST25WF */
+	{ "MX25R*",		MS_VOLTAGE_WIDE },	/* Macronix MX25R (low power) */
+	{ "DS25M*",		MS_VOLTAGE_18 },	/* Dosilicon */
 	/* SPI NAND */
 	{ "GD5F*[QM][0-9]R*",	MS_VOLTAGE_18 },	/* GigaDevice: ..U.. is 3.3 V, ..R.. 1.8 V */
 	{ "W25N*W",		MS_VOLTAGE_18 },	/* Winbond W25N..GW, KW */
