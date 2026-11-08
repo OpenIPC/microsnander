@@ -1005,7 +1005,7 @@ static struct chip_info *chip_sfdp(const u8 id[5])
 	static struct chip_info info;
 	static char name[24];
 	u8 h[16], p[64];
-	u32 dw[16], n, ptr, i, enter = 0;
+	u32 dw[16], n, ptr, i, enter = 0, leave = 0;
 	unsigned long long size;
 	int best = -1;
 	u8 op = 0;
@@ -1053,19 +1053,28 @@ static struct chip_info *chip_sfdp(const u8 id[5])
 	if (best < 0)
 		return NULL;
 
+	/* word 1, bits 18:17: 4-byte addresses only; this driver sends 3 address
+	   bytes out of the 4-byte mode, whatever the size */
+	if (((dw[0] >> 17) & 3) == 2) {
+		printf("SFDP: the chip takes 4-byte addresses only, which this program does not send.\n");
+		return NULL;
+	}
 	info.addr4b = size > 16 << 20;
 	if (info.addr4b) {
-		/* word 16: how to enter the 4-byte mode; B7 (bit 24), or a write enable
-		   then B7 (bit 25), is what this driver sends */
-		if (n >= 16)
+		/* word 16: how to enter the 4-byte mode, B7 (bit 24) or a write enable
+		   then B7 (bit 25), and how to leave it, E9 (bit 14) or a write enable
+		   then E9 (bit 15): what this driver sends. A chip left in that mode
+		   would not boot. */
+		if (n >= 16) {
 			enter = dw[15] >> 24;
-		if (!(enter & 0x03)) {
-			printf("SFDP: %llu MB, but no B7 to enter the 4-byte mode: only the first 16 MB.\n", size >> 20);
+			leave = (dw[15] >> 14) & 0x3ff;
+		}
+		if (!(enter & 0x03) || !(leave & 0x03)) {
+			printf("SFDP: %llu MB, but no B7 and E9 for the 4-byte mode: only the first 16 MB.\n", size >> 20);
 			size = 16 << 20;
 			info.addr4b = 0;
 		}
-	} else if (((dw[0] >> 17) & 3) == 2)
-		return NULL;		/* 4-byte addresses only, and no 4-byte mode to switch */
+	}
 
 	snprintf(name, sizeof(name), "SFDP-%02X%02X%02X", id[0], id[1], id[2]);
 	info.name = name;

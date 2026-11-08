@@ -204,6 +204,7 @@ static void check(int ok, const char *what) { printf("%s %s\n", ok ? "ok  " : "F
 /* an SFDP table: header, one parameter header (basic table, version 1.6, n words
    at 0x30), then the words: density, erase types (size 2^N and command) in words
    8 and 9, the 4-byte mode entry in the top byte of word 16 */
+static int sfdp_leave = 1;		/* make_sfdp: the table lists E9 to leave the 4-byte mode */
 static void make_sfdp(unsigned long size, int e1, int c1, int e2, int c2, int enter, int n)
 {
 	unsigned char *t = sfdp + 0x30;
@@ -217,7 +218,7 @@ static void make_sfdp(unsigned long size, int e1, int c1, int e2, int c2, int en
 	t[0] = 0xe5; t[1] = 0x20; t[2] = size > 16 << 20 ? 0x02 : 0x00;	/* address bytes: 3 or 4 when large */
 	t[4] = bits; t[5] = bits >> 8; t[6] = bits >> 16; t[7] = bits >> 24;
 	t[28] = e1; t[29] = c1; t[30] = e2; t[31] = c2;
-	if (n >= 16) t[63] = enter;
+	if (n >= 16) { t[63] = enter; if (sfdp_leave) t[61] = 0x40; }	/* exit with E9: bit 14 of word 16 */
 }
 
 static const struct chip_info *find(const char *name)
@@ -603,6 +604,13 @@ int main(void)
 		snor_erase((16 << 20) + 65536, 65536);
 		check(snor_write(buf, (16 << 20) + 65536, sizeof(buf)) == (int)sizeof(buf) && snor_read(got, (16 << 20) + 65536, sizeof(got)) == (int)sizeof(got) &&
 		      !memcmp(got, buf, sizeof(buf)) && mem[0] == 0 && !four[0], "  written and read above 16 MB, nothing at 0, back in 3-byte mode");
+		sfdp_leave = 0;
+		make_sfdp(32 << 20, 12, 0x20, 16, 0xd8, 0x01, 16);	/* B7, but no E9 to leave */
+		check(snor_init() == 16 << 20 && !spi_chip_info->addr4b, "SFDP: 32 MB with B7 but no E9: the first 16 MB only");
+		sfdp_leave = 1;
+		make_sfdp(32 << 20, 12, 0x20, 16, 0xd8, 0x01, 16);
+		sfdp[0x30 + 2] = 0x04;					/* 4-byte addresses only */
+		check(snor_init() < 0, "SFDP: a chip of 4-byte addresses only is not detected");
 		make_sfdp(32 << 20, 12, 0x20, 16, 0xd8, 0, 9);		/* an old table: no word 16 */
 		check(snor_init() == 16 << 20 && !spi_chip_info->addr4b, "SFDP: 32 MB without the 4-byte mode entry: the first 16 MB only");
 		make_sfdp(16 << 20, 0, 0, 0, 0, 0, 9);
