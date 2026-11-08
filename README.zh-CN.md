@@ -8,17 +8,18 @@
 [![Release](https://img.shields.io/badge/download-latest-blue)](https://github.com/OpenIPC/microsnander/releases/latest)
 [![License: GPL-2.0](https://img.shields.io/badge/license-GPL--2.0-blue.svg)](LICENSE)
 [![Code size](https://img.shields.io/github/languages/code-size/OpenIPC/microsnander)](https://github.com/OpenIPC/microsnander)
-[![Platform](https://img.shields.io/badge/platform-Linux-brightgreen)](#系统要求)
+[![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Android-brightgreen)](#系统要求)
 
 MicroSNANDer 是一个 SPI NOR 和 SPI NAND 闪存芯片编程工具，配合廉价的 CH341A、CH347 和 EZP USB
-编程器（共六种型号）使用，包括内置网页的命令行程序和 Android 应用。它可以读取、写入、擦除和校验摄像机、
-路由器及其他开发板的闪存，解除 SPI NOR 芯片的写保护，支持 434 款 SPI NOR 和 167 款 SPI NAND 芯片。
-每个发布文件约 200–270 KB。
+编程器（共六种型号）使用，包括内置网页的 Linux 命令行程序和适用于 Android 手机及电视盒的应用。它可以读取、写入、擦除、校验和比较摄像机、
+路由器及其他开发板的闪存，解除 SPI NOR 芯片的写保护，保留 SPI NAND 芯片的出厂坏块，支持 434 款 SPI NOR 和
+167 款 SPI NAND 芯片；不在列表中的 SPI NOR 芯片按其自身的 SFDP 表识别。
+每个发布文件约 240–290 KB。
 
 它是 McMCC 的 [SNANDer](https://github.com/McMCCRU/SNANDer) 1.7.4 经过精简、增强、深度修改和优化的版本：
-仅支持 Linux，不支持 EEPROM，增加了 `-u`（解除保护）命令以及 OpenIPC
+仅支持 Linux 和 Android，不支持 EEPROM，增加了 `-u`（解除保护）命令以及 OpenIPC
 硬件上常见的闪存芯片。发布的二进制文件为静态链接、无任何依赖，同一个文件既可以在
-PC 上运行，也可以直接在 USB 口插着编程器的 ARM 摄像机上运行。
+PC 上运行，也可以直接在 USB 口插着编程器的 ARM 摄像机上运行；Android 应用无需 root。
 
 更新记录：[CHANGELOG.md](CHANGELOG.md)。
 
@@ -62,7 +63,7 @@ sudo ./microsnander -w firmware.bin -v
 在桌面电脑上，编程器和芯片都在手边时，其他程序已经能很好地完成工作，其中许多还带图形界面。
 MicroSNANDer 面向的是它们覆盖不到的场合：
 
-- **一个小文件。** 约 200–270 KB 的发布文件包含全部内容：SPI NOR 和 SPI NAND、芯片列表、全部六种
+- **一个小文件。** 约 240–290 KB 的发布文件包含全部内容：SPI NOR 和 SPI NAND、芯片列表、全部六种
   编程器（CH341A、CH347T、CH347F、EZP2019、EZP2019+、EZP2023）的驱动以及网页。
 - **无需安装。** 系统中不需要编程器的内核驱动，也不需要 libc 和 libusb：Linux 二进制文件为静态链接，
   通过内核的 USB 支持访问编程器。
@@ -73,6 +74,8 @@ MicroSNANDer 面向的是它们覆盖不到的场合：
   执行操作。这是同一个文件，因此在没有屏幕的开发板上也能工作。
 - **手机就是编程器。** [Android 应用](#android-应用) 在手机或电视盒子上支持所有这些编程器，
   Android 5.0 及以上，无需 root。
+- **爱护芯片。** 保留 SPI NAND 的出厂坏块，大于 16 MB 的芯片绝不会停留在 4 字节地址模式，Ctrl+C 在步骤之间
+  停止，`-v` 会在你依赖写入、擦除或读取（读两次）之前先检查它们。
 
 Windows 和 macOS 不受支持，今后也不会支持，但仍可以从这些系统进行操作：把编程器连接到另一台运行
 microsnander 的设备（路由器、电脑、摄像机、Linux 电视盒子），然后打开它的[网页](#web-模式)或通过 SSH
@@ -258,7 +261,7 @@ Ctrl+C 会在操作的下一步停止，此时芯片处于一条完整命令之�
 ## 示例
 
 ```sh
-# 芯片 ID、型号和容量
+# 芯片 ID、型号和容量；SPI NOR 芯片还显示其保护状态（W25Q：其唯一 ID）
 microsnander -i
 
 # 自检：芯片是否受保护，第一个块能否擦除、写入并读回
@@ -279,14 +282,26 @@ microsnander -w full.bin -v
 # 只把 U-Boot 写到芯片开头
 microsnander -w u-boot.bin -a 0 -v
 
-# 擦除 0x40000 处的 64 KiB（大多数 SPI NOR 芯片的一个块）
-microsnander -e -a 0x40000 -l 0x10000
+# 将芯片与文件比较，不写入任何内容
+microsnander -c full.bin
+
+# 擦除 0x40000 处的 64 KiB，然后检查其读出为 0xFF
+microsnander -e -a 0x40000 -l 0x10000 -v
+
+# 擦除 0x1000 处的 4 KiB（SFDP 表中列出 4 KB 擦除的 SPI NOR 芯片）
+microsnander -e -a 0x1000 -l 0x1000
 
 # SPI NOR 芯片无法擦除或写入：先解除保护
 microsnander -u
 
 # SPI NAND：带 OOB 区的原始转储，关闭 ECC
 microsnander -d -r raw.bin
+
+# SPI NAND：列出带出厂坏块标记的块
+microsnander -b
+
+# Winbond W25Q：保存其三个安全寄存器
+microsnander -O security.bin
 ```
 
 ## Web 模式
@@ -335,7 +350,7 @@ microsnander -P ch347 -W 8080 -o /srv/dumps
 - 只使用一个编程器，选择方式与不带 `-W` 时相同；连接了多个时请用 `-P`。
 - 每个操作开始时打开编程器、结束后关闭，因此两次操作之间可以重新插拔，或用普通方式运行 microsnander。
 - 每次只运行一个操作；操作进行中的请求会得到 `409`。操作进行时页面每秒查询两次状态。
-- `-W` 不接受自身的操作（`-i`、`-r`、`-w`、`-c`、`-e`、`-u`、`-t`、`-b`），也不接受 `-q`、`-m`、`-v`、`-S`、`-d`、`-I` 或 `-k`：
+- `-W` 不接受自身的操作（`-i`、`-r`、`-w`、`-c`、`-O`、`-e`、`-u`、`-t`、`-b`），也不接受 `-q`、`-m`、`-v`、`-S`、`-d`、`-I` 或 `-k`：
   操作由页面完成，在开启 ECC 的情况下从地址 0 写入完整文件，并始终校验。`-K` 和 `-o` 只能与 `-W` 一起使用。
 - 客户端断开时服务继续运行；慢速客户端不会阻塞其他客户端（最多同时 16 个连接）。
 

@@ -8,20 +8,21 @@
 [![Release](https://img.shields.io/badge/download-latest-blue)](https://github.com/OpenIPC/microsnander/releases/latest)
 [![License: GPL-2.0](https://img.shields.io/badge/license-GPL--2.0-blue.svg)](LICENSE)
 [![Code size](https://img.shields.io/github/languages/code-size/OpenIPC/microsnander)](https://github.com/OpenIPC/microsnander)
-[![Platform](https://img.shields.io/badge/platform-Linux-brightgreen)](#requirements)
+[![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Android-brightgreen)](#requirements)
 
 MicroSNANDer is a programmer for SPI NOR and SPI NAND flash chips with the cheap CH341A,
-CH347 and EZP USB programmers, six models in all: a command-line tool with a web page
-built in, and an Android app. It reads, writes, erases and verifies the flash of cameras,
-routers and other boards, removes the write protection of SPI NOR chips, and knows 434
-SPI NOR and 167 SPI NAND chips. Each release file is about 200–270 KB.
+CH347 and EZP USB programmers, six models in all: a command-line tool for Linux with
+a web page built in, and an app for Android phones and TV boxes. It reads, writes, erases,
+verifies and compares the flash of cameras, routers and other boards, removes the write protection of SPI NOR chips, keeps the
+factory bad blocks of SPI NAND chips, and knows 434 SPI NOR and 167 SPI NAND chips; a SPI NOR
+chip that is not on the list is found by its own SFDP table. Each release file is about 240–290 KB.
 
 It is a stripped-down, extended, deeply modified and optimized version of
-[SNANDer](https://github.com/McMCCRU/SNANDer) 1.7.4 by McMCC: Linux only, SPI NOR
+[SNANDer](https://github.com/McMCCRU/SNANDer) 1.7.4 by McMCC: Linux and Android only, SPI NOR
 and SPI NAND only (no EEPROM chips), with the `-u` (unprotect) command and the
 flash chips found on OpenIPC hardware added. The release binaries are static and
 have no dependencies, so the same file runs on a PC or right on an ARM camera
-with the programmer plugged into its USB port.
+with the programmer plugged into its USB port, and the Android app needs no root.
 
 Changes: [CHANGELOG.md](CHANGELOG.md).
 
@@ -65,7 +66,7 @@ sudo ./microsnander -w firmware.bin -v
 On a desktop, with a programmer and a chip at hand, other programs do the job well, many of
 them with a graphical interface. MicroSNANDer is made for the places they do not reach:
 
-- **One small file.** A release file of about 200–270 KB holds everything: SPI NOR and SPI
+- **One small file.** A release file of about 240–290 KB holds everything: SPI NOR and SPI
   NAND, the chip list, the drivers of all six programmers (CH341A, CH347T, CH347F, EZP2019,
   EZP2019+, EZP2023) and the web page.
 - **Nothing to install.** No kernel driver for the programmer, no libc and no libusb on the
@@ -81,6 +82,9 @@ them with a graphical interface. MicroSNANDer is made for the places they do not
   browser. It is the same file, so it works on a board with no screen.
 - **A phone is a programmer.** The [Android app](#android-app) works with all of them on a
   phone or a TV box, Android 5.0 and later, without root.
+- **Careful with the chip.** The factory bad blocks of a SPI NAND are kept, a chip over 16 MB is
+  never left in its 4-byte address mode, Ctrl+C stops between steps, and `-v` checks a write,
+  an erase or a read (read twice) before you rely on it.
 
 Windows and macOS are not supported and will not be, but you can still work from them: plug
 the programmer into another device that runs microsnander (a router, a computer, a camera, a
@@ -303,7 +307,7 @@ chip: with them `-t` reads the block twice and does not erase it.
 ## Examples
 
 ```sh
-# Chip ID, name and size
+# Chip ID, name and size; for a SPI NOR chip also its protection (a W25Q: its unique ID)
 microsnander -i
 
 # Self-test: is the chip protected, does its first block erase, take a write and read back
@@ -324,14 +328,26 @@ microsnander -w full.bin -v
 # Write U-Boot only, to the start of the chip
 microsnander -w u-boot.bin -a 0 -v
 
-# Erase 64 KiB at 0x40000 (one block of most SPI NOR chips)
-microsnander -e -a 0x40000 -l 0x10000
+# Compare the chip with a file, nothing written
+microsnander -c full.bin
+
+# Erase 64 KiB at 0x40000, then check that it reads 0xFF
+microsnander -e -a 0x40000 -l 0x10000 -v
+
+# Erase 4 KiB at 0x1000 (a SPI NOR chip whose SFDP table lists 4 KB erase)
+microsnander -e -a 0x1000 -l 0x1000
 
 # SPI NOR chip that refuses to erase or write: remove the protection first
 microsnander -u
 
 # SPI NAND: raw dump with the OOB area, ECC off
 microsnander -d -r raw.bin
+
+# SPI NAND: list the blocks with a factory bad mark
+microsnander -b
+
+# Winbond W25Q: save its three security registers
+microsnander -O security.bin
 ```
 
 ## Web mode
@@ -389,7 +405,7 @@ How it works:
   can be replugged, or used by a normal microsnander run.
 - One operation runs at a time; a request while one runs gets `409`. The page polls the state
   twice a second while an operation runs.
-- `-W` takes no operation of its own (`-i`, `-r`, `-w`, `-c`, `-e`, `-u`, `-t`, `-b`) and no `-q`, `-m`, `-v`,
+- `-W` takes no operation of its own (`-i`, `-r`, `-w`, `-c`, `-O`, `-e`, `-u`, `-t`, `-b`) and no `-q`, `-m`, `-v`,
   `-S`, `-d`, `-I` or `-k`: the page does the operations, writes whole files from address 0 with ECC on
   and always verifies. `-K` and `-o` go with `-W` only.
 - The service keeps running when a client disconnects; a slow client does not hold the others
