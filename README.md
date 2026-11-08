@@ -195,7 +195,7 @@ microsnander [options]
                 board that boots in quad mode may then not boot
  -t             self-test: protection, then erase, write and read back one block
                 (the first; -a for another) and put its data back
- -v             verify after write on chip
+ -v             verify after write on chip; after -e: check that the range reads 0xFF
  -c <filename>  compare the chip with the file, nothing written (from -a, as long as
                 the file or -l)
  -P <name>      programmer: ch341a, ch347, ezp, auto (default: the one connected)
@@ -213,8 +213,13 @@ microsnander [options]
 
 One operation per run: `-i`, `-e`, `-r`, `-w`, `-c`, `-O`, `-u`, `-t` or `-b`. Without `-a` and `-l` the
 operation covers the whole chip. Addresses and lengths are decimal or hex with
-`0x`. Erase works on whole blocks: the length must be a multiple of the block size
-the chip reports.
+`0x`. Erase works on whole blocks: the address and the length must be multiples of the
+erase block. For an SPI NOR chip whose SFDP table lists 4 KB and 32 KB erase commands
+(most chips made in the last fifteen years) that block is 4 KB: a range is erased with
+64 KB commands where it covers whole sectors and with 32 KB and 4 KB ones at its ends, and
+detection prints the blocks found. Without such a table it is the sector of the chip
+table, usually 64 KB. `-e -v` reads the erased range back and checks that every byte is
+0xFF (SPI NOR and the EZP programmers).
 
 `-i` of an SPI NOR chip (through the CH341A or the CH347) also says what of it is
 read-only. For a Winbond W25Q of 1 MB and more that is the address range from the tables of

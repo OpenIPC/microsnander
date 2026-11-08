@@ -54,6 +54,7 @@ long flash_cmd_init(struct flash_cmd *cmd)
 		cmd->flash_unprotect = snor_unprotect;
 		cmd->flash_clear_qe = snor_clear_qe;
 		cmd->flash_erase = snor_erase;
+		cmd->erase_unit = snor_erase_unit();
 		cmd->flash_write = snor_write;
 		cmd->flash_read  = snor_read;
 	} else

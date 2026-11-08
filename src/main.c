@@ -42,7 +42,7 @@
 struct flash_cmd prog;
 extern unsigned int bsize;
 
-#define _VER	"1.33.0"
+#define _VER	"1.34.0"
 
 const char *ms_version = _VER;
 
@@ -92,7 +92,7 @@ void usage(int code)
 		"                board that boots in quad mode may then not boot\n"\
 		" -t             self-test: protection, then erase, write and read back one block\n"\
 		"                (the first; -a for another) and put its data back\n"\
-		" -v             verify after write on chip\n"\
+		" -v             verify after write on chip; after -e: check that the range reads 0xFF\n"\
 		" -c <filename>  compare the chip with the file, nothing written (from -a, as long as\n"\
 		"                the file or -l)\n"\
 		" -P <name>      programmer: ch341a, ch347, ezp, auto (default: the one connected)\n"\
@@ -254,6 +254,42 @@ static int verify(unsigned char *buf, const char *fname, long long addr, long lo
 	parts_end("Read", len, len);
 	printf("Status: OK\n");
 	fclose(fp);
+	return 0;
+}
+
+/* -e -v: the erased range read back, in parts; every byte must be 0xFF.
+   0 when it is. */
+static int blank_check(long long addr, long long len)
+{
+	static unsigned char buf[PART_MIN];
+	long long done, k;
+	size_t i;
+	int ret;
+
+	printf("VERIFY:\n");
+	printf("Read addr = 0x%016llX, len = 0x%016llX\n", addr, len);
+	part_size = PART_MIN;
+	parts_begin();
+	for (done = 0; done < len; done += k) {
+		k = part_len(addr + done, len - done);
+		ret = ms_stop ? -1 : prog.flash_read(buf, addr + done, k);
+		if (ms_stop)		/* Ctrl+C during the call: not a finished operation */
+			ret = -1;
+		if (ret != k) {
+			parts_end(NULL, 0, 0);
+			printf("Status: BAD(%d)\n", ret);
+			return 1;
+		}
+		for (i = 0; i < (size_t)k; i++)
+			if (buf[i] != 0xff) {
+				parts_end(NULL, 0, 0);
+				printf("Status: BAD, not erased at 0x%016llX: read 0x%02X\n", addr + done + i, buf[i]);
+				return 1;
+			}
+		parts_progress("Read", done + k, len);
+	}
+	parts_end("Read", len, len);
+	printf("Status: OK, all 0xFF\n");
 	return 0;
 }
 
@@ -540,6 +576,8 @@ int main(int argc, char* argv[])
 	}
 
 	if (op == 'e') {
+		unsigned long eunit = prog.erase_unit ? prog.erase_unit : bsize;
+
 		printf("ERASE:\n");
 		if(addr && !len)
 			len = flen - addr;
@@ -547,8 +585,14 @@ int main(int argc, char* argv[])
 			len = flen;
 			printf("Set full erase chip!\n");
 		}
-		if(len % bsize) {
-			printf("Please set len = 0x%016llX multiple of the block size 0x%08X\n", len, bsize);
+		if (addr % eunit || len % eunit) {
+			printf("Please set addr = 0x%016llX and len = 0x%016llX to multiples of the erase block 0x%08lX\n",
+			       addr, len, eunit);
+			goto out;
+		}
+		/* NAND: blocks with a factory bad-block mark are not 0xFF after an erase */
+		if (vr && prog.kind == FLASH_NAND) {
+			printf("-v after -e checks SPI NOR chips only.\n");
 			goto out;
 		}
 		if (erase_marked > 1) {
@@ -565,7 +609,7 @@ int main(int argc, char* argv[])
 			ret = -1;
 		if(!ret) {
 			printf("Status: OK\n");
-			rc = 0;
+			rc = vr ? blank_check(addr, len) : 0;
 		} else
 			printf("Status: BAD(%d)\n", ret);
 		goto out;

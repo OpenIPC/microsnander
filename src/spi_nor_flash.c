@@ -543,7 +543,7 @@ static int snor_4byte_mode(int enable)
  *
  * Returns 0 if successful, non-zero otherwise.
  */
-static int snor_erase_sector(unsigned long offset)
+static int snor_erase_block(unsigned long offset, u8 op)
 {
 	int ret;
 
@@ -563,7 +563,7 @@ static int snor_erase_sector(unsigned long offset)
 
 	SPI_CONTROLLER_Chip_Select_Low();
 
-	SPI_CONTROLLER_Write_One_Byte(snor_is_sst26() ? OPCODE_P4E : snor_erase_op);
+	SPI_CONTROLLER_Write_One_Byte(op);
 	if (spi_chip_info->addr4b)
 		SPI_CONTROLLER_Write_One_Byte((offset >> 24) & 0xff);
 	SPI_CONTROLLER_Write_One_Byte((offset >> 16) & 0xff);
@@ -1142,6 +1142,66 @@ static int snor_read_sfdp(u32 addr, u8 *buf, int len)
 	return err ? -1 : 0;
 }
 
+/* The basic flash parameter table of the SFDP (JESD216) into p (its first
+   16 words at most); its length in words, or 0 when the chip has none */
+static u32 sfdp_basic(u8 p[64])
+{
+	u8 h[16];
+	u32 n, ptr;
+
+	if (snor_read_sfdp(0, h, sizeof(h)) || memcmp(h, "SFDP", 4))
+		return 0;
+	/* the first parameter header is that of the basic table: ID FF00, version 1.x */
+	if (h[8] != 0x00 || h[15] != 0xff || h[10] != 1)
+		return 0;
+	n = h[11];			/* its length in 32-bit words */
+	if (n < 9)
+		return 0;
+	if (n > 16)
+		n = 16;
+	ptr = h[12] | (h[13] << 8) | (h[14] << 16);
+	if (snor_read_sfdp(ptr, p, n * 4))
+		return 0;
+	return n;
+}
+
+/* 1: the SFDP lists a sector map table (ID FF81): sectors of more than one size */
+static int sfdp_sector_map(void)
+{
+	u8 h[8 + 8 * 8];
+	int n;
+
+	if (snor_read_sfdp(0, h, 8) || memcmp(h, "SFDP", 4))
+		return 0;
+	n = h[6] + 1;			/* parameter headers */
+	if (n > 8)
+		n = 8;
+	if (snor_read_sfdp(8, h + 8, 8 * n))
+		return 1;		/* not known: as if it had one */
+	for (int i = 0; i < n; i++)
+		if (h[8 + 8 * i] == 0x81 && h[8 + 8 * i + 7] == 0xff)
+			return 1;
+	return 0;
+}
+
+/* The erase commands of 4 KB and 32 KB that the SFDP table lists (words 8
+   and 9: up to four types, size 2^N and command); 0: not listed */
+static u8 snor_op_4k, snor_op_32k;
+
+static void sfdp_small_erase(const u8 p[64])
+{
+	for (int i = 0; i < 4; i++) {
+		u8 e = p[28 + 2 * i], c = p[29 + 2 * i];
+
+		if (!c)
+			continue;
+		if (e == 12 && !snor_op_4k)
+			snor_op_4k = c;
+		if (e == 15 && !snor_op_32k)
+			snor_op_32k = c;
+	}
+}
+
 /* A chip whose ID is not in the table: its size, sector erase and address mode
    from its own SFDP table (JESD216), the basic flash parameters. NULL when it
    has none or they do not fit. */
@@ -1149,24 +1209,13 @@ static struct chip_info *chip_sfdp(const u8 id[5])
 {
 	static struct chip_info info;
 	static char name[24];
-	u8 h[16], p[64];
-	u32 dw[16], n, ptr, i, enter = 0, leave = 0;
+	u8 p[64];
+	u32 dw[16], n, i, enter = 0, leave = 0;
 	unsigned long long size;
 	int best = -1;
 	u8 op = 0;
 
-	if (snor_read_sfdp(0, h, sizeof(h)) || memcmp(h, "SFDP", 4))
-		return NULL;
-	/* the first parameter header is that of the basic table: ID FF00, version 1.x */
-	if (h[8] != 0x00 || h[15] != 0xff || h[10] != 1)
-		return NULL;
-	n = h[11];			/* its length in 32-bit words */
-	if (n < 9)
-		return NULL;
-	if (n > 16)
-		n = 16;
-	ptr = h[12] | (h[13] << 8) | (h[14] << 16);
-	if (snor_read_sfdp(ptr, p, n * 4))
+	if (!(n = sfdp_basic(p)))
 		return NULL;
 	for (i = 0; i < n; i++)
 		dw[i] = p[4 * i] | (p[4 * i + 1] << 8) | (p[4 * i + 2] << 16) | ((u32)p[4 * i + 3] << 24);
@@ -1242,6 +1291,7 @@ struct chip_info *chip_prob(void)
 	int i;
 
 	snor_erase_op = OPCODE_SE;
+	snor_op_4k = snor_op_32k = 0;
 	memset(buf, 0, sizeof(buf));
 	if (snor_read_devid(buf, 5)) {
 		printf("SPI NOR Flash Not Detected: the ID read failed on USB.\n");
@@ -1545,6 +1595,28 @@ long snor_init(void)
 	snor_die = -1;
 	if (snor_select_die(0) < 0)	/* a run stopped on another die left it selected */
 		return -1;
+	/* Smaller erase blocks only where the chip's own SFDP table lists them:
+	   not every chip has them (M25P: 64 KB only), and the table has the
+	   commands. SST26 erases in 4 KB sectors already, its own way. */
+	if (spi_chip_info->sector_size > 4096 && !snor_is_sst26() && spi_chip_info->id != 0x01) {
+		u8 p[64];
+
+		/* only where 4 KB erase works all over the chip: word 1, bits 1:0 = 01,
+		   and no sector map table (a chip of mixed sectors, as Spansion S25FL-S
+		   with 4 KB parameter sectors at one end, which is left out too) */
+		if (sfdp_basic(p) && (p[0] & 0x03) == 0x01 && !sfdp_sector_map())
+			sfdp_small_erase(p);
+		if (snor_op_32k && spi_chip_info->sector_size <= 32768)
+			snor_op_32k = 0;
+		if (snor_op_4k || snor_op_32k) {
+			printf("Erase blocks of the SFDP table:");
+			if (snor_op_4k)
+				printf(" 4 KB (%02Xh)", snor_op_4k);
+			if (snor_op_32k)
+				printf(" 32 KB (%02Xh)", snor_op_32k);
+			printf(" %lu KB (%02Xh)\n", spi_chip_info->sector_size >> 10, snor_erase_op);
+		}
+	}
 
 	return spi_chip_info->sector_size * spi_chip_info->n_sectors;
 }
@@ -1573,16 +1645,29 @@ static int snor_erase_die(unsigned long offs, unsigned long len)
 		return -1;
 	}
 
-	/* now erase those sectors */
+	/* now erase those blocks: whole sectors where the range covers them,
+	   32 KB and 4 KB blocks at its ends */
 	while (len > 0) {
-		if (ms_stop || snor_erase_sector(offs)) {
+		unsigned long step = spi_chip_info->sector_size;
+		u8 op = snor_is_sst26() ? OPCODE_P4E : snor_erase_op;
+
+		if (offs % step || len < step) {
+			if (snor_op_32k && !(offs % 32768) && len >= 32768) {
+				step = 32768;
+				op = snor_op_32k;
+			} else {
+				step = 4096;
+				op = snor_op_4k;
+			}
+		}
+		if (ms_stop || snor_erase_block(offs, op)) {
 			printf("\nErase failed at 0x%lx\n", offs);
 			timer_end();
 			return -1;
 		}
 
-		offs += spi_chip_info->sector_size;
-		len -= spi_chip_info->sector_size;
+		offs += step;
+		len -= step;
 		if( timer_progress() )
 		{
 			printf("\bErase %ld%% [%lu] of [%lu] bytes      ", 100 * (plen - len) / plen, plen - len, plen);
@@ -2012,8 +2097,23 @@ int snor_write(unsigned char *buf, unsigned long to, unsigned long len)
 	return snor_on_dies(DIE_WRITE, buf, to, len);
 }
 
+/* the smallest block an erase takes: 4 KB or 32 KB where the SFDP table has
+   them, else the sector of the table */
+unsigned long snor_erase_unit(void)
+{
+	return snor_op_4k ? 4096 : snor_op_32k ? 32768 : spi_chip_info->sector_size;
+}
+
+/* a range that does not start and end on such a block would be erased past
+   its ends: refused */
 int snor_erase(unsigned long offs, unsigned long len)
 {
+	unsigned long unit = snor_erase_unit();
+
+	if (offs % unit || len % unit) {
+		printf("Erase 0x%lX + 0x%lX: not on the erase blocks of 0x%lX bytes.\n", offs, len, unit);
+		return -1;
+	}
 	return snor_on_dies(DIE_ERASE, NULL, offs, len);
 }
 

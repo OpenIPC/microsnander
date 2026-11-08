@@ -175,7 +175,7 @@ microsnander [options]
                 board that boots in quad mode may then not boot
  -t             self-test: protection, then erase, write and read back one block
                 (the first; -a for another) and put its data back
- -v             verify after write on chip
+ -v             verify after write on chip; after -e: check that the range reads 0xFF
  -c <filename>  compare the chip with the file, nothing written (from -a, as long as
                 the file or -l)
  -P <name>      programmer: ch341a, ch347, ezp, auto (default: the one connected)
@@ -193,7 +193,10 @@ microsnander [options]
 
 每次运行只执行一个操作：`-i`、`-e`、`-r`、`-w`、`-c`、`-O`、`-u`、`-t` 或 `-b`。不指定 `-a` 和 `-l` 时，
 操作覆盖整片芯片。地址和长度可以是十进制，或带 `0x` 的十六进制。擦除按整块进行：
-长度必须是芯片报告的块大小的整数倍。
+地址和长度都必须是擦除块的整数倍。对于 SFDP 表中列出 4 KB 和 32 KB 擦除命令的 SPI NOR 芯片（近十五年
+生产的大多数芯片），擦除块为 4 KB：范围中覆盖整个扇区的部分用 64 KB 命令擦除，两端用 32 KB 和 4 KB
+命令，检测时会显示找到的擦除块。没有这样的表时，擦除块是芯片表中的扇区，通常为 64 KB。`-e -v`
+会读回已擦除的范围并检查每个字节是否为 0xFF（SPI NOR 和 EZP 编程器）。
 
 对 SPI NOR 芯片（通过 CH341A 或 CH347），`-i` 还会显示芯片中哪一部分处于写保护状态。对 1 MB 及以上的 Winbond
 W25Q，按其数据手册中的表格给出地址范围（块保护位、TB、SEC 和 CMP）；对其他芯片，只显示是否有
