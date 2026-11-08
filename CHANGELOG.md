@@ -4,7 +4,7 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
-## 1.27.0 — 2026-11-07
+## 1.27.0 — 2026-11-08
 
 - SPI NAND factory bad blocks: a block whose first or second page has a byte other than 0xFF at
   the start of its spare area (read with the ECC off) is bad from the factory. `-e` leaves it as
