@@ -342,6 +342,8 @@ int main(void)
 	write_read_erase("W25Q32BV", ORDINARY);
 	write_read_erase("PCT25VF016B", SST25);
 	write_read_erase("PCT26VF016", SST26);
+	write_read_erase("SST26VF016B", SST26);
+	write_read_erase("SST26VF064B", SST26);
 	write_read_erase("XM25QH64A", NO_SR23);
 	write_read_erase("MX25L3205D", QE_SR1);
 	write_read_erase("W25Q128BV", QE_FIXED);
