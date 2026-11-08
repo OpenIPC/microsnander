@@ -8,21 +8,21 @@
 [![Release](https://img.shields.io/badge/download-latest-blue)](https://github.com/OpenIPC/microsnander/releases/latest)
 [![License: GPL-2.0](https://img.shields.io/badge/license-GPL--2.0-blue.svg)](LICENSE)
 [![Code size](https://img.shields.io/github/languages/code-size/OpenIPC/microsnander)](https://github.com/OpenIPC/microsnander)
-[![Platform](https://img.shields.io/badge/platform-Linux-brightgreen)](#requirements)
+[![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Android-brightgreen)](#requirements)
 
 MicroSNANDer is a programmer for SPI NOR and SPI NAND flash chips with the cheap CH341A,
-CH347 and EZP USB programmers, six models in all: a command-line tool with a web page
-built in, and an Android app. It reads, writes, erases, verifies and compares the flash of
-cameras, routers and other boards, removes the write protection of SPI NOR chips, keeps the
+CH347 and EZP USB programmers, six models in all: a command-line tool for Linux with
+a web page built in, and an app for Android phones and TV boxes. It reads, writes, erases,
+verifies and compares the flash of cameras, routers and other boards, removes the write protection of SPI NOR chips, keeps the
 factory bad blocks of SPI NAND chips, and knows 434 SPI NOR and 167 SPI NAND chips; a SPI NOR
 chip that is not on the list is found by its own SFDP table. Each release file is about 240–290 KB.
 
 It is a stripped-down, extended, deeply modified and optimized version of
-[SNANDer](https://github.com/McMCCRU/SNANDer) 1.7.4 by McMCC: Linux only, SPI NOR
+[SNANDer](https://github.com/McMCCRU/SNANDer) 1.7.4 by McMCC: Linux and Android only, SPI NOR
 and SPI NAND only (no EEPROM chips), with the `-u` (unprotect) command and the
 flash chips found on OpenIPC hardware added. The release binaries are static and
 have no dependencies, so the same file runs on a PC or right on an ARM camera
-with the programmer plugged into its USB port.
+with the programmer plugged into its USB port, and the Android app needs no root.
 
 Changes: [CHANGELOG.md](CHANGELOG.md).
 

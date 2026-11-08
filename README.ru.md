@@ -8,21 +8,21 @@
 [![Release](https://img.shields.io/badge/download-latest-blue)](https://github.com/OpenIPC/microsnander/releases/latest)
 [![License: GPL-2.0](https://img.shields.io/badge/license-GPL--2.0-blue.svg)](LICENSE)
 [![Code size](https://img.shields.io/github/languages/code-size/OpenIPC/microsnander)](https://github.com/OpenIPC/microsnander)
-[![Platform](https://img.shields.io/badge/platform-Linux-brightgreen)](#требования)
+[![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Android-brightgreen)](#требования)
 
 MicroSNANDer — программатор микросхем флеш-памяти SPI NOR и SPI NAND для недорогих
-USB-программаторов CH341A, CH347 и EZP, всего шесть моделей: консольная программа со
-встроенной веб-страницей и приложение для Android. Он читает, записывает, стирает, проверяет и
+USB-программаторов CH341A, CH347 и EZP, всего шесть моделей: консольная программа для Linux со
+встроенной веб-страницей и приложение для телефонов и ТВ-приставок на Android. Он читает, записывает, стирает, проверяет и
 сравнивает флеш камер, роутеров и других плат, снимает защиту от записи с микросхем SPI NOR,
 сохраняет заводские плохие блоки микросхем SPI NAND и знает 434 микросхемы SPI NOR и 167
 микросхем SPI NAND; микросхема SPI NOR не из списка определяется по её собственной таблице SFDP. Каждый файл релиза занимает около
 240–290 КБ.
 
 Это урезанная, дополненная, глубоко модифицированная и оптимизированная версия
-[SNANDer](https://github.com/McMCCRU/SNANDer) 1.7.4 от McMCC: только Linux, без поддержки EEPROM, с командой
+[SNANDer](https://github.com/McMCCRU/SNANDer) 1.7.4 от McMCC: только Linux и Android, без поддержки EEPROM, с командой
 `-u` (снятие защиты) и микросхемами флеш-памяти, которые встречаются в оборудовании
 OpenIPC. Релизные файлы статические и без зависимостей, поэтому один и тот же файл
-работает и на ПК, и прямо на ARM-камере с программатором в её USB-порту.
+работает и на ПК, и прямо на ARM-камере с программатором в её USB-порту, а приложению для Android не нужен root.
 
 Изменения: [CHANGELOG.md](CHANGELOG.md).
 

@@ -8,18 +8,18 @@
 [![Release](https://img.shields.io/badge/download-latest-blue)](https://github.com/OpenIPC/microsnander/releases/latest)
 [![License: GPL-2.0](https://img.shields.io/badge/license-GPL--2.0-blue.svg)](LICENSE)
 [![Code size](https://img.shields.io/github/languages/code-size/OpenIPC/microsnander)](https://github.com/OpenIPC/microsnander)
-[![Platform](https://img.shields.io/badge/platform-Linux-brightgreen)](#系统要求)
+[![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Android-brightgreen)](#系统要求)
 
 MicroSNANDer 是一个 SPI NOR 和 SPI NAND 闪存芯片编程工具，配合廉价的 CH341A、CH347 和 EZP USB
-编程器（共六种型号）使用，包括内置网页的命令行程序和 Android 应用。它可以读取、写入、擦除、校验和比较摄像机、
+编程器（共六种型号）使用，包括内置网页的 Linux 命令行程序和适用于 Android 手机及电视盒的应用。它可以读取、写入、擦除、校验和比较摄像机、
 路由器及其他开发板的闪存，解除 SPI NOR 芯片的写保护，保留 SPI NAND 芯片的出厂坏块，支持 434 款 SPI NOR 和
 167 款 SPI NAND 芯片；不在列表中的 SPI NOR 芯片按其自身的 SFDP 表识别。
 每个发布文件约 240–290 KB。
 
 它是 McMCC 的 [SNANDer](https://github.com/McMCCRU/SNANDer) 1.7.4 经过精简、增强、深度修改和优化的版本：
-仅支持 Linux，不支持 EEPROM，增加了 `-u`（解除保护）命令以及 OpenIPC
+仅支持 Linux 和 Android，不支持 EEPROM，增加了 `-u`（解除保护）命令以及 OpenIPC
 硬件上常见的闪存芯片。发布的二进制文件为静态链接、无任何依赖，同一个文件既可以在
-PC 上运行，也可以直接在 USB 口插着编程器的 ARM 摄像机上运行。
+PC 上运行，也可以直接在 USB 口插着编程器的 ARM 摄像机上运行；Android 应用无需 root。
 
 更新记录：[CHANGELOG.md](CHANGELOG.md)。
 
