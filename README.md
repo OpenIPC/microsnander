@@ -307,6 +307,9 @@ microsnander -t
 # Full backup
 microsnander -r full.bin
 
+# Full backup read twice, saved only if both reads are the same (a chip on its board, a clip)
+microsnander -r full.bin -v
+
 # 1 MiB from 0x50000 (for example, a kernel partition)
 microsnander -r kernel.bin -a 0x50000 -l 0x100000
 

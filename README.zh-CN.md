@@ -263,6 +263,9 @@ microsnander -t
 # 完整备份
 microsnander -r full.bin
 
+# 读取两次的完整备份，只有两次读取相同时才保存（板上芯片、夹子）
+microsnander -r full.bin -v
+
 # 从 0x50000 读取 1 MiB（例如内核分区）
 microsnander -r kernel.bin -a 0x50000 -l 0x100000
 
