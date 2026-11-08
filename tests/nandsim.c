@@ -47,6 +47,7 @@ static long loaded = -1;		/* the page last read into the chip's cache */
 static long fail_cache = -1;		/* the USB transfer fails when this page is read from the cache */
 static int fail_feature = -1;		/* the USB transfer of a read of this feature register fails */
 static int fail_after_program;		/* status reads fail from the next program execute on */
+static int fail_ecc_on;			/* a write of B0 that turns the on-die ECC on fails */
 static int fail_set_feature;		/* CS high fails after a write of a feature register */
 static int fail_load;			/* the USB transfer of the page data of a program load fails */
 static int nor_chip;			/* a SPI NOR: no answer to the feature read, 0xff */
@@ -111,7 +112,7 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Read_NByte(u8 *d, u32 len, SPI_CONTROLLER_SP
 SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Chip_Select_High(void)
 {
 	unsigned char *p;
-	if (fail_set_feature && cmd[0] == 0x1f) {
+	if ((fail_set_feature && cmd[0] == 0x1f) || (fail_ecc_on && cmd[0] == 0x1f && cmd[1] == 0xb0 && (cmd[2] & 0x10))) {
 		ncmd = nread = 0;
 		return SPI_CONTROLLER_RTN_WRITE_DATAPFIFO_ERROR;
 	}
@@ -642,8 +643,37 @@ int main(void)
 		big[PAGE] = 0x00;			/* the mark of a raw dump of another chip */
 		check(snand_write(big, 4L * 64 * (PAGE + OOB), 2 * (PAGE + OOB)) == 2 * (PAGE + OOB) && spi_nand_block_marked(4) == 1,
 		      "  a raw write that brings a mark: the block is marked from then on");
+		/* a raw image of the chip itself goes back as it is, marked block too */
+		memset(big, 0x12, PAGE + OOB);
+		big[PAGE] = 0x00;
+		check(snand_write(big, 3L * 64 * (PAGE + OOB), PAGE + OOB) == PAGE + OOB && page(3 * 64)[0] == 0x12,
+		      "  a raw write over a marked block writes it as it is");
+		Skip_BAD_page = 1;
+		memset(back, 0, PAGE + OOB);
+		check(snand_read(back, 3L * 64 * (PAGE + OOB), PAGE + OOB) == PAGE + OOB && back[0] == 0x12,
+		      "  -k -d reads the marked block as it is");
+		Skip_BAD_page = 0;
 		ECC_fcheck = 1;
 		snand_init();
+
+		/* Ctrl+C stops -b */
+		chip(0xef, 0xaa, 0x21);
+		snand_init();
+		ms_stop = 1;
+		check(snand_bad_blocks(0, 16 * B) < 0, "-b stops on Ctrl+C");
+		ms_stop = 0;
+
+		/* the ECC does not come back on after the marks: nothing goes on until it does */
+		chip(0xef, 0xaa, 0x21);
+		snand_init();
+		page(3 * 64)[PAGE] = 0x00;
+		fail_ecc_on = 1;
+		check(spi_nand_block_marked(3) < 0, "the ECC does not come back on after the marks: the lookup fails");
+		check(snand_read(back, 0, PAGE) < 0 && snand_erase(0, B) < 0 && snand_write(big, 0, PAGE) < 0,
+		      "  read, erase and write fail while it stays off");
+		fail_ecc_on = 0;
+		check(snand_read(back, 0, PAGE) == PAGE && (feat[0xb0] & 0x10) && spi_nand_block_marked(3) == 1,
+		      "  once it is on again they go on, and the marks are read again");
 	}
 
 	if (!fail) printf("all nandsim checks passed\n");

@@ -4056,6 +4056,10 @@ SPI_NAND_FLASH_RTN_T spi_nand_erase_block ( u32 block_index)
 #define MARK_AHEAD	64		/* blocks read with one switch of the ECC */
 static u8 *_marks;
 static u32 _marks_count;
+/* the on-die ECC did not come back on after a scan of the marks: no NAND
+   operation goes on before it does (a later one in the web mode would read
+   pages as if the ECC were on) */
+static int _ecc_lost;
 
 static void spi_nand_marks_reset( void )
 {
@@ -4116,10 +4120,30 @@ static SPI_NAND_FLASH_RTN_T spi_nand_read_marks( u32 first, u32 count )
 	_current_page_num = 0xFFFFFFFF;		/* the chip's cache holds another page now */
 	if( ecc ) {
 		rtn_ecc = spi_nand_ecc_switch(1);
+		if( rtn_ecc != SPI_NAND_FLASH_RTN_NO_ERROR ) {
+			/* what was read stays unknown, and the ECC is set again first */
+			_SPI_NAND_PRINTF("\nThe on-die ECC did not come back on after the bad block marks\n");
+			for( b = first; b < first + count; b++ )
+				_marks[b] = MARK_UNKNOWN;
+			_ecc_lost = 1;
+		}
 		if( rtn_status == SPI_NAND_FLASH_RTN_NO_ERROR )
 			rtn_status = rtn_ecc;
 	}
 	return rtn_status;
+}
+
+/* Before a NAND operation: the ECC back on if a scan left it off; 0, -1 */
+static int spi_nand_ecc_restore( void )
+{
+	if( !_ecc_lost )
+		return 0;
+	if( spi_nand_ecc_switch(1) != SPI_NAND_FLASH_RTN_NO_ERROR ) {
+		_SPI_NAND_PRINTF("\nThe on-die ECC cannot be turned on again\n");
+		return -1;
+	}
+	_ecc_lost = 0;
+	return 0;
 }
 
 /* 1: the block has a factory bad mark, 0: it has none, -1: the mark did not come
@@ -4131,6 +4155,8 @@ static int spi_nand_block_marked( u32 block )
 
 	if( block >= count )
 		return 0;
+	if( spi_nand_ecc_restore() < 0 )
+		return -1;
 	if( !_marks ) {
 		_marks = calloc(count, 1);
 		if( !_marks ) {
@@ -4156,6 +4182,8 @@ int snand_bad_blocks( unsigned long addr, unsigned long len )
 	int m;
 
 	for( block = first; block < end; block++ ) {
+		if( ms_stop )		/* Ctrl+C: the blocks so far are listed */
+			return -1;
 		m = spi_nand_block_marked(block);
 		if( m < 0 )
 			return -1;
@@ -4615,9 +4643,10 @@ static SPI_NAND_FLASH_RTN_T spi_nand_write_internal( u32 dst_addr, u32 len, u32 
 		}
 
 		/* a block with a factory bad mark: -k puts the data in the next block;
-		   without -k only data of all 0xFF may go there, nothing is programmed */
+		   without -k only data of all 0xFF may go there, nothing is programmed.
+		   A raw image (-d) is the physical chip, marks and all: written as it is */
 		block = page_number / pages;
-		marked = spi_nand_block_marked(block);
+		marked = ECC_fcheck ? spi_nand_block_marked(block) : 0;
 		if( marked < 0 ) {
 			rtn_status = SPI_NAND_FLASH_RTN_IO_ERROR;
 			break;
@@ -4734,8 +4763,9 @@ static SPI_NAND_FLASH_RTN_T spi_nand_read_internal ( u32 addr, u32 len, u8 *ptr_
 
 		_SPI_NAND_DEBUG_PRINTF(SPI_NAND_FLASH_DEBUG_LEVEL_1, "spi_nand_read_internal: read_addr = 0x%x, page_number = 0x%x, data_offset = 0x%x\n", physical_read_addr, page_number, data_offset);
 
-		/* -k: a block with a factory bad mark holds none of the data */
-		if( Skip_BAD_page ) {
+		/* -k: a block with a factory bad mark holds none of the data; a raw
+		   dump (-d) is the physical chip, marks and all */
+		if( Skip_BAD_page && ECC_fcheck ) {
 			u32 block = page_number / (ptr_dev_info_t->erase_size / ptr_dev_info_t->page_size);
 			int marked = spi_nand_block_marked(block);
 
@@ -5946,6 +5976,8 @@ int snand_read(unsigned char *buf, unsigned long from, unsigned long len)
 	unsigned long retlen = 0;
 	SPI_NAND_FLASH_RTN_T status;
 
+	if( spi_nand_ecc_restore() < 0 )
+		return -1;
 	if(!nandflash_read((unsigned long)from, (unsigned long)len, &retlen, buf, &status))
 		return len;
 	return -1;
@@ -5953,6 +5985,8 @@ int snand_read(unsigned char *buf, unsigned long from, unsigned long len)
 
 int snand_erase(unsigned long offs, unsigned long len)
 {
+	if( spi_nand_ecc_restore() < 0 )
+		return -1;
 	return nandflash_erase((unsigned long)offs, (unsigned long)len);
 }
 
@@ -5960,6 +5994,8 @@ int snand_write(unsigned char *buf, unsigned long to, unsigned long len)
 {
 	unsigned long retlen = 0;
 
+	if( spi_nand_ecc_restore() < 0 )
+		return -1;
 	if(!nandflash_write((unsigned long)to, (unsigned long)len, &retlen, buf))
 		return (int)retlen;
 	return -1;
@@ -5969,6 +6005,7 @@ long snand_init(void)
 {
 	_skipped_count = 0;
 	spi_nand_marks_reset();
+	_ecc_lost = 0;			/* the detection sets the ECC again */
 	if(!nandflash_init(0)) {
 		struct SPI_NAND_FLASH_INFO_T *ptr_dev_info_t = _SPI_NAND_GET_DEVICE_INFO_PTR;
 		bsize = ptr_dev_info_t->erase_size;
