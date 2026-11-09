@@ -4,6 +4,15 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.39.0 — 2026-11-09
+
+- Web page: during a read or a write, the speed and the time left under the chip, counted by the
+  clock between two states and smoothed; it starts again with the verify.
+- Web page: the browser tab has an icon, a round lamp in the colour of the state: amber at work,
+  green when done, red on a failure or with no link, grey when idle.
+- Web page: with less motion asked for in the system (`prefers-reduced-motion`), the bar does not
+  run, it stays lit, and the lamps and buttons do not blink.
+
 ## 1.38.0 — 2026-11-08
 
 - Web page: a bar of 20 segments replaces the dial. It fills amber as the operation goes on, turns

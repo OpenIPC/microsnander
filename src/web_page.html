@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>MicroSNANDer Web</title>
+<link rel="icon" id="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='6.5' fill='%23b09873' stroke='%236e5320'/%3E%3C/svg%3E">
 <style>
 :root{--panel:#2c2119;--panel2:#3d2d22;--brass:#c9a24d;--brass2:#8c6a2a;--amber:#ffb347;--ember:#ff6a1a;--ink:#e8d9b8;--dim:#b09873;--red:#c8452c;--green:#5ad38f}
 *{box-sizing:border-box}
@@ -62,6 +63,12 @@ h1{font-size:clamp(22px,4.5vw,40px);letter-spacing:.2em;text-transform:uppercase
 .regbtns{display:flex;justify-content:flex-end;margin-top:20px}
 .regbtns .btn{min-width:240px}
 body:not(.ready) *{transition:none!important}
+/* no running light and no blinking for those who asked for less motion: the
+   display and the Busy lamp tell that the work goes on */
+@media (prefers-reduced-motion:reduce){
+.bulb.bad,.btn.danger.engaged .ind{animation:none}
+.bg.run b{animation:none;background:var(--amber);box-shadow:0 0 6px var(--amber);opacity:.5}
+}
 .foot{margin-top:0;font-family:'Courier New',monospace;font-size:11px;color:#958061;letter-spacing:.2em;text-transform:uppercase;text-align:center}
 </style>
 </head>
@@ -122,6 +129,24 @@ function meter(s){
  });
 }
 var base=location.origin;	/* without user:password@ of the address, which fetch() refuses */
+/* the tab icon: a round lamp in the colour of the state; set again only when it
+   changes. A hidden tab polls less often, so its icon lags a little */
+var icolor='';
+function icon(c){if(c===icolor)return;icolor=c;$('icon').href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='6.5' fill='%23"+c+"' stroke='%236e5320'/%3E%3C/svg%3E"}
+/* the speed from what was done between two states, by the clock (a hidden tab
+   polls less often than every 500 ms), smoothed; it starts again with each
+   operation and each phase (the verify of a write counts from 0 again) */
+var rate={};
+function speed(s){
+ var now=Date.now();
+ if(!s.busy||!s.total){rate={};return ''}
+ if(rate.seq!==s.seq||rate.phase!==s.phase||s.done<rate.d){rate={seq:s.seq,phase:s.phase,t:now,d:s.done,v:0};return ''}
+ var dt=(now-rate.t)/1000;
+ if(dt>=0.25){var v=(s.done-rate.d)/dt;rate.v=rate.v?rate.v*0.7+v*0.3:v;rate.t=now;rate.d=s.done}
+ if(!rate.v)return '';
+ var left=Math.ceil((s.total-s.done)/rate.v);
+ return '<b>SPEED</b>'+(rate.v>=1048576?(rate.v/1048576).toFixed(1)+' MB/s':(rate.v/1024).toFixed(0)+' KB/s')+' &middot; '+(left>=60?Math.floor(left/60)+' min '+left%60+' s':left+' s')+' left<br>';
+}
 function bulb(id,c){$(id).className='bulb'+(c?' '+c:'')}
 function esc(t){return String(t).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
 function size(n){return n>=1048576?(n/1048576)+' MB':n?(n/1024)+' KB':'-'}
@@ -140,9 +165,11 @@ function render(s){
  else if(s.ok===false)show('Failed','bad');
  else show('Stand by','off');
  meter(s);
+ icon(s.busy?'ffb347':s.ok===true?'5ad38f':s.ok===false?'c8452c':'b09873');
  var m='';
  if(s.programmer)m+='<b>PROGRAMMER</b>'+esc(s.programmer)+'<br>';
  if(s.chip)m+='<b>CHIP</b>'+esc(s.chip)+' &middot; '+size(s.size)+(s.voltage?' &middot; '+esc(s.voltage)+' V':'')+'<br>';
+ m+=speed(s);
  if(s.warning)m+='<span class="warn'+(s.voltage==='1.8'?' v18':'')+'">'+esc(s.warning)+'</span><br>';
  if(s.file)m+='<b>DUMP</b><a href="/dumps/'+encodeURIComponent(s.file)+'" download>'+esc(s.file)+'</a><br>';
  if(s.message)m+=esc(s.message);
@@ -162,7 +189,7 @@ function render(s){
  if(s.busy&&!timer)timer=setInterval(poll,500);
  if(!s.busy&&timer){clearInterval(timer);timer=null}
 }
-function offline(){bulb('l-link','bad');$('t-link').textContent='No link';show('Link offline','bad');$('bar').className='bg';[].forEach.call($('bar').children,function(e){e.className=''})}
+function offline(){bulb('l-link','bad');icon('c8452c');$('t-link').textContent='No link';show('Link offline','bad');$('bar').className='bg';[].forEach.call($('bar').children,function(e){e.className=''})}
 function poll(){fetch(base+'/api/state',{cache:'no-store'}).then(function(r){return r.json()}).then(render).catch(offline)}
 /* accepted(n): the operation started as number n ("Started n."); chip: the
    one confirmed for what changes it, the server refuses another one */
