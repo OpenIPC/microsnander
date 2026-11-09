@@ -335,6 +335,13 @@ int main(void)
 	check(strstr(web_page, "id=\"bar\"") && strstr(web_page, "document.title=") && !strstr(web_page, "needle"), "  the page has the bar and the state in the tab title");
 	check(strstr(web_page, "show('Link offline','bad');$('bar').className='bg';[].forEach.call($('bar').children,function(e){e.className=''})") != NULL,
 	      "  no link: the bar goes dark, it does not keep the last result");
+	check(strstr(web_page, "rel=\"icon\" id=\"icon\"") && strstr(web_page, "icon(s.busy?'ffb347':s.ok===true?'5ad38f':s.ok===false?'c8452c':'b09873')")
+	      && strstr(web_page, "function offline(){bulb('l-link','bad');icon('c8452c');"),
+	      "  the tab icon: a lamp in the colour of the state, red with no link");
+	check(strstr(web_page, "@media (prefers-reduced-motion:reduce)") && strstr(web_page, "m+=speed(s);")
+	      && strstr(web_page, "rate.seq!==s.seq||rate.phase!==s.phase){") && strstr(web_page, "dt>=0.25&&s.done>=rate.d")
+	      && strstr(web_page, "var now=performance.now();"),
+	      "  less motion: no running light; the speed starts again with each operation and phase");
 	check(strstr(web_page, ".btn:disabled.engaged{filter:none}") && strstr(web_page, "detectThen(b,function(s){if(confirm('Clear the protection"),
 	      "  the running button keeps its colour; Clear protection asks about the chip found");
 

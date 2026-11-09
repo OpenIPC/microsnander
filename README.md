@@ -377,8 +377,10 @@ The page:
   Written, Erased, Failed) with its percent, also in the title of the browser tab. The bar of 20
   segments fills amber, the verify of a write turns the same segments green, an operation with
   no percentage (Detect, Erase, Registers) runs a light, the end is all green and a failure red
-  on the segment where it stopped. Under them the programmer, the chip and its size, the last
-  dump and the last message.
+  on the segment where it stopped. Under them the programmer, the chip and its size, the speed
+  and the time left of a read or a write, the last dump and the last message. The tab icon is a
+  lamp in the colour of the state: amber at work, green when done, red on a failure or with no
+  link. With less motion asked for in the system, the bar does not run and nothing blinks.
 - **Detect**: finds the programmer and the chip, and reads the status registers.
 - **Read**: the whole chip into a file in the `-o` directory (the current one by default),
   which the browser downloads too; the link stays on the page. With `-a`/`-l` given at the
