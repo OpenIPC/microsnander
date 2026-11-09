@@ -339,7 +339,8 @@ int main(void)
 	      && strstr(web_page, "function offline(){bulb('l-link','bad');icon('c8452c');"),
 	      "  the tab icon: a lamp in the colour of the state, red with no link");
 	check(strstr(web_page, "@media (prefers-reduced-motion:reduce)") && strstr(web_page, "m+=speed(s);")
-	      && strstr(web_page, "rate.seq!==s.seq||rate.phase!==s.phase"),
+	      && strstr(web_page, "rate.seq!==s.seq||rate.phase!==s.phase){") && strstr(web_page, "dt>=0.25&&s.done>=rate.d")
+	      && strstr(web_page, "var now=performance.now();"),
 	      "  less motion: no running light; the speed starts again with each operation and phase");
 	check(strstr(web_page, ".btn:disabled.engaged{filter:none}") && strstr(web_page, "detectThen(b,function(s){if(confirm('Clear the protection"),
 	      "  the running button keeps its colour; Clear protection asks about the chip found");

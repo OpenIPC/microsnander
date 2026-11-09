@@ -135,16 +135,18 @@ var icolor='';
 function icon(c){if(c===icolor)return;icolor=c;$('icon').href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='6.5' fill='%23"+c+"' stroke='%236e5320'/%3E%3C/svg%3E"}
 /* the speed from what was done between two states, by the clock (a hidden tab
    polls less often than every 500 ms), smoothed; it starts again with each
-   operation and each phase (the verify of a write counts from 0 again) */
+   operation and each phase (the verify of a write counts from 0 again). The
+   clock is performance.now(), which a change of the system time does not move;
+   a state that comes late, with less done in the same phase, is left out */
 var rate={};
 function speed(s){
- var now=Date.now();
+ var now=performance.now();
  if(!s.busy||!s.total){rate={};return ''}
- if(rate.seq!==s.seq||rate.phase!==s.phase||s.done<rate.d){rate={seq:s.seq,phase:s.phase,t:now,d:s.done,v:0};return ''}
+ if(rate.seq!==s.seq||rate.phase!==s.phase){rate={seq:s.seq,phase:s.phase,t:now,d:s.done,v:0};return ''}
  var dt=(now-rate.t)/1000;
- if(dt>=0.25){var v=(s.done-rate.d)/dt;rate.v=rate.v?rate.v*0.7+v*0.3:v;rate.t=now;rate.d=s.done}
+ if(dt>=0.25&&s.done>=rate.d){var v=(s.done-rate.d)/dt;rate.v=rate.v?rate.v*0.7+v*0.3:v;rate.t=now;rate.d=s.done}
  if(!rate.v)return '';
- var left=Math.ceil((s.total-s.done)/rate.v);
+ var left=Math.ceil((s.total-rate.d)/rate.v);
  return '<b>SPEED</b>'+(rate.v>=1048576?(rate.v/1048576).toFixed(1)+' MB/s':(rate.v/1024).toFixed(0)+' KB/s')+' &middot; '+(left>=60?Math.floor(left/60)+' min '+left%60+' s':left+' s')+' left<br>';
 }
 function bulb(id,c){$(id).className='bulb'+(c?' '+c:'')}
