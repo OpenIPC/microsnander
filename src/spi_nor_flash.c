@@ -1291,8 +1291,9 @@ static struct chip_info *chip_sfdp(const u8 id[5])
 	return &info;
 }
 
-/* Die die selected (C2h), and the chip tells it as its active die (F8h) */
-static int snor_active_die_is(u8 die)
+/* Die die selected (C2h), then what the chip tells as its active die (F8h);
+   -1: the transfer failed */
+static int snor_active_die(u8 die)
 {
 	u8 got = 0xff;
 	int err = SPI_CONTROLLER_Chip_Select_Low();
@@ -1304,23 +1305,35 @@ static int snor_active_die_is(u8 die)
 	err |= SPI_CONTROLLER_Write_One_Byte(OPCODE_RD_DIE);
 	err |= SPI_CONTROLLER_Read_NByte(&got, 1, SPI_CONTROLLER_SPEED_SINGLE);
 	err |= SPI_CONTROLLER_Chip_Select_High();
-	return !err && got == die;
+	return err ? -1 : got;
 }
 
 /* A chip of stacked dies with the ID of a single one: the GD25S512MD, two
    GD25B256D dies, answers C8 40 19 as the GD25Q256C. Only a chip of two dies
    takes the die select (C2h) and tells the active die (F8h); a single die
    ignores both, and its data line reads the same byte for any die. The
-   entry of the dies, or one; die 0 is selected again. */
+   entry of the dies, or one; die 0 is selected again. NULL when that is not
+   sure: a failed transfer, or die 1 answered and die 0 then did not, so the
+   chip may be left on die 1, where the entry of one die would never go back. */
 static struct chip_info *snor_stacked(struct chip_info *one)
 {
 	for (unsigned i = 0; i < sizeof(chips_data) / sizeof(chips_data[0]); i++) {
 		struct chip_info *e = &chips_data[i];
 
 		if (e != one && e->dies > 1 && e->id == one->id && (e->jedec_id >> 16) == (one->jedec_id >> 16)) {
-			int two = snor_active_die_is(1);
+			int d1 = snor_active_die(1), d0 = snor_active_die(0);
 
-			return snor_active_die_is(0) && two ? e : one;
+			if (d1 < 0 || d0 < 0) {
+				printf("The die select of %s failed on USB.\n", e->name);
+				return NULL;
+			}
+			if (d1 != 1)
+				return one;
+			if (d0 != 0) {
+				printf("%s: die 1 answered, but die 0 could not be selected again (F8h: %02x).\n", e->name, d0);
+				return NULL;
+			}
+			return e;
 		}
 	}
 	return one;
@@ -1354,8 +1367,8 @@ struct chip_info *chip_prob(void)
 			if ((info->jedec_id == jedec) || ((info->jedec_id & 0xffff0000) == jedec_strip)) {
 				u8 sr,sr2,sr3=0;
 
-				if (info->dies < 2)
-					info = snor_stacked(info);
+				if (info->dies < 2 && !(info = snor_stacked(info)))
+					return NULL;
 				snor_read_sr(OPCODE_RDSR, &sr);
 
 				if (info->id == 0xc2) {	/* Macronix: one status register */

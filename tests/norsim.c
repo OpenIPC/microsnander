@@ -48,6 +48,7 @@ static long stop_reads;			/* Ctrl+C after this many bytes read */
 static long stop_pages;			/* Ctrl+C after this many pages programmed */
 static int stop_chip_erase;		/* Ctrl+C during a chip erase */
 static int die_reads = -1;
+static int stuck_die1;			/* DIES: die 0 is not selected again, F8 still says 1 */
 static int line_low;			/* a single die: the data line reads 0 for a command it does not know */
 static int nprogs;			/* page programs (02) */
 static unsigned char sfdp[256];
@@ -110,7 +111,7 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Read_NByte(u8 *d, u32 len, SPI_CONTROLLER_SP
 		}
 		case OPCODE_RDSR: d[i] = sr | (wel ? SR_WEL : 0) | (aai ? 0x40 : 0) | (busy ? SR_WIP : 0); if (busy) busy--; break;
 		case OPCODE_RDSR2: d[i] = kind == NO_SR23 || kind == QE_SR1 ? 0xff : sr2; sr2_reads++; break;
-		case OPCODE_RD_DIE: d[i] = kind == DIES ? (u8)die : line_low ? 0 : 0xff; break;	/* a single die: the line as it is */
+		case OPCODE_RD_DIE: d[i] = kind == DIES ? (die == 0 && stuck_die1 ? 1 : (u8)die) : line_low ? 0 : 0xff; break;	/* a single die: the line as it is */
 		case OPCODE_RDSR3: die_reads = die; d[i] = kind == NO_SR23 ? 0xff : kind == QE_SR1 ? 0x07 : sr3; break;	/* another register on Macronix */
 		case OPCODE_READ:
 			d[i] = mem[at(addr() + nread)];
@@ -697,6 +698,10 @@ int main(void)
 		line_low = 1;
 		check(snor_init() == 32 << 20 && !strcmp(flash_chip_name, "GD25Q256CSIG"), "  and with the data line low (F8 reads 0)");
 		line_low = 0;
+		chip(find("GD25S512MD"), DIES);
+		stuck_die1 = 1;
+		check(snor_init() < 0, "GD25S512MD: die 1 answers, die 0 is not confirmed again: not detected, not taken for one die");
+		stuck_die1 = 0;
 	}
 
 	/* pages of all 0xFF are not programmed: nothing on the chip would change */
