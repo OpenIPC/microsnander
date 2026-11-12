@@ -4,6 +4,14 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.40.0 — 2026-11-12
+
+- SPI NOR: GigaDevice GD25S512MD, two GD25B256D dies of 32 MB in one package, read, written and
+  erased as one 64 MB chip, as its datasheet says. Its dies answer with the ID of the GD25Q256C
+  (`C8 40 19`), which was detected before, with only the first die: at that ID the second die is
+  looked for now, by the die select (C2h) and the active die ID (F8h), which a single die does
+  not know.
+
 ## 1.39.0 — 2026-11-09
 
 - Web page: during a read or a write, the speed and the time left under the chip, counted by the

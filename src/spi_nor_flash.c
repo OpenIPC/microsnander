@@ -72,7 +72,8 @@
 #define OPCODE_BRWR			0x17
 #define OPCODE_RDUID			0x4B	/* W25Q: read the unique ID */
 #define OPCODE_RDSCUR_W			0x48	/* W25Q: read a security register */
-#define OPCODE_DIE_SELECT		0xC2	/* stacked dies (W25M): the active die, 0, 1 */
+#define OPCODE_DIE_SELECT		0xC2	/* stacked dies (W25M, GD25S): the active die, 0, 1 */
+#define OPCODE_RD_DIE			0xF8	/* GD25S: read the active die */
 #define OPCODE_RDSFDP			0x5A	/* read the SFDP table (JESD216) */
 
 /* Status Register bits. */
@@ -123,7 +124,7 @@ struct chip_info *spi_chip_info;
    found by it gives with its sector size */
 static u8 snor_erase_op = OPCODE_SE;
 
-/* Stacked dies (W25M512JV): each die is a chip of its own, with its own
+/* Stacked dies (W25M512JV, GD25S512MD): each die is a chip of its own, with its own
    registers and address mode; the commands go to the die selected last. */
 static int snor_die = -1;			/* the selected die; -1: not known */
 
@@ -647,6 +648,7 @@ static struct chip_info chips_data [] = {
 	{ "GD25Q128CSIG",	0xc8, 0x4018c840, 64 * 1024, 256, 0 },
 	{ "YC25Q128",		0xd8, 0x4018d840, 64 * 1024, 256, 0 },
 	{ "GD25Q256CSIG",	0xc8, 0x4019c840, 64 * 1024, 512, 1 },
+	{ "GD25S512MD",		0xc8, 0x40190000, 64 * 1024, 1024, 1, 2 },	/* two GD25B256D dies, the ID of one */
 	{ "GD25Q20C",		0xc8, 0x40120000, 64 * 1024, 4,   0 },
 	{ "GD25Q40C",		0xc8, 0x40130000, 64 * 1024, 8,   0 },
 	{ "GD25Q80C",		0xc8, 0x40140000, 64 * 1024, 16,  0 },
@@ -1289,6 +1291,41 @@ static struct chip_info *chip_sfdp(const u8 id[5])
 	return &info;
 }
 
+/* Die die selected (C2h), and the chip tells it as its active die (F8h) */
+static int snor_active_die_is(u8 die)
+{
+	u8 got = 0xff;
+	int err = SPI_CONTROLLER_Chip_Select_Low();
+
+	err |= SPI_CONTROLLER_Write_One_Byte(OPCODE_DIE_SELECT);
+	err |= SPI_CONTROLLER_Write_One_Byte(die);
+	err |= SPI_CONTROLLER_Chip_Select_High();
+	err |= SPI_CONTROLLER_Chip_Select_Low();
+	err |= SPI_CONTROLLER_Write_One_Byte(OPCODE_RD_DIE);
+	err |= SPI_CONTROLLER_Read_NByte(&got, 1, SPI_CONTROLLER_SPEED_SINGLE);
+	err |= SPI_CONTROLLER_Chip_Select_High();
+	return !err && got == die;
+}
+
+/* A chip of stacked dies with the ID of a single one: the GD25S512MD, two
+   GD25B256D dies, answers C8 40 19 as the GD25Q256C. Only a chip of two dies
+   takes the die select (C2h) and tells the active die (F8h); a single die
+   ignores both, and its data line reads the same byte for any die. The
+   entry of the dies, or one; die 0 is selected again. */
+static struct chip_info *snor_stacked(struct chip_info *one)
+{
+	for (unsigned i = 0; i < sizeof(chips_data) / sizeof(chips_data[0]); i++) {
+		struct chip_info *e = &chips_data[i];
+
+		if (e != one && e->dies > 1 && e->id == one->id && (e->jedec_id >> 16) == (one->jedec_id >> 16)) {
+			int two = snor_active_die_is(1);
+
+			return snor_active_die_is(0) && two ? e : one;
+		}
+	}
+	return one;
+}
+
 struct chip_info *chip_prob(void)
 {
 	struct chip_info *info = NULL, *match = NULL;
@@ -1316,6 +1353,9 @@ struct chip_info *chip_prob(void)
 		if (info->id == buf[0]) {
 			if ((info->jedec_id == jedec) || ((info->jedec_id & 0xffff0000) == jedec_strip)) {
 				u8 sr,sr2,sr3=0;
+
+				if (info->dies < 2)
+					info = snor_stacked(info);
 				snor_read_sr(OPCODE_RDSR, &sr);
 
 				if (info->id == 0xc2) {	/* Macronix: one status register */

@@ -8,7 +8,8 @@
    one with the quad enable bit set in its only status register, busy for a
    while after every erase and program. Chips over 16 MB: one that takes B7
    (4-byte address mode) only after a write enable, as Micron N25Q/MT25Q, one
-   that does not need it, and a W25M512JV of two dies selected with C2; a
+   that does not need it, and a W25M512JV of two dies selected with C2 (and a
+   GD25S512MD, two dies with the ID of the GD25Q256C, found by F8); a
    chip left in 3-byte mode takes the first three address bytes, so data goes
    to the wrong place, as on a real one. The driver is built into this file,
    so the checks can walk its chip table. */
@@ -47,6 +48,7 @@ static long stop_reads;			/* Ctrl+C after this many bytes read */
 static long stop_pages;			/* Ctrl+C after this many pages programmed */
 static int stop_chip_erase;		/* Ctrl+C during a chip erase */
 static int die_reads = -1;
+static int line_low;			/* a single die: the data line reads 0 for a command it does not know */
 static int nprogs;			/* page programs (02) */
 static unsigned char sfdp[256];
 static int nerase52, nerased8;		/* 32 KB and 64 KB erase commands */		/* the SFDP table the chip answers 5A with */
@@ -108,6 +110,7 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Read_NByte(u8 *d, u32 len, SPI_CONTROLLER_SP
 		}
 		case OPCODE_RDSR: d[i] = sr | (wel ? SR_WEL : 0) | (aai ? 0x40 : 0) | (busy ? SR_WIP : 0); if (busy) busy--; break;
 		case OPCODE_RDSR2: d[i] = kind == NO_SR23 || kind == QE_SR1 ? 0xff : sr2; sr2_reads++; break;
+		case OPCODE_RD_DIE: d[i] = kind == DIES ? (u8)die : line_low ? 0 : 0xff; break;	/* a single die: the line as it is */
 		case OPCODE_RDSR3: die_reads = die; d[i] = kind == NO_SR23 ? 0xff : kind == QE_SR1 ? 0x07 : sr3; break;	/* another register on Macronix */
 		case OPCODE_READ:
 			d[i] = mem[at(addr() + nread)];
@@ -318,7 +321,7 @@ int main(void)
 
 	for (int i = 0; i < n; i++) {
 		const struct chip_info *e = &chips_data[i];
-		chip(e, ORDINARY);
+		chip(e, e->dies > 1 ? DIES : ORDINARY);
 		struct chip_info *got = chip_prob();
 		if (got == e)
 			continue;
@@ -668,6 +671,32 @@ int main(void)
 		ms_stop = 0;
 		die = 1;
 		check(snor_init() == 64 << 20 && die == 0, "  a die left selected by a stopped run: die 0 again at the start");
+	}
+
+	/* GD25S512MD: two dies with the ID of the GD25Q256C (C8 40 19); only the
+	   die select (C2) and the active die (F8) tell them apart */
+	{
+		static unsigned char buf[0x1000], got[0x1000];
+		const unsigned long b = 32 << 20;
+		const struct chip_info *q = find("GD25Q256CSIG");
+
+		chip(find("GD25S512MD"), DIES);
+		id[3] = 0xc8; id[4] = 0x40;		/* the ID bytes of the GD25Q256C entry */
+		check(snor_init() == 64 << 20 && !strcmp(flash_chip_name, "GD25S512MD") && die == 0,
+		      "GD25S512MD: found by its second die, 64 MB, die 0 selected after");
+		for (unsigned i = 0; i < sizeof(buf); i++) buf[i] = (unsigned char)(i * 5 + 1);
+		memset(mem + b - 0x800, 0xff, sizeof(buf));
+		int n = snor_write(buf, b - 0x800, sizeof(buf));
+		memset(got, 0, sizeof(got));
+		check(n == (int)sizeof(buf) && snor_read(got, b - 0x800, sizeof(got)) == (int)sizeof(got) &&
+		      !memcmp(got, buf, sizeof(buf)) && !memcmp(mem + b - 0x800, buf, sizeof(buf)) && die == 0,
+		      "  a write over the boundary goes to both dies and reads back");
+		chip(q, ORDINARY);
+		check(snor_init() == 32 << 20 && !strcmp(flash_chip_name, "GD25Q256CSIG"),
+		      "GD25Q256CSIG: one die (F8 reads 0xff), still 32 MB");
+		line_low = 1;
+		check(snor_init() == 32 << 20 && !strcmp(flash_chip_name, "GD25Q256CSIG"), "  and with the data line low (F8 reads 0)");
+		line_low = 0;
 	}
 
 	/* pages of all 0xFF are not programmed: nothing on the chip would change */
