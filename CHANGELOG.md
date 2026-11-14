@@ -4,6 +4,13 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.40.1 — 2026-11-14
+
+- Web page: the footer text is lighter (`#a08a69`, the `--foot` colour), so it keeps a contrast
+  of at least 4:1 on the top of the background; the same colour as the other OpenIPC device pages.
+- Android app: the dim text (labels, the lamps and buttons that are off) is the dim colour of the
+  web page (`#b09873`), lighter than before (`#8a7455`), which was too dark on the panel.
+
 ## 1.40.0 — 2026-11-12
 
 - SPI NOR: GigaDevice GD25S512MD, two GD25B256D dies of 32 MB in one package, read, written and
