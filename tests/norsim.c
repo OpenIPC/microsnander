@@ -44,6 +44,7 @@ static unsigned char id[5];
 static unsigned char mem[64 << 20];
 static const unsigned long die_size = 32 << 20;
 static int four[2], die;		/* 4-byte address mode of each die; the selected die (DIES) */
+static int stop_wrsr;			/* Ctrl+C right after a status register write */
 static long stop_reads;			/* Ctrl+C after this many bytes read */
 static long stop_pages;			/* Ctrl+C after this many pages programmed */
 static int stop_chip_erase;		/* Ctrl+C during a chip erase */
@@ -145,6 +146,7 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Chip_Select_High(void)
 				sr2 = (cmd[2] & 0x43) | (kind == QE_FIXED ? 0x02 : 0);
 			else if (kind == OLD_WRSR)		/* older chips: one byte clears register 2 */
 				sr2 = 0;
+			if (stop_wrsr) ms_stop = 1;
 			busy = 3;
 		}
 		wel = 0;
@@ -271,7 +273,7 @@ static void chip(const struct chip_info *e, int k)
 	id[1] = e->jedec_id >> 24; id[2] = e->jedec_id >> 16; id[3] = e->jedec_id >> 8; id[4] = e->jedec_id;
 	kind = k; wel = aai = busy = busy_cmds = sr2_writes = 0;
 	sr3 = 0;
-	four[0] = four[1] = die = 0; stop_reads = stop_pages = stop_chip_erase = 0; ms_stop = 0;
+	four[0] = four[1] = die = 0; stop_reads = stop_pages = stop_chip_erase = stop_wrsr = 0; ms_stop = 0;
 	sr2 = k == QE_FIXED ? 0x02 : 0;
 	locked = k == SST26;
 	sr = k == SST26 ? 0 : 0x1c;		/* BP bits set at power-up */
@@ -511,6 +513,12 @@ int main(void)
 		check(snor_write_status(0, 0x04, 0x04) == -2 && strstr(snor_unprotect_why, "die 2 (dies 1-1 took the write)") && die == 0 && !wel,
 		      "W25M512JV: die 2 does not take it after die 1 did: which die is told");
 		ro_die1 = 0; sr = 0;
+		ms_stop = 1;
+		check(snor_write_status(0, 0x04, 0x04) == -1 && sr == 0, "  stopped before die 1: nothing written, no die named");
+		ms_stop = 0; stop_wrsr = 1;
+		check(snor_write_status(0, 0x04, 0x04) == -2 && sr == 0x04 && strstr(snor_unprotect_why, "die 2 (dies 1-1 took the write): it did not answer"),
+		      "  stopped after die 1 took it: the dies that differ are told");
+		ms_stop = 0; stop_wrsr = 0; sr = 0;
 		check(snor_write_status(0, 0x04, 0x04) == 0 && sr == 0x04 && die == 0, "  both dies take it: done, die 0 selected after");
 		sr = 0;
 		chip(find("PCT25VF016B"), SST25);

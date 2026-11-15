@@ -2293,13 +2293,15 @@ int snor_write_status(int reg, unsigned char mask, unsigned char val)
 	ws_done = 0;
 	int ret = snor_each_die(write_status);
 
-	/* no undo: tell which die stopped it, the ones before it have the bit */
-	if (ret && ws_done && snor_unprotect_why[0]) {
+	/* no undo: tell which die stopped it, the ones before it have the bit;
+	   a die that did not answer is told too, the dies differ either way */
+	if (ret && ws_done) {
 		char why[sizeof(snor_unprotect_why)];
 
-		snprintf(why, sizeof(why), "%s", snor_unprotect_why);
+		snprintf(why, sizeof(why), "%s", snor_unprotect_why[0] ? snor_unprotect_why : "it did not answer");
 		snprintf(snor_unprotect_why, sizeof(snor_unprotect_why), "die %d (dies 1-%d took the write): %.150s",
 			 ws_done + 1, ws_done, why);
+		ret = -2;
 	}
 	return ret;
 }
