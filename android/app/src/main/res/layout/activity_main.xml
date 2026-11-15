@@ -277,53 +277,52 @@
                     android:textAllCaps="false" />
             </LinearLayout>
 
-            <LinearLayout
+            <EditText
+                android:id="@+id/hex_addr"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:gravity="center_vertical"
+                android:background="@drawable/display"
+                android:digits="0123456789abcdefABCDEFxX"
+                android:fontFamily="monospace"
+                android:hint="@string/hex_hint"
+                android:imeOptions="actionGo"
+                android:importantForAutofill="no"
+                android:inputType="textNoSuggestions|textVisiblePassword"
+                android:maxLength="14"
+                android:padding="10dp"
+                android:singleLine="true"
+                android:textColor="@color/amber"
+                android:textColorHint="@color/dim"
+                android:textSize="14sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
                 android:orientation="horizontal">
 
                 <Button
                     android:id="@+id/b_hex_prev"
                     style="@style/Brass"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/hex_prev" />
-
-                <EditText
-                    android:id="@+id/hex_addr"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:layout_marginLeft="6dp"
-                    android:layout_marginRight="6dp"
-                    android:background="@drawable/display"
-                    android:digits="0123456789abcdefABCDEFxX"
-                    android:fontFamily="monospace"
-                    android:hint="@string/hex_hint"
-                    android:imeOptions="actionGo"
-                    android:importantForAutofill="no"
-                    android:inputType="textNoSuggestions|textVisiblePassword"
-                    android:maxLength="14"
-                    android:padding="10dp"
-                    android:singleLine="true"
-                    android:textColor="@color/amber"
-                    android:textColorHint="@color/dim"
-                    android:textSize="14sp" />
+                    android:text="@string/hex_prev" />
 
                 <Button
                     android:id="@+id/b_hex_go"
                     style="@style/Brass"
-                    android:layout_width="wrap_content"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
+                    android:layout_weight="1"
                     android:text="@string/hex_go" />
 
                 <Button
                     android:id="@+id/b_hex_next"
                     style="@style/Brass"
-                    android:layout_width="wrap_content"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
+                    android:layout_weight="1"
                     android:text="@string/hex_next" />
             </LinearLayout>
 

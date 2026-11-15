@@ -105,12 +105,12 @@ public class MainActivity extends Activity {
     private Button saveAs, share;
     // the hex view of the last dump: its file and the address of the page shown
     private static final int HEX_PAGE = 512;
-    private static String hexName;
+    private static String hexName;	// the dump shown: name, time and length, a rewritten one counts as new
     private static long hexOff;
     private View hexPanel;
     private TextView hexFile, hexText;
     private EditText hexAddr;
-    private Button hexPrev, hexNext;
+    private Button hexPrev, hexNext, hexGoButton;
     private Runnable afterPermission;
 
     @Override
@@ -133,12 +133,14 @@ public class MainActivity extends Activity {
         hexAddr = findViewById(R.id.hex_addr);
         hexPrev = findViewById(R.id.b_hex_prev);
         hexNext = findViewById(R.id.b_hex_next);
-        hexPrev.setOnClickListener(v -> { hexOff = Math.max(0, hexOff - HEX_PAGE); showHex(); });
-        hexNext.setOnClickListener(v -> { hexOff += HEX_PAGE; showHex(); });
-        findViewById(R.id.b_hex_go).setOnClickListener(v -> hexGo());
+        hexGoButton = findViewById(R.id.b_hex_go);
+        // not while an operation runs: it may be writing the dump shown
+        hexPrev.setOnClickListener(v -> { if (busy) return; hexOff = Math.max(0, hexOff - HEX_PAGE); showHex(); });
+        hexNext.setOnClickListener(v -> { if (busy) return; hexOff += HEX_PAGE; showHex(); });
+        hexGoButton.setOnClickListener(v -> { if (!busy) hexGo(); });
         hexAddr.setOnEditorActionListener((v, id, e) -> {
             if (id != EditorInfo.IME_ACTION_GO && e == null) return false;
-            hexGo();
+            if (!busy) hexGo();
             return true;
         });
         ((TextView) findViewById(R.id.version)).setText(getString(R.string.version, BuildConfig.VERSION_NAME));
@@ -718,7 +720,14 @@ public class MainActivity extends Activity {
         boolean dump = on && lastDump() != null;
         saveAs.setEnabled(dump);
         share.setEnabled(dump);
-        if (on) showHex();
+        hexAddr.setEnabled(on);
+        hexGoButton.setEnabled(on);
+        if (on)
+            showHex();
+        else {
+            hexPrev.setEnabled(false);
+            hexNext.setEnabled(false);
+        }
     }
 
     // ---- the hex view ----
@@ -755,14 +764,15 @@ public class MainActivity extends Activity {
             hexName = null;
             return;
         }
-        if (!f.getName().equals(hexName)) {	// another dump: from its start
-            hexName = f.getName();
+        String id = f.getName() + ':' + f.lastModified() + ':' + f.length();
+        if (!id.equals(hexName)) {	// another dump, or the same name written again: from its start
+            hexName = id;
             hexOff = 0;
         }
         long len = f.length();
         if (hexOff >= len) hexOff = Math.max(0, (len - 1) / HEX_PAGE * HEX_PAGE);
         hexPanel.setVisibility(View.VISIBLE);
-        hexFile.setText(hexName);
+        hexFile.setText(f.getName());
         byte[] b = new byte[(int) Math.min(HEX_PAGE, len - hexOff)];
         try (RandomAccessFile r = new RandomAccessFile(f, "r")) {
             r.seek(hexOff);
