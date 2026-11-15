@@ -44,6 +44,10 @@ int ms_registers(struct ms_chip *chip, char *msg, size_t n);
    and its name (no directory) goes to saved, "" when nothing is saved. */
 int ms_selftest(struct ms_chip *chip, const char *save_dir, char *saved, size_t saved_n, char *msg, size_t n);
 int ms_unprotect(struct ms_chip *chip, char *msg, size_t n);
+/* the bits mask of status register reg (0-2: SR1-SR3) set to those of val on
+   every die (each keeps its other bits), for the chip of ms_expect(); WIP and
+   WEL are the chip's, LB1-LB3 are never set */
+int ms_write_register(struct ms_chip *chip, int reg, unsigned int mask, unsigned int val, char *msg, size_t n);
 
 /* the chip (name and size of a Detect) the next operation must find, or
    it does nothing: the one the user confirmed an Erase or a Write for.

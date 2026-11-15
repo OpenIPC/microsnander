@@ -24,6 +24,11 @@ int snor_unprotect(void);	/* 0; -1: the chip does not answer; -2: a register sta
 int snor_clear_qe(void);	/* -uu: snor_unprotect(), then QE; the same results */
 extern char snor_unprotect_why[200];
 int snor_read_status(unsigned char sr[3]);
+/* the bits mask of status register reg (0-2: 1-3) set to those of val on every
+   die, its other bits kept, then read back: 0; -1 the chip does not answer; -2
+   bits stay (snor_unprotect_why); -3 not on this chip or not allowed
+   (snor_unprotect_why). WIP and WEL are kept, LB1-LB3 not set. */
+int snor_write_status(int reg, unsigned char mask, unsigned char val);
 int snor_read_status_at(unsigned long addr, unsigned char sr[3]);	/* of the die that holds addr */
 int snor_info(void);		/* -i: the read-only range and the unique ID; 0, -1 a read failed */
 long snor_security_size(void);	/* -O: bytes of the security registers; 0: none known */

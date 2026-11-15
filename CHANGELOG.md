@@ -4,6 +4,21 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.41.0 — 2026-11-15
+
+- Android app: a tap on a status register lamp flips that bit (#84). The app detects the chip, asks
+  with the bit number, the old and the new value of the register, writes it on every die and reads
+  the registers again. The lamps of WEL, BUSY (WIP), SUS, the reserved bits and the one-time LB1–LB3
+  take no tap; a lock bit (SRP0, SRP1, SRWD) or a pin bit (QE, HOLD, WPS) gets a warning first. If
+  another chip is in the programmer by then, nothing is asked: its registers are shown, and the bit
+  is tapped again.
+- SPI NOR: a write of chosen bits of one status register (1–3) on every die, each die keeping its
+  other bits, read back after: WIP and WEL stay the chip's, LB1–LB3 and the pair SRP0 + SRP1 (one-
+  time locks) are never set, Macronix takes no write of registers 2 and 3, SST25 (other bits in
+  register 1) and SST26 (block locks) none; register 2 lost by a one-byte write of register 1 on an
+  older chip is put back. A register that stays says why: SRP1 (until a power cycle), SRP0 with WP#
+  low, or a QE fixed at 1 at the factory.
+
 ## 1.40.1 — 2026-11-14
 
 - Web page: the footer text is lighter (`#a08a69`, the `--foot` colour), so it keeps a contrast

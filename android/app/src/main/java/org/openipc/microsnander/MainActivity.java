@@ -75,6 +75,10 @@ public class MainActivity extends Activity {
     };
     private static final String[] BITS_MACRONIX = {"SRWD", "QE", "BP3", "BP2", "BP1", "BP0", "WEL", "WIP"};
     private static final String PROTECTION = " SRP0 TB BP2 BP1 BP0 CMP SRP1 WPS SRWD BP3 ";
+    /** bits a tap does not change: the chip's state (WEL, BUSY, WIP, SUS), reserved, one-time (LB) */
+    private static final String FIXED = " WEL BUSY WIP SUS R LB1 LB2 LB3 ";
+    /** bits whose change needs more care: a register lock, the pins of the chip */
+    private static final String RISKY = " SRP0 SRP1 SRWD QE HOLD WPS ";
 
     // ---- the process-wide state of the operations (UI thread) ----
     private static final ExecutorService WORKER = Executors.newSingleThreadExecutor();
@@ -336,6 +340,42 @@ public class MainActivity extends Activity {
         run(R.string.unprotecting, true, (fd, vid, pid, p) -> {
             Native.expect(r.chip, r.size);
             return Native.unprotect(fd, vid, pid);
+        });
+    }
+
+    /** a tap on bit k (7 = bit 0) of status register reg: Detect, the question, then the write */
+    private void editBit(int reg, int k, String name) {
+        detectThen((a, r) -> {
+            boolean macronix = ((r.sr >> 24) & 1) != 0;
+            if (r.sr < 0 || (macronix && reg > 0)) {
+                a.state.setText(R.string.bit_cannot);
+                return;
+            }
+            // the bit of the chip there is now: another chip may have another layout
+            String now = macronix ? BITS_MACRONIX[k] : BITS[reg][k];
+            if (!now.equals(name) || FIXED.contains(" " + now + " ")) {
+                a.state.setText(R.string.bit_changed);
+                return;
+            }
+            int v = (r.sr >> (16 - 8 * reg)) & 0xff;
+            int nv = v ^ (1 << (7 - k));
+            boolean set = (nv & (1 << (7 - k))) != 0;
+            String q = a.getString(set ? R.string.bit_set_confirm : R.string.bit_clear_confirm,
+                    name, reg + 1, r.chip, sizeOf(r.size), v, nv, 7 - k);
+            if (RISKY.contains(" " + name + " "))
+                q += "\n\n" + a.getString(R.string.bit_risky);
+            new AlertDialog.Builder(a)
+                    .setMessage(q)
+                    .setPositiveButton(set ? R.string.bit_set : R.string.bit_clear, (d, w) -> a.writeRegister(r, reg, 1 << (7 - k), nv))
+                    .setNegativeButton(android.R.string.cancel, null).show();
+        });
+    }
+
+    /** the bits mask of status register reg set as in value, only if it is still the chip r found */
+    private void writeRegister(Native.Result r, int reg, int mask, int value) {
+        run(R.string.writing_register, true, (fd, vid, pid, p) -> {
+            Native.expect(r.chip, r.size);
+            return Native.writeRegister(fd, vid, pid, reg, mask, value);
         });
     }
 
@@ -742,6 +782,17 @@ public class MainActivity extends Activity {
                 b.setPadding(6, 6, 6, 6);
                 b.setTextColor(col(on ? R.color.ink_dark : R.color.dim));
                 b.setBackgroundResource(on ? (PROTECTION.contains(" " + n + " ") ? R.drawable.bit_on : R.drawable.bit_ok) : R.drawable.bit_off);
+                if (!FIXED.contains(" " + n + " ")) {
+                    final int reg = r, bit = k;
+                    b.setFocusable(true);
+                    b.setClickable(true);
+                    b.setContentDescription(getString(on ? R.string.bit_clear_hint : R.string.bit_set_hint, n, r + 1));
+                    b.setOnFocusChangeListener((view, f) -> {
+                        view.setScaleX(f ? 1.2f : 1f);
+                        view.setScaleY(f ? 1.2f : 1f);
+                    });
+                    b.setOnClickListener(view -> { if (!busy) editBit(reg, bit, n); });
+                }
                 GridLayout.LayoutParams lp = new GridLayout.LayoutParams();
                 lp.setMargins(3, 3, 3, 3);
                 regs.addView(b, lp);

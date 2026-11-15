@@ -2192,6 +2192,146 @@ static int unprotect_all(void) { return unprotect(1); }
 int snor_unprotect(void) { return snor_each_die(unprotect_all); }
 int snor_clear_qe(void) { return snor_each_die(clear_qe); }
 
+/* the register, the bits and their value of snor_write_status(), for each
+   die: each die keeps its own other bits */
+static int ws_reg, ws_done;		/* ws_done: the dies that took it */
+static u8 ws_mask, ws_val;
+
+/* bits a write cannot set: WIP and WEL of register 1 are the state of the
+   chip; LB1-LB3 of register 2 lock the security registers for good */
+#define WS_STATE	0x03
+#define WS_OTP		(SR2_LB1 | SR2_LB2 | SR2_LB3)
+
+static int write_status(void)
+{
+	static const u8 rd[3] = { OPCODE_RDSR, OPCODE_RDSR2, OPCODE_RDSR3 };
+	static const u8 wr[3] = { OPCODE_WRSR, OPCODE_WRSR2, OPCODE_WRSR3 };
+	const u8 keep = ws_reg ? 0 : WS_STATE;		/* the bits the chip sets itself */
+	u8 sr = 0, sr2 = 0xff, val;
+
+	snor_unprotect_why[0] = 0;
+	if (snor_is_sst26() || snor_is_sst25_aai() || (ws_reg && snor_is_macronix())) {
+		snprintf(snor_unprotect_why, sizeof(snor_unprotect_why),
+			 snor_is_sst26() ? "this chip keeps its protection in a block register, not in the status registers" :
+			 snor_is_sst25_aai() ? "the bits of this chip (BP3, AAI, BPL) are not the ones shown; Clear protection clears them" :
+					       "this chip has status register 1 only");
+		return -3;
+	}
+	if (snor_read_sr(rd[ws_reg], &sr) < 0)
+		return -1;
+	if (ws_reg && sr == 0xff) {		/* no such register: MISO stays high */
+		snprintf(snor_unprotect_why, sizeof(snor_unprotect_why),
+			 "this chip has no status register %d (it reads 0xff)", ws_reg + 1);
+		return -3;
+	}
+	val = (sr & ~ws_mask) | (ws_val & ws_mask);	/* this die's register, the bits asked changed */
+	if (ws_reg == 1 && !snor_is_macronix() && (val & WS_OTP & ~sr)) {
+		snprintf(snor_unprotect_why, sizeof(snor_unprotect_why),
+			 "LB1-LB3 are one-time bits: once set, the security registers stay locked for good");
+		return -3;
+	}
+	/* SRP0 and SRP1 both set: the one-time lock of the status registers on
+	   Winbond and GigaDevice parts; a write that would make that pair is refused */
+	if (ws_reg < 2 && !snor_is_macronix()) {
+		u8 other = 0;
+
+		if (snor_read_sr(ws_reg ? OPCODE_RDSR : OPCODE_RDSR2, &other) < 0)
+			return -1;
+		if (!ws_reg && other == 0xff)
+			other = 0;			/* no status register 2: no SRP1 */
+		u8 srp0 = ws_reg ? other & SR_SRWD : val & SR_SRWD;
+		u8 srp1 = ws_reg ? val & SR2_SRP1 : other & SR2_SRP1;
+		u8 was0 = ws_reg ? other & SR_SRWD : sr & SR_SRWD;
+		u8 was1 = ws_reg ? sr & SR2_SRP1 : other & SR2_SRP1;
+
+		if (srp0 && srp1 && !(was0 && was1)) {
+			snprintf(snor_unprotect_why, sizeof(snor_unprotect_why),
+				 "SRP0 and SRP1 together lock the status registers for good on many chips (one-time)");
+			return -3;
+		}
+	}
+	val = (val & ~keep) | (sr & keep);
+	if (!ws_reg && !snor_is_macronix() && !snor_is_sst25_aai() && snor_read_sr(OPCODE_RDSR2, &sr2) < 0)
+		return -1;
+	if (snor_unprotect_write(wr[ws_reg], &val) || snor_read_sr(rd[ws_reg], &sr) < 0)
+		return -1;
+	if (ws_reg == 1 && ((sr ^ val) & ~keep)) {	/* no WRSR2 on this chip, perhaps */
+		u8 sr1 = 0;
+
+		if (snor_read_sr(OPCODE_RDSR, &sr1) < 0 || snor_write_sr12(sr1, val) || snor_read_sr(rd[1], &sr) < 0)
+			return -1;
+	}
+	if (sr2 != 0xff) {
+		/* a one-byte WRSR clears register 2 on some older chips: put it back */
+		u8 now = 0;
+
+		if (snor_read_sr(OPCODE_RDSR2, &now) < 0)
+			return -1;
+		if (now != sr2 && (snor_write_sr12(sr, sr2) || snor_read_sr(OPCODE_RDSR, &sr) < 0 ||
+				   snor_read_sr(OPCODE_RDSR2, &now) < 0))
+			return -1;
+		if ((now ^ sr2) & ~SR2_SUS) {	/* SRP0 with WP# low, set by that write, may stop it */
+			snprintf(snor_unprotect_why, sizeof(snor_unprotect_why),
+				 "status register 1 is 0x%02x, but the write cleared register 2 (0x%02x, was 0x%02x) "
+				 "and it could not be put back%s", sr, now, sr2,
+				 sr & SR_SRWD ? ": SRP0 is set and the WP# pin is probably low" : "");
+			printf("Status register: %s.\n", snor_unprotect_why);
+			return -2;
+		}
+	}
+	if ((sr ^ val) & ~keep) {
+		/* why: a register lock first (SRP1 until a power cycle, SRP0 with
+		   WP# low), then a QE fixed at the factory */
+		u8 s1 = 0, s2 = 0;
+		const char *why = "the chip does not take those bits (read-only or reserved)";
+		int other = !snor_is_macronix() && !snor_is_sst25_aai();
+
+		if (snor_read_sr(OPCODE_RDSR, &s1) < 0 || (other && snor_read_sr(OPCODE_RDSR2, &s2) < 0))
+			return -1;
+		if (other && s2 != 0xff && (s2 & SR2_SRP1))
+			why = "SRP1 locks the registers until the chip is powered off and on";
+		else if ((s1 & SR_SRWD) && !snor_is_sst25_aai())
+			why = "SRP0 is set, so the WP# pin of the chip is probably low and locks the registers";
+		else if (ws_reg == 1 && other && ((sr ^ val) & ~keep) == SR2_QE && (sr & SR2_QE))
+			why = "QE stays 1: on some parts it is fixed at the factory";
+		snprintf(snor_unprotect_why, sizeof(snor_unprotect_why),
+			 "status register %d reads 0x%02x, not 0x%02x: %s", ws_reg + 1, sr, val, why);
+		printf("Status register: %s.\n", snor_unprotect_why);
+		return -2;
+	}
+	ws_done++;
+	return 0;
+}
+
+int snor_write_status(int reg, unsigned char mask, unsigned char val)
+{
+	if (reg < 0 || reg > 2)
+		return -3;
+	ws_reg = reg;
+	ws_mask = mask;
+	ws_val = val;
+	ws_done = 0;
+	int ret = snor_each_die(write_status);
+
+	/* no undo: tell which die stopped it, the ones before it have the bit;
+	   a die that did not answer is told too, the dies differ either way */
+	if (ret && ws_done >= (spi_chip_info->dies > 1 ? spi_chip_info->dies : 1)) {
+		/* every die took it: only the select of die 0 after failed */
+		snprintf(snor_unprotect_why, sizeof(snor_unprotect_why),
+			 "written on every die, but die 1 could not be selected again: press Registers");
+		ret = -2;
+	}
+	else if (ret && ws_done) {
+		char why[sizeof(snor_unprotect_why)];
+
+		snprintf(why, sizeof(why), "%s", snor_unprotect_why[0] ? snor_unprotect_why : "it did not answer");
+		snprintf(snor_unprotect_why, sizeof(snor_unprotect_why), "die %d (dies 1-%d took the write): %.150s",
+			 ws_done + 1, ws_done, why);
+		ret = -2;
+	}
+	return ret;
+}
+
 void support_snor_list(void)
 {
 	int i;

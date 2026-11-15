@@ -38,16 +38,18 @@ static int fast_clock(clockid_t id, struct timespec *t)
 unsigned int bsize;
 const char *flash_chip_name;
 
-enum { ORDINARY, SST25, SST26, NO_SR23, QE_SR1, QE_FIXED, NO_WRSR2, FOURB, FOURB_WREN, DIES };
+enum { ORDINARY, SST25, SST26, NO_SR23, QE_SR1, QE_FIXED, NO_WRSR2, FOURB, FOURB_WREN, DIES, OLD_WRSR };
 static int kind;
 static unsigned char id[5];
 static unsigned char mem[64 << 20];
 static const unsigned long die_size = 32 << 20;
 static int four[2], die;		/* 4-byte address mode of each die; the selected die (DIES) */
+static int stop_wrsr;			/* Ctrl+C right after a status register write */
 static long stop_reads;			/* Ctrl+C after this many bytes read */
 static long stop_pages;			/* Ctrl+C after this many pages programmed */
 static int stop_chip_erase;		/* Ctrl+C during a chip erase */
 static int die_reads = -1;
+static int ro_die1;			/* DIES: the status register of die 1 reads 0 and takes no write */
 static int stuck_die1;			/* DIES: die 0 is not selected again, F8 still says 1 */
 static int line_low;			/* a single die: the data line reads 0 for a command it does not know */
 static int nprogs;			/* page programs (02) */
@@ -109,7 +111,7 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Read_NByte(u8 *d, u32 len, SPI_CONTROLLER_SP
 			d[i] = a + nread < sizeof(sfdp) ? sfdp[a + nread] : 0xff;
 			break;
 		}
-		case OPCODE_RDSR: d[i] = sr | (wel ? SR_WEL : 0) | (aai ? 0x40 : 0) | (busy ? SR_WIP : 0); if (busy) busy--; break;
+		case OPCODE_RDSR: d[i] = kind == DIES && die == 1 && ro_die1 ? 0 : sr | (wel ? SR_WEL : 0) | (aai ? 0x40 : 0) | (busy ? SR_WIP : 0); if (busy) busy--; break;
 		case OPCODE_RDSR2: d[i] = kind == NO_SR23 || kind == QE_SR1 ? 0xff : sr2; sr2_reads++; break;
 		case OPCODE_RD_DIE: d[i] = kind == DIES ? (die == 0 && stuck_die1 ? 1 : (u8)die) : line_low ? 0 : 0xff; break;	/* a single die: the line as it is */
 		case OPCODE_RDSR3: die_reads = die; d[i] = kind == NO_SR23 ? 0xff : kind == QE_SR1 ? 0x07 : sr3; break;	/* another register on Macronix */
@@ -142,6 +144,9 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Chip_Select_High(void)
 			sr = (cmd[1] & (kind == QE_SR1 ? 0xfc : 0xbc));
 			if (ncmd > 2 && kind != NO_SR23)	/* the second byte goes to register 2 */
 				sr2 = (cmd[2] & 0x43) | (kind == QE_FIXED ? 0x02 : 0);
+			else if (kind == OLD_WRSR)		/* older chips: one byte clears register 2 */
+				sr2 = 0;
+			if (stop_wrsr) ms_stop = 1;
 			busy = 3;
 		}
 		wel = 0;
@@ -268,7 +273,7 @@ static void chip(const struct chip_info *e, int k)
 	id[1] = e->jedec_id >> 24; id[2] = e->jedec_id >> 16; id[3] = e->jedec_id >> 8; id[4] = e->jedec_id;
 	kind = k; wel = aai = busy = busy_cmds = sr2_writes = 0;
 	sr3 = 0;
-	four[0] = four[1] = die = 0; stop_reads = stop_pages = stop_chip_erase = 0; ms_stop = 0;
+	four[0] = four[1] = die = 0; stop_reads = stop_pages = stop_chip_erase = stop_wrsr = 0; ms_stop = 0;
 	sr2 = k == QE_FIXED ? 0x02 : 0;
 	locked = k == SST26;
 	sr = k == SST26 ? 0 : 0x1c;		/* BP bits set at power-up */
@@ -440,6 +445,95 @@ int main(void)
 		sr = 0x80; sr2 = 0x02; wp_low = 1;
 		check(snor_clear_qe() == -2 && sr2 == 0x02, "a protection that stays stops -uu before QE");
 		wp_low = 0; sr = 0;
+	}
+
+	/* a status register written bit by bit (the lamps of the Android app) */
+	{
+		chip(find("W25Q32BV"), ORDINARY);
+		snor_init();
+		sr = 0; sr2 = 0x02;
+		check(snor_write_status(0, 0xff, 0x1c) == 0 && sr == 0x1c && sr2 == 0x02 && !wel,
+		      "W25Q32BV: status register 1 written, register 2 kept, no write enable left");
+		check(snor_write_status(0, 0xff, 0x03) == 0 && sr == 0, "  WIP and WEL in the value are the chip's, not written");
+		check(snor_write_status(1, 0xff, 0x42) == 0 && sr2 == 0x42 && sr == 0, "  status register 2: CMP set, QE kept");
+		check(snor_write_status(1, 0xff, 0x4a) == -3 && sr2 == 0x42 && strstr(snor_unprotect_why, "one-time"),
+		      "  LB1 is one-time: not set");
+		check(snor_write_status(2, 0xff, 0x04) == -2 && strstr(snor_unprotect_why, "not 0x04") && !wel,
+		      "  a register that does not take the write: said, no write enable left");
+		check(snor_write_status(3, 0xff, 0) == -3, "  no status register 4");
+		sr = 0x80; sr2 = 0x02;
+		check(snor_write_status(1, 0x01, 0x01) == -3 && sr2 == 0x02 && strstr(snor_unprotect_why, "for good"),
+		      "  SRP1 with SRP0 set: the one-time lock, refused");
+		sr = 0; sr2 = 0x03;
+		check(snor_write_status(0, 0x80, 0x80) == -3 && sr == 0 && strstr(snor_unprotect_why, "for good"),
+		      "  SRP0 with SRP1 set: refused too");
+		check(snor_write_status(1, 0x01, 0) == 0 && sr2 == 0x02, "  SRP1 alone cleared");
+		sr = 0; sr2 = 0;
+		sr = 0x18;
+		check(snor_write_status(0, 0x04, 0x04) == 0 && sr == 0x1c, "  one bit (BP0) set, the other bits of this die kept");
+		check(snor_write_status(0, 0x10, 0) == 0 && sr == 0x0c, "  one bit (BP2) cleared, the others kept");
+		sr = 0;
+		sr = 0x80; wp_low = 1;
+		check(snor_write_status(0, 0xff, 0) == -2 && sr == 0x80 && strstr(snor_unprotect_why, "WP#"),
+		      "  SRP0 with WP# low: the register stays, and that is told");
+		wp_low = 0; sr = 0;
+		chip(find("W25Q32BV"), NO_WRSR2);
+		snor_init();
+		sr = 0x1c; sr2 = 0;
+		check(snor_write_status(1, 0xff, 0x02) == 0 && sr2 == 0x02 && sr == 0x1c && !wel,
+		      "a chip that does not know WRSR2: register 2 goes with the two-byte WRSR");
+		chip(find("W25Q128BV"), QE_FIXED);
+		snor_init();
+		sr = 0; sr2 = 0x02;
+		check(snor_write_status(1, 0xff, 0) == -2 && sr2 == 0x02 && strstr(snor_unprotect_why, "fixed at the factory") && !wel,
+		      "W25Q128BV with QE fixed at 1: QE stays, and that is told");
+		chip(find("W25Q32BV"), ORDINARY);
+		snor_init();
+		sr = 0x80; sr2 = 0x02; wp_low = 1;
+		check(snor_write_status(2, 0xff, 0x04) == -2 && strstr(snor_unprotect_why, "WP#"),
+		      "  SRP0 with WP# low is named for a register 3 that stays too");
+		wp_low = 0; sr = 0;
+		chip(find("MX25L3205D"), QE_SR1);
+		snor_init();
+		sr = 0; sr2 = 0x02;
+		check(snor_write_status(0, 0xff, 0x40) == 0 && sr == 0x40, "MX25L3205D: QE set in status register 1");
+		check(snor_write_status(1, 0xff, 0) == -3 && strstr(snor_unprotect_why, "register 1 only"), "  no write of register 2");
+		chip(find("XM25QH64A"), NO_SR23);
+		snor_init();
+		sr = 0;
+		check(snor_write_status(1, 0xff, 0) == -3 && strstr(snor_unprotect_why, "no status register 2") && !wel,
+		      "XM25QH64A without status register 2: told, nothing written");
+		chip(find("SST26VF016B"), SST26);
+		snor_init();
+		check(snor_write_status(0, 0xff, 0) == -3, "SST26: its protection is not in the status registers");
+		chip(find("W25Q32BV"), OLD_WRSR);
+		snor_init();
+		sr = 0; sr2 = 0x02;
+		check(snor_write_status(0, 0x04, 0x04) == 0 && sr == 0x04 && sr2 == 0x02 && !wel,
+		      "an older chip whose one-byte WRSR clears register 2: register 2 put back");
+		sr = 0; sr2 = 0x02; wp_low = 1;
+		check(snor_write_status(0, 0x80, 0x80) == -2 && sr == 0x80 && sr2 == 0 && strstr(snor_unprotect_why, "could not be put back") && !wel,
+		      "  SRP0 set with WP# low stops that: told, not a success");
+		wp_low = 0; sr = 0; sr2 = 0;
+		chip(find("W25M512JV"), DIES);
+		snor_init();
+		sr = 0; ro_die1 = 1;
+		check(snor_write_status(0, 0x04, 0x04) == -2 && strstr(snor_unprotect_why, "die 2 (dies 1-1 took the write)") && die == 0 && !wel,
+		      "W25M512JV: die 2 does not take it after die 1 did: which die is told");
+		ro_die1 = 0; sr = 0;
+		ms_stop = 1;
+		check(snor_write_status(0, 0x04, 0x04) == -1 && sr == 0, "  stopped before die 1: nothing written, no die named");
+		ms_stop = 0; stop_wrsr = 1;
+		check(snor_write_status(0, 0x04, 0x04) == -2 && sr == 0x04 && strstr(snor_unprotect_why, "die 2 (dies 1-1 took the write): it did not answer"),
+		      "  stopped after die 1 took it: the dies that differ are told");
+		ms_stop = 0; stop_wrsr = 0; sr = 0;
+		check(snor_write_status(0, 0x04, 0x04) == 0 && sr == 0x04 && die == 0, "  both dies take it: done, die 0 selected after");
+		sr = 0;
+		chip(find("PCT25VF016B"), SST25);
+		snor_init();
+		check(snor_write_status(0, 0x04, 0x04) == -3 && strstr(snor_unprotect_why, "not the ones shown") && !wel,
+		      "SST25: its bits are not the lamps shown, no write");
+		sr = 0; sr2 = 0;
 	}
 
 	/* SRP0 alone, no BP: unprotect clears it too (it used to be left, and

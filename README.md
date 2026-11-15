@@ -476,6 +476,9 @@ with the remote).
   then verifies it; the file is read in parts, not held in memory. **Erase** erases the whole chip.
 - **Registers** and **Clear protection** as in the web mode (SPI NOR through the CH341A or the
   CH347), and **Self-test** (`-t` on the first block, after Detect and a question).
+- A tap on a register lamp flips that bit: Detect, a question with the old and the new value,
+  the write on every die, then the registers read again. WEL, BUSY (WIP) and SUS are the state of
+  the chip, R bits are reserved and LB1–LB3 are one-time locks: those lamps take no tap.
 - The app runs the same C code as microsnander (`src/`), built with the NDK, on the device the
   Android USB manager opened (its file descriptor, through the usbfs code, no libusb). The signed APK is in the release:
   `microsnander-android.apk` in [latest](https://github.com/OpenIPC/microsnander/releases/latest).
