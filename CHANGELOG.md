@@ -4,6 +4,14 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.41.1 — 2026-11-16
+
+- Web mode: a file to write that stops coming (no data for 30 s, or the connection closed) is a
+  failed Write in the state, with how much came: "The file stopped coming after N of M bytes …:
+  nothing was written. Press Write again." Before, the connection was dropped without a word and
+  the page kept showing the last result. After a timeout the browser gets 408, and the page itself
+  says the file did not reach the programmer.
+
 ## 1.41.0 — 2026-11-15
 
 - Android app: a tap on a status register lamp flips that bit (#84). The app detects the chip, asks

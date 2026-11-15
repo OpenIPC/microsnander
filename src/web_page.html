@@ -204,7 +204,10 @@ function run(op,body,btn,accepted,chip){
    if(!r.ok){$('log').textContent='> '+op+': '+t;return}
    $('log').innerHTML='&nbsp;';poll();if(!timer)timer=setInterval(poll,500);var n=parseInt(t.split(' ')[1],10);seen=n;if(accepted)accepted(n);	/* this page's own operation sets it */
   });
- }).catch(offline);
+ }).catch(function(){
+  /* a file that stopped coming: the server tells it in the state, if it is there */
+  if(body){$('log').textContent='> '+op+': the file did not reach the programmer, nothing was written';poll()}else offline();
+ });
 }
 $('b-detect').onclick=function(){run('detect',null,this)};
 $('b-read').onclick=function(){run('read',null,this)};
