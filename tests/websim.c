@@ -132,7 +132,8 @@ int main(void)
 	      "GET / gives the page");
 	check(strstr(body_of(), "if(s.seq<seen&&s.seq!==0)return") != NULL, "  an older state does not replace a newer one on the page");
 	check(strstr(body_of(), "id=\"hexpanel\"") && strstr(body_of(), "Range:'bytes='+a+'-'+(a+HXP-1)") &&
-	      strstr(body_of(), "if(s.file&&!s.busy)hexOpen(s.file)") && strstr(body_of(), "if(my===hx.req)hexDraw("),
+	      strstr(body_of(), "if(s.file&&!s.busy)hexOpen(s.file)") && strstr(body_of(), "if(my===hx.req)hexDraw(") &&
+	      strstr(body_of(), "[0-9a-f]{1,12}$/i") && strstr(body_of(), "if(hx.size&&n>=hx.size)"),
 	      "  the hex view of the last dump, read with Range, only the last answer shown");
 	check(strstr(body_of(), "function detectThen") && strstr(body_of(), "(o==='erase'||o==='write'||o==='selftest'||o==='unprotect')&&!s.chip"),
 	      "  Erase and Write wait for a chip: off without one, a Detect before the question");
@@ -232,6 +233,9 @@ int main(void)
 		snprintf(hdr, sizeof(hdr), "Host: 127.0.0.1:8080\r\n%s", want);
 		extra = hdr;
 		check(request("GET", path, NULL, NULL, 0) == 416 && strstr(resp, "Content-Range: bytes */"), "  from past the end: 416");
+		extra = "Host: 127.0.0.1:8080\r\nRange:\tbytes=16-31 \r\n";
+		check(request("GET", path, NULL, NULL, 0) == 206 && nresp - (body_of() - resp) == 16 && !memcmp(body_of(), mem + 16, 16),
+		      "  a tab before the range and a space after it: still that part");
 		extra = "Host: 127.0.0.1:8080\r\nRange: bytes=0-15\r\nRange: bytes=32-47\r\n";
 		check(request("GET", path, NULL, NULL, 0) == 200 && nresp - (body_of() - resp) == SIM_SIZE,
 		      "  two Range headers: the whole dump");

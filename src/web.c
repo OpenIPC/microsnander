@@ -499,7 +499,7 @@ static int dump_range(const char *range, long long size, long long *from, long l
 	if (!range)
 		return 0;
 	range += 2 + 6;				/* "\r\nRange:" */
-	while (*range == ' ')
+	while (*range == ' ' || *range == '\t')
 		range++;
 	if (strncmp(range, "bytes=", 6) || range[6] < '0' || range[6] > '9')
 		return 0;			/* no unit we know, or a suffix range: the whole file */
@@ -508,6 +508,8 @@ static int dump_range(const char *range, long long size, long long *from, long l
 		return 0;
 	if (*e >= '0' && *e <= '9')
 		b = strtoll(e, &e, 10);
+	while (*e == ' ' || *e == '\t')
+		e++;
 	if (*e != '\r' || (b >= 0 && b < a))
 		return 0;			/* several ranges or a bad one: the whole file */
 	if (a >= size)

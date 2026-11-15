@@ -213,7 +213,7 @@ function hexOpen(f){if(f===hx.file)return;hx.file=f;hx.off=0;hx.size=0;$('hexfil
 function hexLoad(){
  var a=hx.off,my=++hx.req;	/* only the last request is shown: an older answer is dropped */
  fetch(base+'/dumps/'+encodeURIComponent(hx.file),{headers:{Range:'bytes='+a+'-'+(a+HXP-1)},cache:'no-store'}).then(function(r){
-  if(r.status===416)throw 'Past the end of the dump ('+size(hx.size)+').';
+  if(r.status===416){hx.off=0;throw 'Past the end of the dump: press Go for an address inside it.'}
   if(r.status!==206)throw 'The dump cannot be read here.';
   var cr=r.headers.get('Content-Range');if(cr)hx.size=parseInt(cr.split('/')[1],10);
   return r.arrayBuffer();
@@ -233,7 +233,8 @@ function hexDraw(u,a){
  $('hex').innerHTML=h||'Empty.';$('h-addr').value='0x'+h2(a,1);
  $('h-prev').disabled=a===0;$('h-next').disabled=a+HXP>=hx.size;
 }
-function hexGo(){var v=$('h-addr').value.trim().replace(/^0x/i,''),n=parseInt(v,16);if(!/^[0-9a-f]+$/i.test(v)||isNaN(n)){$('hex').textContent='An address in hex, as 0x1F000.';return}hx.off=Math.floor(n/16)*16;hexLoad()}
+/* an address inside the dump only: past its end, or too big for a number, nothing is asked */
+function hexGo(){var v=$('h-addr').value.trim().replace(/^0x/i,''),n=parseInt(v,16);if(!/^[0-9a-f]{1,12}$/i.test(v)||isNaN(n)){$('hex').textContent='An address in hex, as 0x1F000.';return}if(hx.size&&n>=hx.size){$('hex').textContent='Past the end of the dump ('+size(hx.size)+'): the last address is 0x'+h2(hx.size-1,1)+'.';return}hx.off=Math.floor(n/16)*16;hexLoad()}
 $('h-prev').onclick=function(){hx.off=Math.max(0,hx.off-HXP);hexLoad()};
 $('h-next').onclick=function(){if(hx.off+HXP<hx.size){hx.off+=HXP;hexLoad()}};
 $('h-go').onclick=hexGo;
