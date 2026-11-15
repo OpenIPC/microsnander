@@ -10,10 +10,14 @@ from every push to `main`; this file is the change history.
   asks with the old and the new value of the register, writes it on every die and reads the
   registers again. The lamps of WEL, BUSY (WIP), SUS, the reserved bits and the one-time LB1–LB3
   take no tap; a lock bit (SRP0, SRP1, SRWD) or a pin bit (QE, HOLD, WPS) gets a warning first.
+  If another chip is in the programmer by then, nothing is asked: its registers are shown, and
+  the bit is tapped again.
 - SPI NOR: a status register write of one register (1–3) on every die, read back after: WIP and
   WEL stay the chip's, LB1–LB3 are never set, a chip with status register 1 only (Macronix, SST25)
   or with block locks (SST26) takes no write of the others; register 2 lost by a one-byte write
   of register 1 on an older chip is put back.
+  A register that stays says why: SRP1 (until a power cycle), SRP0 with WP# low, or a QE fixed
+  at 1 at the factory.
 
 ## 1.40.1 — 2026-11-14
 

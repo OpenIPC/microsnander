@@ -2248,11 +2248,22 @@ static int write_status(void)
 			return -1;
 	}
 	if ((sr ^ val) & ~keep) {
+		/* why: a register lock first (SRP1 until a power cycle, SRP0 with
+		   WP# low), then a QE fixed at the factory */
+		u8 s1 = 0, s2 = 0;
+		const char *why = "the chip does not take those bits (read-only or reserved)";
+		int other = !snor_is_macronix() && !snor_is_sst25_aai();
+
+		if (snor_read_sr(OPCODE_RDSR, &s1) < 0 || (other && snor_read_sr(OPCODE_RDSR2, &s2) < 0))
+			return -1;
+		if (other && s2 != 0xff && (s2 & SR2_SRP1))
+			why = "SRP1 locks the registers until the chip is powered off and on";
+		else if ((s1 & SR_SRWD) && !snor_is_sst25_aai())
+			why = "SRP0 is set, so the WP# pin of the chip is probably low and locks the registers";
+		else if (ws_reg == 1 && other && ((sr ^ val) & ~keep) == SR2_QE && (sr & SR2_QE))
+			why = "QE stays 1: on some parts it is fixed at the factory";
 		snprintf(snor_unprotect_why, sizeof(snor_unprotect_why),
-			 "status register %d reads 0x%02x, not 0x%02x: %s", ws_reg + 1, sr, val,
-			 ws_reg == 0 && (sr & SR_SRWD) && !snor_is_sst25_aai() ?
-				"SRP0 is set, so the WP# pin of the chip is probably low and locks the register" :
-				"the chip does not take those bits (read-only or reserved)");
+			 "status register %d reads 0x%02x, not 0x%02x: %s", ws_reg + 1, sr, val, why);
 		printf("Status register: %s.\n", snor_unprotect_why);
 		return -2;
 	}

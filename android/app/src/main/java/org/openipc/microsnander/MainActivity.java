@@ -351,6 +351,12 @@ public class MainActivity extends Activity {
                 a.state.setText(R.string.bit_cannot);
                 return;
             }
+            // the bit of the chip there is now: another chip may have another layout
+            String now = macronix ? BITS_MACRONIX[k] : BITS[reg][k];
+            if (!now.equals(name) || FIXED.contains(" " + now + " ")) {
+                a.state.setText(R.string.bit_changed);
+                return;
+            }
             int v = (r.sr >> (16 - 8 * reg)) & 0xff;
             int nv = v ^ (1 << (7 - k));
             boolean set = (nv & (1 << (7 - k))) != 0;

@@ -465,6 +465,17 @@ int main(void)
 		sr = 0x1c; sr2 = 0;
 		check(snor_write_status(1, 0x02) == 0 && sr2 == 0x02 && sr == 0x1c && !wel,
 		      "a chip that does not know WRSR2: register 2 goes with the two-byte WRSR");
+		chip(find("W25Q128BV"), QE_FIXED);
+		snor_init();
+		sr = 0; sr2 = 0x02;
+		check(snor_write_status(1, 0) == -2 && sr2 == 0x02 && strstr(snor_unprotect_why, "fixed at the factory") && !wel,
+		      "W25Q128BV with QE fixed at 1: QE stays, and that is told");
+		chip(find("W25Q32BV"), ORDINARY);
+		snor_init();
+		sr = 0x80; sr2 = 0x02; wp_low = 1;
+		check(snor_write_status(2, 0x04) == -2 && strstr(snor_unprotect_why, "WP#"),
+		      "  SRP0 with WP# low is named for a register 3 that stays too");
+		wp_low = 0; sr = 0;
 		chip(find("MX25L3205D"), QE_SR1);
 		snor_init();
 		sr = 0; sr2 = 0x02;
