@@ -302,8 +302,8 @@ int main(void)
 	      strstr(body_of(), "nothing was written"),
 	      "  the state says it, as a failed Write, for the page");
 	request("GET", "/", NULL, NULL, 0);
-	check(strstr(body_of(), "the link broke while the file was sent: see the state") && strstr(body_of(), "if(!r.ok){lastOp='';") && strstr(body_of(), "if(r.status===408)poll();return}"),
-	      "  and the page tells it when its upload breaks, reads the state after a 408, forgets a refused operation");
+	check(strstr(body_of(), "the link broke while the file was sent: see the state") && strstr(body_of(), "if(r.status===408)poll();return}") && strstr(body_of(), "if(++k<20)setTimeout(again,2000)"),
+	      "  and the page tells it when its upload breaks, reads the state after a 408, and for 40 s after a broken upload");
 	st.uploading = 1;				/* another upload is coming in */
 	check(request("POST", "/api/write", NULL, img, sizeof(img)) == 409, "  a second upload at the same time: 409, before it takes space");
 	check(request("POST", "/api/erase", NULL, NULL, 0) == 409, "  an erase while a file is coming in: 409");

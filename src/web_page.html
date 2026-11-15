@@ -201,13 +201,14 @@ function run(op,body,btn,accepted,chip){
  var h={'X-MicroSNANDer':'1'};if(chip)h['X-MicroSNANDer-Chip']=chip.chip+';'+chip.size;
  fetch(base+'/api/'+op,{method:'POST',headers:h,body:body||''}).then(function(r){
   return r.text().then(function(t){
-   /* refused: not this page's operation; a 408 (the file stopped coming) is in the state */
-   if(!r.ok){lastOp='';$('log').textContent='> '+op+': '+t;if(r.status===408)poll();return}
+   /* a 408 (the file stopped coming) is in the state */
+   if(!r.ok){$('log').textContent='> '+op+': '+t;if(r.status===408)poll();return}
    $('log').innerHTML='&nbsp;';poll();if(!timer)timer=setInterval(poll,500);var n=parseInt(t.split(' ')[1],10);seen=n;if(accepted)accepted(n);	/* this page's own operation sets it */
   });
  }).catch(function(){
   /* the link broke during the upload: whether the write started, only the state says */
-  if(body){$('log').textContent='> '+op+': the link broke while the file was sent: see the state';poll()}else offline();
+  /* the server may still wait for the file (up to 30 s): read the state for a while */
+  if(body){$('log').textContent='> '+op+': the link broke while the file was sent: see the state';var k=0;(function again(){poll();if(++k<20)setTimeout(again,2000)})()}else offline();
  });
 }
 $('b-detect').onclick=function(){run('detect',null,this)};
