@@ -342,6 +342,9 @@ microsnander -P ch347 -W 8080 -o /srv/dumps
   CH341A 或 CH347 操作 SPI NOR；EZP 编程器无法读取寄存器。
 - **Self-test**：对第一个块执行 `-t`（见[用法](#用法)）：先 Detect，再弹出写明所找到芯片的确认；结果
   （`OK`、`PROTECTED`、`FAILED`）和保护状态显示在消息中。无法写回的块保存到 `-o` 目录。
+- **Hex view**：最近一次的转储，每页 512 字节：地址、字节和 ASCII，每行 16 字节（00 和 FF 显示为暗色），
+  Prev 和 Next 翻页，Go 跳转到十六进制地址。页面只读取文件的这一部分（对 `/dumps/<文件>` 使用 `Range`），
+  因此任何大小的转储都能立即打开。
 
 文件名：`flash-YYYYMMDDHHMM-芯片.bin`，使用运行服务的机器的本地时间，例如
 `flash-202611031706-W25Q128BV.bin`。使用 `-a`/`-l` 时会加上区域：
