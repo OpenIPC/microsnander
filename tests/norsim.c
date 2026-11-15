@@ -48,6 +48,7 @@ static long stop_reads;			/* Ctrl+C after this many bytes read */
 static long stop_pages;			/* Ctrl+C after this many pages programmed */
 static int stop_chip_erase;		/* Ctrl+C during a chip erase */
 static int die_reads = -1;
+static int ro_die1;			/* DIES: the status register of die 1 reads 0 and takes no write */
 static int stuck_die1;			/* DIES: die 0 is not selected again, F8 still says 1 */
 static int line_low;			/* a single die: the data line reads 0 for a command it does not know */
 static int nprogs;			/* page programs (02) */
@@ -109,7 +110,7 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Read_NByte(u8 *d, u32 len, SPI_CONTROLLER_SP
 			d[i] = a + nread < sizeof(sfdp) ? sfdp[a + nread] : 0xff;
 			break;
 		}
-		case OPCODE_RDSR: d[i] = sr | (wel ? SR_WEL : 0) | (aai ? 0x40 : 0) | (busy ? SR_WIP : 0); if (busy) busy--; break;
+		case OPCODE_RDSR: d[i] = kind == DIES && die == 1 && ro_die1 ? 0 : sr | (wel ? SR_WEL : 0) | (aai ? 0x40 : 0) | (busy ? SR_WIP : 0); if (busy) busy--; break;
 		case OPCODE_RDSR2: d[i] = kind == NO_SR23 || kind == QE_SR1 ? 0xff : sr2; sr2_reads++; break;
 		case OPCODE_RD_DIE: d[i] = kind == DIES ? (die == 0 && stuck_die1 ? 1 : (u8)die) : line_low ? 0 : 0xff; break;	/* a single die: the line as it is */
 		case OPCODE_RDSR3: die_reads = die; d[i] = kind == NO_SR23 ? 0xff : kind == QE_SR1 ? 0x07 : sr3; break;	/* another register on Macronix */
@@ -504,6 +505,14 @@ int main(void)
 		check(snor_write_status(0, 0x80, 0x80) == -2 && sr == 0x80 && sr2 == 0 && strstr(snor_unprotect_why, "could not be put back") && !wel,
 		      "  SRP0 set with WP# low stops that: told, not a success");
 		wp_low = 0; sr = 0; sr2 = 0;
+		chip(find("W25M512JV"), DIES);
+		snor_init();
+		sr = 0; ro_die1 = 1;
+		check(snor_write_status(0, 0x04, 0x04) == -2 && strstr(snor_unprotect_why, "die 2 (dies 1-1 took the write)") && die == 0 && !wel,
+		      "W25M512JV: die 2 does not take it after die 1 did: which die is told");
+		ro_die1 = 0; sr = 0;
+		check(snor_write_status(0, 0x04, 0x04) == 0 && sr == 0x04 && die == 0, "  both dies take it: done, die 0 selected after");
+		sr = 0;
 		chip(find("PCT25VF016B"), SST25);
 		snor_init();
 		check(snor_write_status(0, 0x04, 0x04) == -3 && strstr(snor_unprotect_why, "not the ones shown") && !wel,

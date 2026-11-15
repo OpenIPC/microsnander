@@ -2194,7 +2194,7 @@ int snor_clear_qe(void) { return snor_each_die(clear_qe); }
 
 /* the register, the bits and their value of snor_write_status(), for each
    die: each die keeps its own other bits */
-static int ws_reg;
+static int ws_reg, ws_done;		/* ws_done: the dies that took it */
 static u8 ws_mask, ws_val;
 
 /* bits a write cannot set: WIP and WEL of register 1 are the state of the
@@ -2279,6 +2279,7 @@ static int write_status(void)
 		printf("Status register: %s.\n", snor_unprotect_why);
 		return -2;
 	}
+	ws_done++;
 	return 0;
 }
 
@@ -2289,7 +2290,18 @@ int snor_write_status(int reg, unsigned char mask, unsigned char val)
 	ws_reg = reg;
 	ws_mask = mask;
 	ws_val = val;
-	return snor_each_die(write_status);
+	ws_done = 0;
+	int ret = snor_each_die(write_status);
+
+	/* no undo: tell which die stopped it, the ones before it have the bit */
+	if (ret && ws_done && snor_unprotect_why[0]) {
+		char why[sizeof(snor_unprotect_why)];
+
+		snprintf(why, sizeof(why), "%s", snor_unprotect_why);
+		snprintf(snor_unprotect_why, sizeof(snor_unprotect_why), "die %d (dies 1-%d took the write): %.150s",
+			 ws_done + 1, ws_done, why);
+	}
+	return ret;
 }
 
 void support_snor_list(void)
