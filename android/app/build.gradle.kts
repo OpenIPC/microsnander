@@ -31,9 +31,14 @@ android {
         versionName = msVersion
         // phones and TV boxes (32-bit ARM too) (#89). -PmicrosnanderAbis=armeabi-v7a
         // for one ABI only, add x86_64 for an x86_64 emulator.
-        val abis = (project.findProperty("microsnanderAbis") as String?)
-            ?: "arm64-v8a,armeabi-v7a"
-        ndk { abiFilters += abis.split(",").map { it.trim() } }
+        // An empty list would leave abiFilters unset, i.e. every ABI of the NDK (#92)
+        val abis = ((project.findProperty("microsnanderAbis") as String?) ?: "arm64-v8a,armeabi-v7a")
+            .split(",").map { it.trim() }.filter { it.isNotEmpty() }
+        val knownAbis = setOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
+        require(abis.isNotEmpty() && abis.all { it in knownAbis }) {
+            "-PmicrosnanderAbis=${abis.joinToString(",")}: one or more of ${knownAbis.joinToString(",")}"
+        }
+        ndk { abiFilters += abis }
         resourceConfigurations += listOf("en", "ru", "zh-rCN")
     }
     signingConfigs {
