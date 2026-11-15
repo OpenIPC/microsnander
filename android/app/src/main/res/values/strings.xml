@@ -58,7 +58,7 @@
     <string name="bit_clear_hint">%1$s of SR%2$d is set: tap to clear it</string>
     <string name="bit_set_confirm">Set bit %7$d (%1$s) in status register %2$d of the %3$s (%4$s)? SR%2$d: %5$02X → %6$02X.</string>
     <string name="bit_clear_confirm">Clear bit %7$d (%1$s) in status register %2$d of the %3$s (%4$s)? SR%2$d: %5$02X → %6$02X.</string>
-    <string name="bit_risky">SRP0, SRP1 and SRWD lock the registers (with the WP# pin low, or until the chip is powered off). QE, HOLD and WPS change what the pins of the chip do: a board may not boot from it until they are set back.</string>
+    <string name="bit_risky">SRP0, SRP1 and SRWD lock the registers (with the WP# pin low, or until the chip is powered off); SRP0 and SRP1 together would lock them for good and are refused. QE, HOLD and WPS change what the pins of the chip do: a board may not boot from it until they are set back.</string>
     <string name="bit_changed">Another chip is in the programmer: its registers are shown now, tap the bit again.</string>
     <string name="bit_cannot">This chip has no such status register to write.</string>
 </resources>

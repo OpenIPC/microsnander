@@ -461,6 +461,14 @@ int main(void)
 		check(snor_write_status(2, 0xff, 0x04) == -2 && strstr(snor_unprotect_why, "not 0x04") && !wel,
 		      "  a register that does not take the write: said, no write enable left");
 		check(snor_write_status(3, 0xff, 0) == -3, "  no status register 4");
+		sr = 0x80; sr2 = 0x02;
+		check(snor_write_status(1, 0x01, 0x01) == -3 && sr2 == 0x02 && strstr(snor_unprotect_why, "for good"),
+		      "  SRP1 with SRP0 set: the one-time lock, refused");
+		sr = 0; sr2 = 0x03;
+		check(snor_write_status(0, 0x80, 0x80) == -3 && sr == 0 && strstr(snor_unprotect_why, "for good"),
+		      "  SRP0 with SRP1 set: refused too");
+		check(snor_write_status(1, 0x01, 0) == 0 && sr2 == 0x02, "  SRP1 alone cleared");
+		sr = 0; sr2 = 0;
 		sr = 0x18;
 		check(snor_write_status(0, 0x04, 0x04) == 0 && sr == 0x1c, "  one bit (BP0) set, the other bits of this die kept");
 		check(snor_write_status(0, 0x10, 0) == 0 && sr == 0x0c, "  one bit (BP2) cleared, the others kept");

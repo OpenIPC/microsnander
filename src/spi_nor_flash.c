@@ -2230,6 +2230,26 @@ static int write_status(void)
 			 "LB1-LB3 are one-time bits: once set, the security registers stay locked for good");
 		return -3;
 	}
+	/* SRP0 and SRP1 both set: the one-time lock of the status registers on
+	   Winbond and GigaDevice parts; a write that would make that pair is refused */
+	if (ws_reg < 2 && !snor_is_macronix()) {
+		u8 other = 0;
+
+		if (snor_read_sr(ws_reg ? OPCODE_RDSR : OPCODE_RDSR2, &other) < 0)
+			return -1;
+		if (!ws_reg && other == 0xff)
+			other = 0;			/* no status register 2: no SRP1 */
+		u8 srp0 = ws_reg ? other & SR_SRWD : val & SR_SRWD;
+		u8 srp1 = ws_reg ? val & SR2_SRP1 : other & SR2_SRP1;
+		u8 was0 = ws_reg ? other & SR_SRWD : sr & SR_SRWD;
+		u8 was1 = ws_reg ? sr & SR2_SRP1 : other & SR2_SRP1;
+
+		if (srp0 && srp1 && !(was0 && was1)) {
+			snprintf(snor_unprotect_why, sizeof(snor_unprotect_why),
+				 "SRP0 and SRP1 together lock the status registers for good on many chips (one-time)");
+			return -3;
+		}
+	}
 	val = (val & ~keep) | (sr & keep);
 	if (!ws_reg && !snor_is_macronix() && !snor_is_sst25_aai() && snor_read_sr(OPCODE_RDSR2, &sr2) < 0)
 		return -1;
@@ -2295,7 +2315,13 @@ int snor_write_status(int reg, unsigned char mask, unsigned char val)
 
 	/* no undo: tell which die stopped it, the ones before it have the bit;
 	   a die that did not answer is told too, the dies differ either way */
-	if (ret && ws_done) {
+	if (ret && ws_done >= (spi_chip_info->dies > 1 ? spi_chip_info->dies : 1)) {
+		/* every die took it: only the select of die 0 after failed */
+		snprintf(snor_unprotect_why, sizeof(snor_unprotect_why),
+			 "written on every die, but die 1 could not be selected again: press Registers");
+		ret = -2;
+	}
+	else if (ret && ws_done) {
 		char why[sizeof(snor_unprotect_why)];
 
 		snprintf(why, sizeof(why), "%s", snor_unprotect_why[0] ? snor_unprotect_why : "it did not answer");
