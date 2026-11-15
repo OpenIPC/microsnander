@@ -397,6 +397,9 @@ The page:
 - **Self-test**: `-t` on the first block (see [Usage](#usage)) — Detect first, then the
   question naming the chip found; the verdict (`OK`, `PROTECTED`, `FAILED`) and the protection
   are the message. A block that does not come back is saved in the `-o` directory.
+- **Hex view**: the last dump, 512 bytes a page: address, bytes and ASCII, 16 bytes a row
+  (00 and FF dim), Prev and Next, and Go to an address in hex. The page reads only that part of
+  the file (`Range` on `/dumps/<file>`), so a dump of any size opens at once.
 
 File names: `flash-YYYYMMDDHHMM-CHIP.bin` in the local time of the machine that runs the
 service, for example `flash-202611031706-W25Q128BV.bin`. With `-a`/`-l` the range is added:

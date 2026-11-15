@@ -4,6 +4,13 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.42.0 — 2026-11-16
+
+- Web mode: a hex view of the last dump (#85), under the status registers: address, bytes and
+  ASCII, 16 bytes a row, 512 bytes a page, with 00 and FF dim; Prev, Next and Go to an address in
+  hex. The page reads only that part of the dump: `/dumps/<file>` takes `Range: bytes=A-B` (or
+  `A-`) and answers 206 with `Content-Range`, 416 past the end; several ranges give the whole file.
+
 ## 1.41.1 — 2026-11-16
 
 - Web mode: a file to write that stops coming (no data for 30 s, or the connection closed) is a

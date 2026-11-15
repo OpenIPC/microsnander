@@ -131,6 +131,8 @@ int main(void)
 	check(request("GET", "/", NULL, NULL, 0) == 200 && strstr(body_of(), "<title>MicroSNANDer Web</title>") && strstr(body_of(), "Registers"),
 	      "GET / gives the page");
 	check(strstr(body_of(), "if(s.seq<seen&&s.seq!==0)return") != NULL, "  an older state does not replace a newer one on the page");
+	check(strstr(body_of(), "id=\"hexpanel\"") && strstr(body_of(), "Range:'bytes='+a+'-'+(a+HXP-1)") &&
+	      strstr(body_of(), "if(s.file&&!s.busy)hexOpen(s.file)"), "  the hex view of the last dump, read with Range");
 	check(strstr(body_of(), "function detectThen") && strstr(body_of(), "(o==='erase'||o==='write'||o==='selftest'||o==='unprotect')&&!s.chip"),
 	      "  Erase and Write wait for a chip: off without one, a Detect before the question");
 
@@ -211,6 +213,29 @@ int main(void)
 	snprintf(path, sizeof(path), "/dumps/%s", file);
 	check(request("GET", path, NULL, NULL, 0) == 200 && strstr(resp, "attachment; filename=") &&
 	      nresp - (body_of() - resp) == SIM_SIZE && !memcmp(body_of(), mem, SIM_SIZE), "  and downloads with the chip content");
+	{
+		char want[64];
+
+		extra = "Host: 127.0.0.1:8080\r\nRange: bytes=4096-4607\r\n";
+		snprintf(want, sizeof(want), "Content-Range: bytes 4096-4607/%d\r\n", SIM_SIZE);
+		check(request("GET", path, NULL, NULL, 0) == 206 && strstr(resp, want) && nresp - (body_of() - resp) == 512 &&
+		      !memcmp(body_of(), mem + 4096, 512), "  a part of it with Range (the hex view): 206, those 512 bytes");
+		extra = "Host: 127.0.0.1:8080\r\nRange: bytes=1048000-\r\n";
+		check(request("GET", path, NULL, NULL, 0) == 206 && nresp - (body_of() - resp) == SIM_SIZE - 1048000 &&
+		      !memcmp(body_of(), mem + 1048000, SIM_SIZE - 1048000), "  an open range: to the end");
+		extra = "Host: 127.0.0.1:8080\r\nRange: bytes=1048000-2000000\r\n";
+		check(request("GET", path, NULL, NULL, 0) == 206 && nresp - (body_of() - resp) == SIM_SIZE - 1048000,
+		      "  a range past the end is cut at the end");
+		snprintf(want, sizeof(want), "Range: bytes=%d-\r\n", SIM_SIZE);
+		char hdr[128];
+		snprintf(hdr, sizeof(hdr), "Host: 127.0.0.1:8080\r\n%s", want);
+		extra = hdr;
+		check(request("GET", path, NULL, NULL, 0) == 416 && strstr(resp, "Content-Range: bytes */"), "  from past the end: 416");
+		extra = "Host: 127.0.0.1:8080\r\nRange: bytes=0-15,32-47\r\n";
+		check(request("GET", path, NULL, NULL, 0) == 200 && nresp - (body_of() - resp) == SIM_SIZE,
+		      "  several ranges: the whole dump, as without Range");
+		extra = "";
+	}
 	request("POST", "/api/read", NULL, NULL, 0);
 	wait_idle();
 	request("GET", "/api/state", NULL, NULL, 0);

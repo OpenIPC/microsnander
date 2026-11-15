@@ -23,7 +23,7 @@
  *   POST /api/registers    read the status registers (SPI NOR)
  *   POST /api/unprotect    clear the protection (as -u), then read them
  *   POST /api/selftest     -t on the first block
- *   GET  /dumps/<file>     a dump made by Read
+ *   GET  /dumps/<file>     a dump made by Read (Range: bytes=A-B gives a part, for the hex view)
  */
 #include <errno.h>
 #include <pthread.h>
@@ -489,7 +489,35 @@ static int dump_ok(const char *name)
 	return (read || saved) && !strcmp(name + n - 4, ".bin") && !strchr(name, '/') && !strstr(name, "..");
 }
 
-static void send_dump(int fd, const char *name)
+/* Range: bytes=A-B or bytes=A- of a file of size bytes: 1 and the part in
+   *from, *to; 0 no range (the whole file); -1 a range past the end */
+static int dump_range(const char *range, long long size, long long *from, long long *to)
+{
+	long long a, b = -1;
+	char *e;
+
+	if (!range)
+		return 0;
+	range += 2 + 6;				/* "\r\nRange:" */
+	while (*range == ' ')
+		range++;
+	if (strncmp(range, "bytes=", 6) || range[6] < '0' || range[6] > '9')
+		return 0;			/* no unit we know, or a suffix range: the whole file */
+	a = strtoll(range + 6, &e, 10);
+	if (*e++ != '-')
+		return 0;
+	if (*e >= '0' && *e <= '9')
+		b = strtoll(e, &e, 10);
+	if (*e != '\r' || (b >= 0 && b < a))
+		return 0;			/* several ranges or a bad one: the whole file */
+	if (a >= size)
+		return -1;
+	*from = a;
+	*to = b < 0 || b >= size ? size - 1 : b;
+	return 1;
+}
+
+static void send_dump(int fd, const char *name, const char *range)
 {
 	char path[1024], h[512];
 	struct stat sb;
@@ -506,14 +534,38 @@ static void send_dump(int fd, const char *name)
 		reply_text(fd, "404 Not Found", "No such dump.\n");
 		return;
 	}
-	int k = snprintf(h, sizeof(h), "HTTP/1.0 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: %lld\r\n"
-			 "Content-Disposition: attachment; filename=\"%s\"\r\nConnection: close\r\n\r\n", (long long)sb.st_size, name);
+	long long from = 0, to = (long long)sb.st_size - 1;
+	int part = dump_range(range, sb.st_size, &from, &to);
+	int k;
+
+	if (part < 0) {
+		k = snprintf(h, sizeof(h), "HTTP/1.0 416 Range Not Satisfiable\r\nContent-Range: bytes */%lld\r\n"
+			     "Content-Length: 0\r\nConnection: close\r\n\r\n", (long long)sb.st_size);
+		send_all(fd, h, k);
+		fclose(f);
+		return;
+	}
+	if (part > 0 && fseeko(f, from, SEEK_SET)) {
+		fclose(f);
+		reply_text(fd, "500 Internal Server Error", "Cannot read the dump.\n");
+		return;
+	}
+	if (part > 0)
+		k = snprintf(h, sizeof(h), "HTTP/1.0 206 Partial Content\r\nContent-Type: application/octet-stream\r\n"
+			     "Content-Range: bytes %lld-%lld/%lld\r\nContent-Length: %lld\r\nConnection: close\r\n\r\n",
+			     from, to, (long long)sb.st_size, to - from + 1);
+	else
+		k = snprintf(h, sizeof(h), "HTTP/1.0 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: %lld\r\n"
+			     "Content-Disposition: attachment; filename=\"%s\"\r\nAccept-Ranges: bytes\r\nConnection: close\r\n\r\n",
+			     (long long)sb.st_size, name);
 	if (!send_all(fd, h, k)) {
 		char buf[16384];
+		long long left = to - from + 1;
 		size_t n;
 
-		while ((n = fread(buf, 1, sizeof(buf), f)) > 0 && !send_all(fd, buf, n))
-			;
+		while (left > 0 && (n = fread(buf, 1, left < (long long)sizeof(buf) ? (size_t)left : sizeof(buf), f)) > 0 &&
+		       !send_all(fd, buf, n))
+			left -= n;
 	}
 	fclose(f);
 }
@@ -614,7 +666,7 @@ static void handle(int fd)
 		return;
 	}
 	if (!strcmp(method, "GET") && !strncmp(path, "/dumps/", 7)) {
-		send_dump(fd, path + 7);
+		send_dump(fd, path + 7, find_header(head, "Range:"));
 		return;
 	}
 	if (strcmp(method, "POST")) {

@@ -62,6 +62,13 @@ h1{font-size:clamp(22px,4.5vw,40px);letter-spacing:.2em;text-transform:uppercase
 .note{font-family:'Courier New',monospace;font-size:11px;color:var(--dim);letter-spacing:.08em;line-height:1.6;margin-top:16px}
 .regbtns{display:flex;justify-content:flex-end;margin-top:20px}
 .regbtns .btn{min-width:240px}
+.hexnav{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:20px}
+.hexnav .btn{padding:9px 16px;font-size:12px}
+.hexnav input{font-family:'Courier New',monospace;font-size:14px;letter-spacing:.08em;color:var(--amber);background:#120d0a;border:2px solid #574123;border-radius:8px;padding:8px 10px;width:11em}
+.hex{font-family:'Courier New',monospace;font-size:12px;line-height:1.55;color:var(--ink);background:#120d0a;border:2px solid #574123;border-radius:8px;box-shadow:inset 0 0 14px rgba(0,0,0,.8);padding:10px 12px;margin:14px 0 0;overflow-x:auto;white-space:pre;min-height:3em}
+#hexfile{text-transform:none;letter-spacing:.06em;word-break:break-all}
+.hex .ha{color:var(--amber)}
+.hex .hd,.hex .hc{color:var(--dim)}
 body:not(.ready) *{transition:none!important}
 /* no running light and no blinking for those who asked for less motion: the
    display and the Busy lamp tell that the work goes on */
@@ -105,6 +112,13 @@ body:not(.ready) *{transition:none!important}
 <div class="note" id="regnote">Bit names as on most Winbond-type chips; other makers name some bits differently. Clear protection clears BP, SRP and CMP, as -u does, and keeps QE.</div>
 <div class="note" id="regnote-mx" hidden>Macronix: one status register. Clear protection clears BP and SRWD, as -u does, and keeps QE.</div>
 <div class="regbtns"><button class="btn danger" id="b-unprotect">Clear protection<span class="ind"></span></button></div>
+</div>
+<div class="panel" id="hexpanel" hidden>
+<span class="rivet tl"></span><span class="rivet tr"></span><span class="rivet bl"></span><span class="rivet br"></span>
+<div class="top"><span class="plate">Hex view</span><span class="plate" id="hexfile">&nbsp;</span></div>
+<div class="hexnav"><button class="btn" id="h-prev">Prev</button><input id="h-addr" value="0x0" spellcheck="false" autocomplete="off" aria-label="Address (hex)"><button class="btn" id="h-go">Go</button><button class="btn" id="h-next">Next</button></div>
+<pre class="hex" id="hex"></pre>
+<div class="note">The last dump, 512 bytes at a time. Address in hex; 00 and FF bytes are dim.</div>
 </div>
 <div class="foot">MicroSNANDer &middot; OpenIPC &middot; GPL-2.0</div>
 <script>
@@ -186,11 +200,44 @@ function render(s){
   sr.forEach(function(v,i){h+='<div class="name">SR'+(i+1)+'</div>';names[i].forEach(function(n,k){var on=(v>>(7-k))&1;h+='<div class="bit"><span class="bulb'+(on?(protect[n]?' on':' ok'):'')+'"></span>'+n+'</div>'})});
   $('regs').innerHTML=h;
  }else if(!s.busy&&['detect','registers','unprotect'].indexOf(s.op)>=0)$('regpanel').hidden=true;
+ if(s.file&&!s.busy)hexOpen(s.file);
  if(!s.busy&&lastOp==='read'&&s.op==='read'&&s.ok&&s.file){lastOp='';location.href=base+'/dumps/'+encodeURIComponent(s.file)}
  if(!document.body.classList.contains('ready'))setTimeout(function(){document.body.classList.add('ready')},50);	/* the first state is shown at once */
  if(s.busy&&!timer)timer=setInterval(poll,500);
  if(!s.busy&&timer){clearInterval(timer);timer=null}
 }
+/* the hex view of the last dump: 512 bytes a page, read with Range */
+var hx={file:'',off:0,size:0},HXP=512;
+function h2(v,n){var s=v.toString(16).toUpperCase();while(s.length<n)s='0'+s;return s}
+function hexOpen(f){if(f===hx.file)return;hx.file=f;hx.off=0;hx.size=0;$('hexfile').textContent=f;$('hexpanel').hidden=false;hexLoad()}
+function hexLoad(){
+ var a=hx.off;
+ fetch(base+'/dumps/'+encodeURIComponent(hx.file),{headers:{Range:'bytes='+a+'-'+(a+HXP-1)},cache:'no-store'}).then(function(r){
+  if(r.status===416)throw 'Past the end of the dump ('+size(hx.size)+').';
+  if(r.status!==206)throw 'The dump cannot be read here.';
+  var cr=r.headers.get('Content-Range');if(cr)hx.size=parseInt(cr.split('/')[1],10);
+  return r.arrayBuffer();
+ }).then(function(b){hexDraw(new Uint8Array(b),a)}).catch(function(e){$('hex').textContent=typeof e==='string'?e:'No link.'});
+}
+function hexDraw(u,a){
+ var h='';
+ for(var i=0;i<u.length;i+=16){
+  var x='',c='';
+  for(var k=0;k<16;k++){
+   if(k===8)x+=' ';
+   if(i+k<u.length){var v=u[i+k],t=h2(v,2);x+=(v===0||v===255?'<span class="hd">'+t+'</span>':t)+' ';c+=v>=32&&v<127?esc(String.fromCharCode(v)):'.'}
+   else x+='   ';
+  }
+  h+='<span class="ha">'+h2(a+i,8)+'</span>  '+x+' <span class="hc">'+c+'</span>\n';
+ }
+ $('hex').innerHTML=h||'Empty.';$('h-addr').value='0x'+h2(a,1);
+ $('h-prev').disabled=a===0;$('h-next').disabled=a+HXP>=hx.size;
+}
+function hexGo(){var v=$('h-addr').value.trim().replace(/^0x/i,''),n=parseInt(v,16);if(!/^[0-9a-f]+$/i.test(v)||isNaN(n)){$('hex').textContent='An address in hex, as 0x1F000.';return}hx.off=Math.floor(n/16)*16;hexLoad()}
+$('h-prev').onclick=function(){hx.off=Math.max(0,hx.off-HXP);hexLoad()};
+$('h-next').onclick=function(){if(hx.off+HXP<hx.size){hx.off+=HXP;hexLoad()}};
+$('h-go').onclick=hexGo;
+$('h-addr').onkeydown=function(e){if(e.key==='Enter')hexGo()};
 function offline(){bulb('l-link','bad');icon('c8452c');$('t-link').textContent='No link';show('Link offline','bad');$('bar').className='bg';[].forEach.call($('bar').children,function(e){e.className=''})}
 function poll(){fetch(base+'/api/state',{cache:'no-store'}).then(function(r){return r.json()}).then(render).catch(offline)}
 /* accepted(n): the operation started as number n ("Started n."); chip: the
