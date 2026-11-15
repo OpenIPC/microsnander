@@ -189,3 +189,14 @@ JNIEXPORT jobject JNICALL FN(unprotect)(JNIEnv *env, jclass cls, jint fd, jint v
 	int ret = ms_unprotect(&c, msg, sizeof(msg));
 	return result(env, ret == 0, msg, &c, NULL);
 }
+
+JNIEXPORT jobject JNICALL FN(writeRegister)(JNIEnv *env, jclass cls, jint fd, jint vid, jint pid, jint reg, jint value)
+{
+	struct ms_chip c;
+	char msg[256] = "";
+	(void)cls;
+
+	use_device(fd, vid, pid);
+	int ret = ms_write_register(&c, reg, (unsigned int)value, msg, sizeof(msg));
+	return result(env, ret == 0, msg, &c, NULL);
+}

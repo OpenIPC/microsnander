@@ -64,6 +64,10 @@ final class Native {
 
     static synchronized native Result unprotect(int fd, int vid, int pid);
 
+    /** status register reg (0-2: SR1-SR3) set to value, for the chip of expect(); WIP and WEL stay
+     *  the chip's, LB1-LB3 are never set */
+    static synchronized native Result writeRegister(int fd, int vid, int pid, int reg, int value);
+
     /** -t on the first block (ms_expect first); a block that does not come back is saved in dir */
     static synchronized native Result selftest(int fd, int vid, int pid, String dir);
 }

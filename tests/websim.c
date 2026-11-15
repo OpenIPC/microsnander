@@ -48,6 +48,7 @@ static int sim_macronix;
 int snor_sr1_macronix(void) { return sim_macronix; }
 static unsigned char sim_sr1 = 0x1c;		/* BP bits set: a protected chip */
 int snor_read_status(unsigned char sr[3]) { sr[0] = sim_sr1; sr[1] = 0x02; sr[2] = 0x60; return 0; }
+int snor_write_status(int reg, unsigned char val) { if (reg) return -3; sim_sr1 = val; return 0; }
 
 static char resp[1 << 21];
 static size_t nresp;

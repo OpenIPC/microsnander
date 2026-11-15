@@ -2192,6 +2192,82 @@ static int unprotect_all(void) { return unprotect(1); }
 int snor_unprotect(void) { return snor_each_die(unprotect_all); }
 int snor_clear_qe(void) { return snor_each_die(clear_qe); }
 
+/* the register and value of snor_write_status(), for each die */
+static int ws_reg;
+static u8 ws_val;
+
+/* bits a write cannot set: WIP and WEL of register 1 are the state of the
+   chip; LB1-LB3 of register 2 lock the security registers for good */
+#define WS_STATE	0x03
+#define WS_OTP		(SR2_LB1 | SR2_LB2 | SR2_LB3)
+
+static int write_status(void)
+{
+	static const u8 rd[3] = { OPCODE_RDSR, OPCODE_RDSR2, OPCODE_RDSR3 };
+	static const u8 wr[3] = { OPCODE_WRSR, OPCODE_WRSR2, OPCODE_WRSR3 };
+	const u8 keep = ws_reg ? 0 : WS_STATE;		/* the bits the chip sets itself */
+	u8 sr = 0, sr2 = 0xff, val;
+
+	snor_unprotect_why[0] = 0;
+	if (snor_is_sst26() || (ws_reg && (snor_is_sst25_aai() || snor_is_macronix()))) {
+		snprintf(snor_unprotect_why, sizeof(snor_unprotect_why),
+			 snor_is_sst26() ? "this chip keeps its protection in a block register, not in the status registers"
+					 : "this chip has status register 1 only");
+		return -3;
+	}
+	if (snor_read_sr(rd[ws_reg], &sr) < 0)
+		return -1;
+	if (ws_reg && sr == 0xff) {		/* no such register: MISO stays high */
+		snprintf(snor_unprotect_why, sizeof(snor_unprotect_why),
+			 "this chip has no status register %d (it reads 0xff)", ws_reg + 1);
+		return -3;
+	}
+	if (ws_reg == 1 && !snor_is_macronix() && (ws_val & WS_OTP & ~sr)) {
+		snprintf(snor_unprotect_why, sizeof(snor_unprotect_why),
+			 "LB1-LB3 are one-time bits: once set, the security registers stay locked for good");
+		return -3;
+	}
+	val = (ws_val & ~keep) | (sr & keep);
+	if (!ws_reg && !snor_is_macronix() && !snor_is_sst25_aai() && snor_read_sr(OPCODE_RDSR2, &sr2) < 0)
+		return -1;
+	if (snor_unprotect_write(wr[ws_reg], &val) || snor_read_sr(rd[ws_reg], &sr) < 0)
+		return -1;
+	if (ws_reg == 1 && ((sr ^ val) & ~keep)) {	/* no WRSR2 on this chip, perhaps */
+		u8 sr1 = 0;
+
+		if (snor_read_sr(OPCODE_RDSR, &sr1) < 0 || snor_write_sr12(sr1, val) || snor_read_sr(rd[1], &sr) < 0)
+			return -1;
+	}
+	if (sr2 != 0xff) {
+		/* a one-byte WRSR clears register 2 on some older chips: put it back */
+		u8 now = 0;
+
+		if (snor_read_sr(OPCODE_RDSR2, &now) < 0)
+			return -1;
+		if (now != sr2 && (snor_write_sr12(sr, sr2) || snor_read_sr(OPCODE_RDSR, &sr) < 0))
+			return -1;
+	}
+	if ((sr ^ val) & ~keep) {
+		snprintf(snor_unprotect_why, sizeof(snor_unprotect_why),
+			 "status register %d reads 0x%02x, not 0x%02x: %s", ws_reg + 1, sr, val,
+			 ws_reg == 0 && (sr & SR_SRWD) && !snor_is_sst25_aai() ?
+				"SRP0 is set, so the WP# pin of the chip is probably low and locks the register" :
+				"the chip does not take those bits (read-only or reserved)");
+		printf("Status register: %s.\n", snor_unprotect_why);
+		return -2;
+	}
+	return 0;
+}
+
+int snor_write_status(int reg, unsigned char val)
+{
+	if (reg < 0 || reg > 2)
+		return -3;
+	ws_reg = reg;
+	ws_val = val;
+	return snor_each_die(write_status);
+}
+
 void support_snor_list(void)
 {
 	int i;

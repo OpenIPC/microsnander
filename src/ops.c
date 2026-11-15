@@ -375,3 +375,28 @@ int ms_unprotect(struct ms_chip *c, char *msg, size_t n)
 	chip_close();
 	return ret;
 }
+
+int ms_write_register(struct ms_chip *c, int reg, unsigned int val, char *msg, size_t n)
+{
+	int ret = -1;
+
+	if (chip_open(c, msg, n, 1))		/* it changes the status registers */
+		return -1;
+	if (prog.flash_unprotect != snor_unprotect || !programmer->send)
+		say(msg, n, "The status registers are writable for SPI NOR through the CH341A or the CH347 only.");
+	else if (reg < 0 || reg > 2 || val > 0xff)
+		say(msg, n, "No status register %d, or 0x%x is not a byte.", reg + 1, val);
+	else {
+		ret = snor_write_status(reg, val);
+		read_registers(c);
+		if (!ret)
+			say(msg, n, "Status register %d is 0x%02x now.", reg + 1, c->sr_valid ? c->sr[reg] : val);
+		else if (ret != -1 && snor_unprotect_why[0])
+			say(msg, n, "Status register %d not written: %s.", reg + 1, snor_unprotect_why);
+		else
+			say(msg, n, "Writing status register %d failed: the programmer or the chip did not answer.", reg + 1);
+		ret = ret ? -1 : 0;
+	}
+	chip_close();
+	return ret;
+}
