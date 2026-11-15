@@ -2247,8 +2247,17 @@ static int write_status(void)
 
 		if (snor_read_sr(OPCODE_RDSR2, &now) < 0)
 			return -1;
-		if (now != sr2 && (snor_write_sr12(sr, sr2) || snor_read_sr(OPCODE_RDSR, &sr) < 0))
+		if (now != sr2 && (snor_write_sr12(sr, sr2) || snor_read_sr(OPCODE_RDSR, &sr) < 0 ||
+				   snor_read_sr(OPCODE_RDSR2, &now) < 0))
 			return -1;
+		if ((now ^ sr2) & ~SR2_SUS) {	/* SRP0 with WP# low, set by that write, may stop it */
+			snprintf(snor_unprotect_why, sizeof(snor_unprotect_why),
+				 "status register 1 is 0x%02x, but the write cleared register 2 (0x%02x, was 0x%02x) "
+				 "and it could not be put back%s", sr, now, sr2,
+				 sr & SR_SRWD ? ": SRP0 is set and the WP# pin is probably low" : "");
+			printf("Status register: %s.\n", snor_unprotect_why);
+			return -2;
+		}
 	}
 	if ((sr ^ val) & ~keep) {
 		/* why: a register lock first (SRP1 until a power cycle, SRP0 with

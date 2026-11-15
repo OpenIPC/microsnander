@@ -38,7 +38,7 @@ static int fast_clock(clockid_t id, struct timespec *t)
 unsigned int bsize;
 const char *flash_chip_name;
 
-enum { ORDINARY, SST25, SST26, NO_SR23, QE_SR1, QE_FIXED, NO_WRSR2, FOURB, FOURB_WREN, DIES };
+enum { ORDINARY, SST25, SST26, NO_SR23, QE_SR1, QE_FIXED, NO_WRSR2, FOURB, FOURB_WREN, DIES, OLD_WRSR };
 static int kind;
 static unsigned char id[5];
 static unsigned char mem[64 << 20];
@@ -142,6 +142,8 @@ SPI_CONTROLLER_RTN_T SPI_CONTROLLER_Chip_Select_High(void)
 			sr = (cmd[1] & (kind == QE_SR1 ? 0xfc : 0xbc));
 			if (ncmd > 2 && kind != NO_SR23)	/* the second byte goes to register 2 */
 				sr2 = (cmd[2] & 0x43) | (kind == QE_FIXED ? 0x02 : 0);
+			else if (kind == OLD_WRSR)		/* older chips: one byte clears register 2 */
+				sr2 = 0;
 			busy = 3;
 		}
 		wel = 0;
@@ -493,6 +495,15 @@ int main(void)
 		chip(find("SST26VF016B"), SST26);
 		snor_init();
 		check(snor_write_status(0, 0xff, 0) == -3, "SST26: its protection is not in the status registers");
+		chip(find("W25Q32BV"), OLD_WRSR);
+		snor_init();
+		sr = 0; sr2 = 0x02;
+		check(snor_write_status(0, 0x04, 0x04) == 0 && sr == 0x04 && sr2 == 0x02 && !wel,
+		      "an older chip whose one-byte WRSR clears register 2: register 2 put back");
+		sr = 0; sr2 = 0x02; wp_low = 1;
+		check(snor_write_status(0, 0x80, 0x80) == -2 && sr == 0x80 && sr2 == 0 && strstr(snor_unprotect_why, "could not be put back") && !wel,
+		      "  SRP0 set with WP# low stops that: told, not a success");
+		wp_low = 0; sr = 0; sr2 = 0;
 		chip(find("PCT25VF016B"), SST25);
 		snor_init();
 		check(snor_write_status(0, 0x04, 0x04) == -3 && strstr(snor_unprotect_why, "not the ones shown") && !wel,
