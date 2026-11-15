@@ -232,6 +232,9 @@ int main(void)
 		snprintf(hdr, sizeof(hdr), "Host: 127.0.0.1:8080\r\n%s", want);
 		extra = hdr;
 		check(request("GET", path, NULL, NULL, 0) == 416 && strstr(resp, "Content-Range: bytes */"), "  from past the end: 416");
+		extra = "Host: 127.0.0.1:8080\r\nRange: bytes=0-15\r\nRange: bytes=32-47\r\n";
+		check(request("GET", path, NULL, NULL, 0) == 200 && nresp - (body_of() - resp) == SIM_SIZE,
+		      "  two Range headers: the whole dump");
 		extra = "Host: 127.0.0.1:8080\r\nRange: bytes=0-15,32-47\r\n";
 		check(request("GET", path, NULL, NULL, 0) == 200 && nresp - (body_of() - resp) == SIM_SIZE,
 		      "  several ranges: the whole dump, as without Range");

@@ -666,7 +666,12 @@ static void handle(int fd)
 		return;
 	}
 	if (!strcmp(method, "GET") && !strncmp(path, "/dumps/", 7)) {
-		send_dump(fd, path + 7, find_header(head, "Range:"));
+		/* one Range among the headers, not in what came after them; two: the whole file */
+		const char *rg = find_header(head, "Range:"), *rg2 = rg ? find_header(rg + 2, "Range:") : NULL;
+
+		if (rg && (rg >= end || (rg2 && rg2 < end)))
+			rg = NULL;
+		send_dump(fd, path + 7, rg);
 		return;
 	}
 	if (strcmp(method, "POST")) {
