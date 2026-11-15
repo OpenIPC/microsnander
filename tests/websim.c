@@ -62,6 +62,8 @@ static void *serve_one(void *arg)
 	return NULL;
 }
 
+static size_t short_by;		/* the client sends this many bytes less than its Content-Length, then closes */
+
 /* one request through handle(); the answer in resp */
 static int request(const char *method, const char *path, const char *auth, const void *body, size_t blen)
 {
@@ -77,10 +79,18 @@ static int request(const char *method, const char *path, const char *auth, const
 	if (!p) {				/* the client side writes the request */
 		close(sv[1]);
 		send_all(sv[0], head, k);
-		if (blen) send_all(sv[0], body, blen);
+		if (blen > short_by) send_all(sv[0], body, blen - short_by);
 		_exit(0);
 	}
 	pthread_t t;
+
+	if (short_by) {			/* the client is gone: the server sees the end, nobody reads */
+		close(sv[0]);
+		waitpid(p, NULL, 0);
+		serve_one((void *)(long)sv[1]);
+		resp[nresp = 0] = 0;
+		return 0;
+	}
 	pthread_create(&t, NULL, serve_one, (void *)(long)sv[1]);	/* the server side, while the answer is read */
 	nresp = 0;
 	ssize_t r;
@@ -280,6 +290,20 @@ int main(void)
 		if (f) fclose(f);
 		web_dir = dir;
 	}
+	short_by = 100;					/* the browser goes away in the middle of the file */
+	unsigned int seq_before = st.seq;
+	memset(mem, 0xff, sizeof(img));
+	check(request("POST", "/api/write", NULL, img, sizeof(img)) == 0 && !st.uploading && mem[0] == 0xff,
+	      "a file that stops coming: no answer to a client that is gone, the upload slot free, nothing written");
+	short_by = 0;
+	request("GET", "/api/state", NULL, NULL, 0);
+	check(strstr(body_of(), "\"op\":\"write\"") && strstr(body_of(), "\"ok\":false") && st.seq == seq_before + 1 &&
+	      strstr(body_of(), "The file stopped coming after") && strstr(body_of(), "the connection was closed") &&
+	      strstr(body_of(), "nothing was written"),
+	      "  the state says it, as a failed Write, for the page");
+	request("GET", "/", NULL, NULL, 0);
+	check(strstr(body_of(), "the link broke while the file was sent: see the state") && strstr(body_of(), "if(r.status===408)poll();return}") && strstr(body_of(), "if(++k<20)setTimeout(again,2000)"),
+	      "  and the page tells it when its upload breaks, reads the state after a 408, and for 40 s after a broken upload");
 	st.uploading = 1;				/* another upload is coming in */
 	check(request("POST", "/api/write", NULL, img, sizeof(img)) == 409, "  a second upload at the same time: 409, before it takes space");
 	check(request("POST", "/api/erase", NULL, NULL, 0) == 409, "  an erase while a file is coming in: 409");

@@ -526,6 +526,25 @@ static void upload_done(void)
 	pthread_mutex_unlock(&st.lock);
 }
 
+/* the file stopped coming: a failed Write in the state, so the page (any page)
+   says so instead of the last result; nothing was written */
+static void upload_cut(unsigned long long have, unsigned long long len, int timeout)
+{
+	pthread_mutex_lock(&st.lock);
+	st.uploading = 0;
+	if (!st.busy) {
+		st.seq++;
+		st.op = OP_WRITE;
+		st.ok = 0;
+		st.phase[0] = 0;
+		st.done = st.total = 0;
+		snprintf(st.message, sizeof(st.message),
+			 "The file stopped coming after %llu of %llu bytes (%s): nothing was written. Press Write again.",
+			 have, len, timeout ? "no data for 30 s" : "the connection was closed");
+	}
+	pthread_mutex_unlock(&st.lock);
+}
+
 /* the file to write goes to the disk, not to memory: a SPI NAND image is up
    to 512 MB. It has no name, it goes when it is closed. */
 static FILE *upload_file(void)
@@ -676,8 +695,12 @@ static void handle(int fd)
 			ssize_t r = recv(fd, part, clen - have < sizeof(part) ? clen - have : sizeof(part), 0);
 
 			if (r <= 0) {
+				int timeout = r < 0 && (errno == EAGAIN || errno == EWOULDBLOCK);
+
 				fclose(body);
-				upload_done();
+				upload_cut(have, clen, timeout);
+				if (timeout)	/* the browser may still be there to read it */
+					reply_text(fd, "408 Request Timeout", "The file stopped coming: nothing was written.\n");
 				return;
 			}
 			bad = fwrite(part, 1, r, body) != (size_t)r;
