@@ -132,9 +132,10 @@ int main(void)
 	      "GET / gives the page");
 	check(strstr(body_of(), "if(s.seq<seen&&s.seq!==0)return") != NULL, "  an older state does not replace a newer one on the page");
 	check(strstr(body_of(), "id=\"hexpanel\"") && strstr(body_of(), "Range:'bytes='+a+'-'+(a+HXP-1)") &&
-	      strstr(body_of(), "if(s.file&&!s.busy)hexOpen(s.file)") && strstr(body_of(), "if(my===hx.req)hexDraw(") &&
-	      strstr(body_of(), "[0-9a-f]{1,12}$/i") && strstr(body_of(), "if(hx.size&&n>=hx.size)"),
-	      "  the hex view of the last dump, read with Range, only the last answer shown");
+	      strstr(body_of(), "if(b&&my===hx.req)hexDraw(") &&
+	      strstr(body_of(), "[0-9a-f]{1,12}$/i") && strstr(body_of(), "if(hx.size&&n>=hx.size)") &&
+	      strstr(body_of(), "if(my!==hx.req)return null;") && strstr(body_of(), "if(s.file)hexOpen(s.file);else hexClose()"),
+	      "  the hex view of the last dump, read with Range, only the last answer used, hidden with no dump");
 	check(strstr(body_of(), "function detectThen") && strstr(body_of(), "(o==='erase'||o==='write'||o==='selftest'||o==='unprotect')&&!s.chip"),
 	      "  Erase and Write wait for a chip: off without one, a Detect before the question");
 
