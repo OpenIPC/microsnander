@@ -30,7 +30,9 @@ import android.text.Spanned;
 import android.text.style.ForegroundColorSpan;
 import android.view.Gravity;
 import android.view.View;
+import android.view.inputmethod.EditorInfo;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.GridLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
@@ -41,6 +43,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.RandomAccessFile;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.List;
@@ -100,6 +103,14 @@ public class MainActivity extends Activity {
     private View regsPanel;
     private Button[] buttons;
     private Button saveAs, share;
+    // the hex view of the last dump: its file and the address of the page shown
+    private static final int HEX_PAGE = 512;
+    private static String hexName;
+    private static long hexOff;
+    private View hexPanel;
+    private TextView hexFile, hexText;
+    private EditText hexAddr;
+    private Button hexPrev, hexNext;
     private Runnable afterPermission;
 
     @Override
@@ -116,6 +127,20 @@ public class MainActivity extends Activity {
         regsNote = findViewById(R.id.regs_note);
         saveAs = findViewById(R.id.b_save_as);
         share = findViewById(R.id.b_share);
+        hexPanel = findViewById(R.id.hex_panel);
+        hexFile = findViewById(R.id.hex_file);
+        hexText = findViewById(R.id.hex);
+        hexAddr = findViewById(R.id.hex_addr);
+        hexPrev = findViewById(R.id.b_hex_prev);
+        hexNext = findViewById(R.id.b_hex_next);
+        hexPrev.setOnClickListener(v -> { hexOff = Math.max(0, hexOff - HEX_PAGE); showHex(); });
+        hexNext.setOnClickListener(v -> { hexOff += HEX_PAGE; showHex(); });
+        findViewById(R.id.b_hex_go).setOnClickListener(v -> hexGo());
+        hexAddr.setOnEditorActionListener((v, id, e) -> {
+            if (id != EditorInfo.IME_ACTION_GO && e == null) return false;
+            hexGo();
+            return true;
+        });
         ((TextView) findViewById(R.id.version)).setText(getString(R.string.version, BuildConfig.VERSION_NAME));
         buttons = new Button[] {
             findViewById(R.id.b_detect), findViewById(R.id.b_read), findViewById(R.id.b_erase),
@@ -693,6 +718,91 @@ public class MainActivity extends Activity {
         boolean dump = on && lastDump() != null;
         saveAs.setEnabled(dump);
         share.setEnabled(dump);
+        if (on) showHex();
+    }
+
+    // ---- the hex view ----
+
+    /** Go: an address in hex inside the dump, the page from it (on a 16-byte row) */
+    private void hexGo() {
+        File f = lastDump();
+        String v = hexAddr.getText().toString().trim().replaceFirst("^0[xX]", "");
+        if (f == null) return;
+        if (!v.matches("[0-9a-fA-F]{1,12}")) {
+            hexText.setText(R.string.hex_bad_addr);
+            return;
+        }
+        long a = Long.parseLong(v, 16);
+        if (a >= f.length()) {
+            hexText.setText(getString(R.string.hex_past_end, sizeOf(f.length()), Math.max(0, f.length() - 1)));
+            return;
+        }
+        hexOff = a / 16 * 16;
+        showHex();
+    }
+
+    private static String hex(long v, int n) {
+        StringBuilder s = new StringBuilder(Long.toHexString(v).toUpperCase(java.util.Locale.ROOT));
+        while (s.length() < n) s.insert(0, '0');
+        return s.toString();
+    }
+
+    /** the page of the last dump at hexOff: address, 16 bytes, ASCII a row; none: the panel goes */
+    private void showHex() {
+        File f = lastDump();
+        if (f == null) {
+            hexPanel.setVisibility(View.GONE);
+            hexName = null;
+            return;
+        }
+        if (!f.getName().equals(hexName)) {	// another dump: from its start
+            hexName = f.getName();
+            hexOff = 0;
+        }
+        long len = f.length();
+        if (hexOff >= len) hexOff = Math.max(0, (len - 1) / HEX_PAGE * HEX_PAGE);
+        hexPanel.setVisibility(View.VISIBLE);
+        hexFile.setText(hexName);
+        byte[] b = new byte[(int) Math.min(HEX_PAGE, len - hexOff)];
+        try (RandomAccessFile r = new RandomAccessFile(f, "r")) {
+            r.seek(hexOff);
+            r.readFully(b);
+        } catch (IOException e) {
+            hexText.setText(R.string.hex_cannot);
+            return;
+        }
+        int amber = col(R.color.amber), dim = col(R.color.dim);
+        SpannableStringBuilder h = new SpannableStringBuilder();
+        for (int i = 0; i < b.length; i += 16) {
+            int from = h.length();
+            h.append(hex(hexOff + i, 8));
+            h.setSpan(new ForegroundColorSpan(amber), from, h.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            h.append("  ");
+            StringBuilder c = new StringBuilder();
+            for (int k = 0; k < 16; k++) {
+                if (k == 8) h.append(' ');
+                if (i + k < b.length) {
+                    int v = b[i + k] & 0xff;
+                    int at = h.length();
+                    h.append(hex(v, 2));
+                    if (v == 0 || v == 0xff)
+                        h.setSpan(new ForegroundColorSpan(dim), at, h.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    h.append(' ');
+                    c.append(v >= 32 && v < 127 ? (char) v : '.');
+                } else
+                    h.append("   ");
+            }
+            h.append(' ');
+            int at = h.length();
+            h.append(c);
+            h.setSpan(new ForegroundColorSpan(dim), at, h.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            if (i + 16 < b.length) h.append('\n');
+        }
+        if (b.length == 0) h.append(getString(R.string.hex_empty));
+        hexText.setText(h);
+        hexAddr.setText(getString(R.string.hex_addr, hexOff));
+        hexPrev.setEnabled(hexOff > 0);
+        hexNext.setEnabled(hexOff + HEX_PAGE < len);
     }
 
     private void showBusy() {

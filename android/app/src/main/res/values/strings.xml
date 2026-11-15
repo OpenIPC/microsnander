@@ -61,4 +61,15 @@
     <string name="bit_risky">SRP0, SRP1 and SRWD lock the registers (with the WP# pin low, or until the chip is powered off); SRP0 and SRP1 together would lock them for good and are refused. QE, HOLD and WPS change what the pins of the chip do: a board may not boot from it until they are set back.</string>
     <string name="bit_changed">Another chip is in the programmer: its registers are shown now, tap the bit again.</string>
     <string name="bit_cannot">This chip has no such status register to write.</string>
+    <string name="hex_view">HEX VIEW</string>
+    <string name="hex_prev">Prev</string>
+    <string name="hex_next">Next</string>
+    <string name="hex_go">Go</string>
+    <string name="hex_hint">0x0</string>
+    <string name="hex_addr" translatable="false">0x%1$X</string>
+    <string name="hex_note">The last dump, 512 bytes at a time. Address in hex; 00 and FF bytes are dim.</string>
+    <string name="hex_bad_addr">An address in hex, as 0x1F000.</string>
+    <string name="hex_past_end">Past the end of the dump (%1$s): the last address is 0x%2$X.</string>
+    <string name="hex_cannot">The dump cannot be read.</string>
+    <string name="hex_empty">Empty.</string>
 </resources>
