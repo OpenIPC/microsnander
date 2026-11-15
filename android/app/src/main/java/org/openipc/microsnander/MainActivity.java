@@ -361,21 +361,21 @@ public class MainActivity extends Activity {
             int nv = v ^ (1 << (7 - k));
             boolean set = (nv & (1 << (7 - k))) != 0;
             String q = a.getString(set ? R.string.bit_set_confirm : R.string.bit_clear_confirm,
-                    name, reg + 1, r.chip, sizeOf(r.size), v, nv);
+                    name, reg + 1, r.chip, sizeOf(r.size), v, nv, 7 - k);
             if (RISKY.contains(" " + name + " "))
                 q += "\n\n" + a.getString(R.string.bit_risky);
             new AlertDialog.Builder(a)
                     .setMessage(q)
-                    .setPositiveButton(set ? R.string.bit_set : R.string.bit_clear, (d, w) -> a.writeRegister(r, reg, nv))
+                    .setPositiveButton(set ? R.string.bit_set : R.string.bit_clear, (d, w) -> a.writeRegister(r, reg, 1 << (7 - k), nv))
                     .setNegativeButton(android.R.string.cancel, null).show();
         });
     }
 
-    /** status register reg set to value, only if it is still the chip r found */
-    private void writeRegister(Native.Result r, int reg, int value) {
+    /** the bits mask of status register reg set as in value, only if it is still the chip r found */
+    private void writeRegister(Native.Result r, int reg, int mask, int value) {
         run(R.string.writing_register, true, (fd, vid, pid, p) -> {
             Native.expect(r.chip, r.size);
-            return Native.writeRegister(fd, vid, pid, reg, value);
+            return Native.writeRegister(fd, vid, pid, reg, mask, value);
         });
     }
 

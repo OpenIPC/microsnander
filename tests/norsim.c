@@ -447,48 +447,56 @@ int main(void)
 		chip(find("W25Q32BV"), ORDINARY);
 		snor_init();
 		sr = 0; sr2 = 0x02;
-		check(snor_write_status(0, 0x1c) == 0 && sr == 0x1c && sr2 == 0x02 && !wel,
+		check(snor_write_status(0, 0xff, 0x1c) == 0 && sr == 0x1c && sr2 == 0x02 && !wel,
 		      "W25Q32BV: status register 1 written, register 2 kept, no write enable left");
-		check(snor_write_status(0, 0x03) == 0 && sr == 0, "  WIP and WEL in the value are the chip's, not written");
-		check(snor_write_status(1, 0x42) == 0 && sr2 == 0x42 && sr == 0, "  status register 2: CMP set, QE kept");
-		check(snor_write_status(1, 0x4a) == -3 && sr2 == 0x42 && strstr(snor_unprotect_why, "one-time"),
+		check(snor_write_status(0, 0xff, 0x03) == 0 && sr == 0, "  WIP and WEL in the value are the chip's, not written");
+		check(snor_write_status(1, 0xff, 0x42) == 0 && sr2 == 0x42 && sr == 0, "  status register 2: CMP set, QE kept");
+		check(snor_write_status(1, 0xff, 0x4a) == -3 && sr2 == 0x42 && strstr(snor_unprotect_why, "one-time"),
 		      "  LB1 is one-time: not set");
-		check(snor_write_status(2, 0x04) == -2 && strstr(snor_unprotect_why, "not 0x04") && !wel,
+		check(snor_write_status(2, 0xff, 0x04) == -2 && strstr(snor_unprotect_why, "not 0x04") && !wel,
 		      "  a register that does not take the write: said, no write enable left");
-		check(snor_write_status(3, 0) == -3, "  no status register 4");
+		check(snor_write_status(3, 0xff, 0) == -3, "  no status register 4");
+		sr = 0x18;
+		check(snor_write_status(0, 0x04, 0x04) == 0 && sr == 0x1c, "  one bit (BP0) set, the other bits of this die kept");
+		check(snor_write_status(0, 0x10, 0) == 0 && sr == 0x0c, "  one bit (BP2) cleared, the others kept");
+		sr = 0;
 		sr = 0x80; wp_low = 1;
-		check(snor_write_status(0, 0) == -2 && sr == 0x80 && strstr(snor_unprotect_why, "WP#"),
+		check(snor_write_status(0, 0xff, 0) == -2 && sr == 0x80 && strstr(snor_unprotect_why, "WP#"),
 		      "  SRP0 with WP# low: the register stays, and that is told");
 		wp_low = 0; sr = 0;
 		chip(find("W25Q32BV"), NO_WRSR2);
 		snor_init();
 		sr = 0x1c; sr2 = 0;
-		check(snor_write_status(1, 0x02) == 0 && sr2 == 0x02 && sr == 0x1c && !wel,
+		check(snor_write_status(1, 0xff, 0x02) == 0 && sr2 == 0x02 && sr == 0x1c && !wel,
 		      "a chip that does not know WRSR2: register 2 goes with the two-byte WRSR");
 		chip(find("W25Q128BV"), QE_FIXED);
 		snor_init();
 		sr = 0; sr2 = 0x02;
-		check(snor_write_status(1, 0) == -2 && sr2 == 0x02 && strstr(snor_unprotect_why, "fixed at the factory") && !wel,
+		check(snor_write_status(1, 0xff, 0) == -2 && sr2 == 0x02 && strstr(snor_unprotect_why, "fixed at the factory") && !wel,
 		      "W25Q128BV with QE fixed at 1: QE stays, and that is told");
 		chip(find("W25Q32BV"), ORDINARY);
 		snor_init();
 		sr = 0x80; sr2 = 0x02; wp_low = 1;
-		check(snor_write_status(2, 0x04) == -2 && strstr(snor_unprotect_why, "WP#"),
+		check(snor_write_status(2, 0xff, 0x04) == -2 && strstr(snor_unprotect_why, "WP#"),
 		      "  SRP0 with WP# low is named for a register 3 that stays too");
 		wp_low = 0; sr = 0;
 		chip(find("MX25L3205D"), QE_SR1);
 		snor_init();
 		sr = 0; sr2 = 0x02;
-		check(snor_write_status(0, 0x40) == 0 && sr == 0x40, "MX25L3205D: QE set in status register 1");
-		check(snor_write_status(1, 0) == -3 && strstr(snor_unprotect_why, "register 1 only"), "  no write of register 2");
+		check(snor_write_status(0, 0xff, 0x40) == 0 && sr == 0x40, "MX25L3205D: QE set in status register 1");
+		check(snor_write_status(1, 0xff, 0) == -3 && strstr(snor_unprotect_why, "register 1 only"), "  no write of register 2");
 		chip(find("XM25QH64A"), NO_SR23);
 		snor_init();
 		sr = 0;
-		check(snor_write_status(1, 0) == -3 && strstr(snor_unprotect_why, "no status register 2") && !wel,
+		check(snor_write_status(1, 0xff, 0) == -3 && strstr(snor_unprotect_why, "no status register 2") && !wel,
 		      "XM25QH64A without status register 2: told, nothing written");
 		chip(find("SST26VF016B"), SST26);
 		snor_init();
-		check(snor_write_status(0, 0) == -3, "SST26: its protection is not in the status registers");
+		check(snor_write_status(0, 0xff, 0) == -3, "SST26: its protection is not in the status registers");
+		chip(find("PCT25VF016B"), SST25);
+		snor_init();
+		check(snor_write_status(0, 0x04, 0x04) == -3 && strstr(snor_unprotect_why, "not the ones shown") && !wel,
+		      "SST25: its bits are not the lamps shown, no write");
 		sr = 0; sr2 = 0;
 	}
 

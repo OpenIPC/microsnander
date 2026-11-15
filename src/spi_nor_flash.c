@@ -2192,9 +2192,10 @@ static int unprotect_all(void) { return unprotect(1); }
 int snor_unprotect(void) { return snor_each_die(unprotect_all); }
 int snor_clear_qe(void) { return snor_each_die(clear_qe); }
 
-/* the register and value of snor_write_status(), for each die */
+/* the register, the bits and their value of snor_write_status(), for each
+   die: each die keeps its own other bits */
 static int ws_reg;
-static u8 ws_val;
+static u8 ws_mask, ws_val;
 
 /* bits a write cannot set: WIP and WEL of register 1 are the state of the
    chip; LB1-LB3 of register 2 lock the security registers for good */
@@ -2209,10 +2210,11 @@ static int write_status(void)
 	u8 sr = 0, sr2 = 0xff, val;
 
 	snor_unprotect_why[0] = 0;
-	if (snor_is_sst26() || (ws_reg && (snor_is_sst25_aai() || snor_is_macronix()))) {
+	if (snor_is_sst26() || snor_is_sst25_aai() || (ws_reg && snor_is_macronix())) {
 		snprintf(snor_unprotect_why, sizeof(snor_unprotect_why),
-			 snor_is_sst26() ? "this chip keeps its protection in a block register, not in the status registers"
-					 : "this chip has status register 1 only");
+			 snor_is_sst26() ? "this chip keeps its protection in a block register, not in the status registers" :
+			 snor_is_sst25_aai() ? "the bits of this chip (BP3, AAI, BPL) are not the ones shown; Clear protection clears them" :
+					       "this chip has status register 1 only");
 		return -3;
 	}
 	if (snor_read_sr(rd[ws_reg], &sr) < 0)
@@ -2222,12 +2224,13 @@ static int write_status(void)
 			 "this chip has no status register %d (it reads 0xff)", ws_reg + 1);
 		return -3;
 	}
-	if (ws_reg == 1 && !snor_is_macronix() && (ws_val & WS_OTP & ~sr)) {
+	val = (sr & ~ws_mask) | (ws_val & ws_mask);	/* this die's register, the bits asked changed */
+	if (ws_reg == 1 && !snor_is_macronix() && (val & WS_OTP & ~sr)) {
 		snprintf(snor_unprotect_why, sizeof(snor_unprotect_why),
 			 "LB1-LB3 are one-time bits: once set, the security registers stay locked for good");
 		return -3;
 	}
-	val = (ws_val & ~keep) | (sr & keep);
+	val = (val & ~keep) | (sr & keep);
 	if (!ws_reg && !snor_is_macronix() && !snor_is_sst25_aai() && snor_read_sr(OPCODE_RDSR2, &sr2) < 0)
 		return -1;
 	if (snor_unprotect_write(wr[ws_reg], &val) || snor_read_sr(rd[ws_reg], &sr) < 0)
@@ -2270,11 +2273,12 @@ static int write_status(void)
 	return 0;
 }
 
-int snor_write_status(int reg, unsigned char val)
+int snor_write_status(int reg, unsigned char mask, unsigned char val)
 {
 	if (reg < 0 || reg > 2)
 		return -3;
 	ws_reg = reg;
+	ws_mask = mask;
 	ws_val = val;
 	return snor_each_die(write_status);
 }
