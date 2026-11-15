@@ -482,6 +482,9 @@ with the remote).
 - A tap on a register lamp flips that bit: Detect, a question with the old and the new value,
   the write on every die, then the registers read again. WEL, BUSY (WIP) and SUS are the state of
   the chip, R bits are reserved and LB1–LB3 are one-time locks: those lamps take no tap.
+- **Hex view** of the last dump, as in the web mode: 512 bytes a page, address, bytes and ASCII
+  (00 and FF dim), Prev, Next and Go to an address in hex; the D-pad of a TV box moves through
+  them, and the table scrolls sideways on a narrow screen.
 - The app runs the same C code as microsnander (`src/`), built with the NDK, on the device the
   Android USB manager opened (its file descriptor, through the usbfs code, no libusb). The signed APK is in the release:
   `microsnander-android.apk` in [latest](https://github.com/OpenIPC/microsnander/releases/latest).

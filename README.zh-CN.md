@@ -414,6 +414,8 @@ root；在电视盒子上会出现在主屏幕，可用遥控器操作）。
   **Self-test**（在 Detect 和确认之后对第一个块执行 `-t`）。
 - 点击寄存器指示灯即可翻转该位：先 Detect，再询问并显示旧值和新值，在每个晶粒上写入，然后重新读取寄存器。
   WEL、BUSY（WIP）和 SUS 是芯片的状态，R 位为保留位，LB1–LB3 为一次性锁定位：这些指示灯不能点击。
+- 最近一次转储的 **Hex view**，与 Web 模式相同：每页 512 字节，地址、字节和 ASCII（00 和 FF 显示为暗色），
+  Prev、Next 和 Go（跳转到十六进制地址）；电视盒子上可用遥控器方向键操作，窄屏上表格可横向滚动。
 - 应用使用与 microsnander 相同的 C 代码（`src/`），由 NDK 编译，访问 Android USB 管理器打开的
   设备（通过其文件描述符和 usbfs 代码，不使用 libusb）。签名的 APK 在发布版中：[latest](https://github.com/OpenIPC/microsnander/releases/latest) 里的 `microsnander-android.apk`。
 

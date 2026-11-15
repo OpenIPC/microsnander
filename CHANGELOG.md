@@ -4,6 +4,13 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.43.0 — 2026-11-16
+
+- Android app: a hex view of the last dump (#85), under the status registers, as in the web
+  mode: address, bytes and ASCII, 16 bytes a row, 512 bytes a page, 00 and FF dim; Prev, Next and
+  Go to an address in hex (up to 12 digits, inside the dump). Only that page is read from the
+  file, so a dump of any size opens at once; the panel follows the newest dump.
+
 ## 1.42.1 — 2026-11-16
 
 - Android app: the APK carries native code for ARM only, arm64-v8a and armeabi-v7a (phones and
