@@ -132,7 +132,8 @@ int main(void)
 	      "GET / gives the page");
 	check(strstr(body_of(), "if(s.seq<seen&&s.seq!==0)return") != NULL, "  an older state does not replace a newer one on the page");
 	check(strstr(body_of(), "id=\"hexpanel\"") && strstr(body_of(), "Range:'bytes='+a+'-'+(a+HXP-1)") &&
-	      strstr(body_of(), "if(s.file&&!s.busy)hexOpen(s.file)"), "  the hex view of the last dump, read with Range");
+	      strstr(body_of(), "if(s.file&&!s.busy)hexOpen(s.file)") && strstr(body_of(), "if(my===hx.req)hexDraw("),
+	      "  the hex view of the last dump, read with Range, only the last answer shown");
 	check(strstr(body_of(), "function detectThen") && strstr(body_of(), "(o==='erase'||o==='write'||o==='selftest'||o==='unprotect')&&!s.chip"),
 	      "  Erase and Write wait for a chip: off without one, a Detect before the question");
 

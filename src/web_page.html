@@ -207,17 +207,17 @@ function render(s){
  if(!s.busy&&timer){clearInterval(timer);timer=null}
 }
 /* the hex view of the last dump: 512 bytes a page, read with Range */
-var hx={file:'',off:0,size:0},HXP=512;
+var hx={file:'',off:0,size:0,req:0},HXP=512;
 function h2(v,n){var s=v.toString(16).toUpperCase();while(s.length<n)s='0'+s;return s}
 function hexOpen(f){if(f===hx.file)return;hx.file=f;hx.off=0;hx.size=0;$('hexfile').textContent=f;$('hexpanel').hidden=false;hexLoad()}
 function hexLoad(){
- var a=hx.off;
+ var a=hx.off,my=++hx.req;	/* only the last request is shown: an older answer is dropped */
  fetch(base+'/dumps/'+encodeURIComponent(hx.file),{headers:{Range:'bytes='+a+'-'+(a+HXP-1)},cache:'no-store'}).then(function(r){
   if(r.status===416)throw 'Past the end of the dump ('+size(hx.size)+').';
   if(r.status!==206)throw 'The dump cannot be read here.';
   var cr=r.headers.get('Content-Range');if(cr)hx.size=parseInt(cr.split('/')[1],10);
   return r.arrayBuffer();
- }).then(function(b){hexDraw(new Uint8Array(b),a)}).catch(function(e){$('hex').textContent=typeof e==='string'?e:'No link.'});
+ }).then(function(b){if(my===hx.req)hexDraw(new Uint8Array(b),a)}).catch(function(e){if(my===hx.req)$('hex').textContent=typeof e==='string'?e:'No link.'});
 }
 function hexDraw(u,a){
  var h='';
