@@ -11,6 +11,12 @@ from every push to `main`; this file is the change history.
   Go to an address in hex (up to 12 digits, inside the dump). Only that page is read from the
   file, so a dump of any size opens at once; the panel follows the newest dump.
 
+## 1.42.1 — 2026-11-16
+
+- Android app: the APK carries native code for ARM only, arm64-v8a and armeabi-v7a (phones and
+  TV boxes), not for x86_64 (#89); it is smaller. An x86_64 emulator build:
+  `-PmicrosnanderAbis=arm64-v8a,armeabi-v7a,x86_64`.
+
 ## 1.42.0 — 2026-11-16
 
 - Web mode: a hex view of the last dump (#85), under the status registers: address, bytes and
