@@ -10,7 +10,7 @@ from every push to `main`; this file is the change history.
   failed Write in the state, with how much came: "The file stopped coming after N of M bytes …:
   nothing was written. Press Write again." Before, the connection was dropped without a word and the
   page kept showing the last result. After a timeout the browser gets 408; the page reads the state
-  after any refusal, and when its link breaks during the upload it says so and shows the state.
+  after it, and when its link breaks during the upload it says so and shows the state.
 
 ## 1.41.0 — 2026-11-15
 
