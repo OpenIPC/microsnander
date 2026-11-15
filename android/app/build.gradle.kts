@@ -29,10 +29,10 @@ android {
         targetSdk = 34
         versionCode = msVersionCode
         versionName = msVersion
-        // phones and TV boxes (32-bit ARM too); x86_64 for the emulator.
-        // -PmicrosnanderAbis=armeabi-v7a for one ABI only.
+        // phones and TV boxes (32-bit ARM too) (#89). -PmicrosnanderAbis=armeabi-v7a
+        // for one ABI only, add x86_64 for an x86_64 emulator.
         val abis = (project.findProperty("microsnanderAbis") as String?)
-            ?: "arm64-v8a,armeabi-v7a,x86_64"
+            ?: "arm64-v8a,armeabi-v7a"
         ndk { abiFilters += abis.split(",").map { it.trim() } }
         resourceConfigurations += listOf("en", "ru", "zh-rCN")
     }
@@ -72,7 +72,7 @@ android {
         warningsAsErrors = true
         abortOnError = true
         // GradleDependency etc.: the versions are pinned on purpose (as in compot/android);
-        // ChromeOsAbiSupport: phones and TV boxes, x86_64 only for the emulator
+        // ChromeOsAbiSupport: phones and TV boxes, no x86 by default
         disable += listOf("GradleDependency", "OldTargetApi", "AndroidGradlePluginVersion", "ChromeOsAbiSupport")
     }
 }
