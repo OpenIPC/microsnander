@@ -302,7 +302,8 @@ int main(void)
 	      strstr(body_of(), "nothing was written"),
 	      "  the state says it, as a failed Write, for the page");
 	request("GET", "/", NULL, NULL, 0);
-	check(strstr(body_of(), "the file did not reach the programmer") != NULL, "  and the page tells it when its upload breaks");
+	check(strstr(body_of(), "the link broke while the file was sent: see the state") && strstr(body_of(), "+t;poll();return}"),
+	      "  and the page tells it when its upload breaks, and reads the state after a refusal (408)");
 	st.uploading = 1;				/* another upload is coming in */
 	check(request("POST", "/api/write", NULL, img, sizeof(img)) == 409, "  a second upload at the same time: 409, before it takes space");
 	check(request("POST", "/api/erase", NULL, NULL, 0) == 409, "  an erase while a file is coming in: 409");
