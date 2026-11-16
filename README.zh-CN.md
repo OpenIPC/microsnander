@@ -312,8 +312,8 @@ microsnander -O security.bin
 
 <p align="center">
   <img src="screenshots/web-reading.png" alt="MicroSNANDer Web 读取中：指示灯、显示屏、进度条、黄铜按钮" width="45%">
-  <img src="screenshots/web-registers.png" alt="MicroSNANDer Web 读取完成：转储链接和状态寄存器各位的指示灯" width="45%">
   <img src="screenshots/web-selftest.png" alt="MicroSNANDer Web 自检之后：SELF-TEST OK、保护状态和结果" width="45%">
+  <img src="screenshots/web-registers.png" alt="MicroSNANDer Web 读取完成：转储链接、状态寄存器各位的指示灯和转储的十六进制视图" width="45%">
 </p>
 
 ```sh
@@ -402,7 +402,8 @@ root；在电视盒子上会出现在主屏幕，可用遥控器操作）。
 
 <p align="center">
   <img src="screenshots/android-main.png" alt="MicroSNANDer Android 版：显示屏、黄铜按钮" height="360">
-  <img src="screenshots/android-tv.png" alt="MicroSNANDer 在 Android 电视盒子上：已识别 CH341A 和 W25Q128，状态寄存器指示灯" height="360">
+  <img src="screenshots/android-tv.png" alt="MicroSNANDer 在 Android 电视盒子上：已识别 CH341A 和 BY25Q64AS；点按状态寄存器指示灯，确认后翻转该位" height="360">
+  <img src="screenshots/android-hexview.png" alt="MicroSNANDer 在 Android 电视盒子上：从 0x8400 起的最近转储十六进制视图" height="360">
 </p>
 
 - 插上编程器（手机需通过 OTG 转接头；电视盒子的某个端口可能只能作为设备端口，请换另一个），并允许
