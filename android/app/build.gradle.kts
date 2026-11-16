@@ -40,6 +40,7 @@ android {
             "-PmicrosnanderAbis=${abis.joinToString(",")}: one or more of ${knownAbis.joinToString(",")}"
         }
         ndk { abiFilters += abis }
+        externalNativeBuild { cmake { arguments += "-DMS_VERSION=$msVersion" } }
         resourceConfigurations += listOf("en", "ru", "zh-rCN")
     }
     signingConfigs {

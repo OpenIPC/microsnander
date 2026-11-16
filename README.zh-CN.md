@@ -419,6 +419,18 @@ root；在电视盒子上会出现在主屏幕，可用遥控器操作）。
 - 应用使用与 microsnander 相同的 C 代码（`src/`），由 NDK 编译，访问 Android USB 管理器打开的
   设备（通过其文件描述符和 usbfs 代码，不使用 libusb）。签名的 APK 在发布版中：[latest](https://github.com/OpenIPC/microsnander/releases/latest) 里的 `microsnander-android.apk`。
 
+### 远程访问
+
+应用本身可以提供 [Web 模式](#web-模式) 的页面：操作员在任何能访问到该设备的地方（同一网络、隧道）用浏览器操作编程器，
+现场的人只需插上编程器。在 **Remote access** 面板中点 **Settings…**：**Allow remote access**、端口（8080）和密码
+（至少 4 个字符；浏览器中的用户名任意）。
+
+- 页面监听设备的所有网络：`http://地址:端口`，地址显示在屏幕上。没有密码则不启动。
+- 以前台服务运行：熄屏时也工作，重启后自动启动。
+- 首次插上编程器时选择本应用并勾选 **Always**（始终）：此后每次插入和重启后 Android 都会把它交给应用，设备旁无需有人。
+- 页面和应用共用一个编程器，一次只运行一个操作：操作员运行的操作显示在设备屏幕上（REMOTE: READ 42%），
+  设备上的按钮会等它结束；页面也会显示在设备上运行的操作。双方的转储都在应用的转储目录中，页面链接最近的一个并以十六进制显示。
+
 构建：在安装了 Android SDK 和 NDK r27c 的环境中运行 `cd android && gradle assembleDebug`。
 
 ## SigmaStar ISP

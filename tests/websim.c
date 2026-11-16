@@ -116,6 +116,11 @@ static void wait_idle(void)
 	}
 }
 
+static int dev_fails, dev_opens, dev_closes;
+static int dev_open(void) { dev_opens++; return dev_fails ? -1 : 0; }
+static void dev_close(void) { dev_closes++; }
+static void *serve_thread(void *dir) { return (void *)(long)web_serve("127.0.0.1:0", NULL, dir, 0, 0); }
+
 static int fail;
 static void check(int ok, const char *what) { printf("%s %s\n", ok ? "ok  " : "FAIL", what); if (!ok) fail = 1; }
 
@@ -459,6 +464,74 @@ int main(void)
 	check(web_serve("127.0.0.1:0", "", dir, 0, 0) == 1, "an empty -K password is refused");
 
 	check(request("GET", "/nope", NULL, NULL, 0) == 404 && request("POST", "/api/nope", NULL, NULL, 0) == 404, "unknown paths: 404");
+
+	/* ---- the Android app: device hooks, its own operations, any Host, stop ---- */
+	web_device_open = dev_open;
+	web_device_close = dev_close;
+	dev_fails = 1;
+	request("POST", "/api/detect", NULL, NULL, 0);
+	wait_idle();
+	request("GET", "/api/state", NULL, NULL, 0);
+	check(strstr(body_of(), "\"ok\":false") && strstr(body_of(), "No programmer, or no access to it.") && dev_opens == 1 && dev_closes == 0,
+	      "the app has no programmer for the page: the operation fails, nothing to close");
+	dev_fails = 0;
+	request("POST", "/api/detect", NULL, NULL, 0);
+	wait_idle();
+	request("GET", "/api/state", NULL, NULL, 0);
+	check(strstr(body_of(), "\"ok\":true") && dev_opens == 2 && dev_closes == 1, "  with one: opened for the operation and closed after it");
+	web_device_open = NULL;
+	web_device_close = NULL;
+
+	check(web_local_begin(OP_READ) == 0, "the app's own operation takes the slot");
+	check(web_local_begin(OP_DETECT) == -1, "  a second one of the app: refused");
+	check(request("POST", "/api/detect", NULL, NULL, 0) == 409, "  the page's while it runs: 409");
+	web_local_progress("read", 50, 100);
+	request("GET", "/api/state", NULL, NULL, 0);
+	check(strstr(body_of(), "\"busy\":1,\"local\":true,\"op\":\"read\"") && strstr(body_of(), "\"done\":50,\"total\":100"),
+	      "  the page shows it with its progress");
+	{
+		struct ms_chip c = { .programmer = "CH341A", .chip = "W25Q80", .size = SIM_SIZE };
+
+		web_local_end(&c, 1, "Read by the app.", NULL);
+	}
+	request("GET", "/api/state", NULL, NULL, 0);
+	check(strstr(body_of(), "\"busy\":0,\"local\":true") && strstr(body_of(), "\"ok\":true") &&
+	      strstr(body_of(), "Read by the app.") && strstr(body_of(), "\"programmer\":\"CH341A\""), "  and how it ended");
+	web_show_dump("flash-202611161200-W25Q80.bin");
+	{
+		char js[3072];
+
+		web_state_json(js, sizeof(js));
+		check(strstr(js, "\"file\":\"flash-202611161200-W25Q80.bin\"") != NULL, "a dump the app kept: the page links it");
+	}
+	request("POST", "/api/detect", NULL, NULL, 0);
+	wait_idle();
+	request("GET", "/api/state", NULL, NULL, 0);
+	check(strstr(body_of(), "\"local\":false") != NULL, "  the page's operation after it is the page's");
+
+	extra = "Host: box1.vpn.example.org\r\n";
+	web_allow_any_host(1);
+	check(request("GET", "/api/state", NULL, NULL, 0) == 200, "the app (a password always): a Host of any name, as a tunnel gives");
+	web_allow_any_host(0);
+	extra = "";
+
+	{
+		pthread_t t;
+		void *ret;
+
+		web_stop();				/* before it serves: it returns at once */
+		check(web_serve("127.0.0.1:0", NULL, dir, 0, 0) == 0, "web_stop before web_serve: it returns 0 at once");
+		pthread_create(&t, NULL, serve_thread, dir);
+		usleep(100000);
+		web_stop();
+		pthread_join(t, &ret);
+		check((long)ret == 0, "  while it serves: it returns 0");
+		pthread_create(&t, NULL, serve_thread, dir);	/* and it serves again */
+		usleep(100000);
+		web_stop();
+		pthread_join(t, &ret);
+		check((long)ret == 0, "  served again and stopped again");
+	}
 
 	char cmd[300];
 	snprintf(cmd, sizeof(cmd), "rm -rf %s", dir);

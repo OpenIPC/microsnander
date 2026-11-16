@@ -4,6 +4,21 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.44.0 — 2026-11-16
+
+- Android app: remote access. With **Allow remote access** and a password in **Settings…**, the
+  app serves the page of the web mode (`src/web.c`) on every network of the device, port 8080 by
+  default, so an operator elsewhere (the local network, a tunnel) drives the programmer from a
+  browser and nobody has to be at the device: a foreground service, with the screen off and from
+  boot; a programmer once chosen with Always is the app's on every plug-in and after a reboot
+  (a new UsbAttachActivity takes the plug-in). The page and the app share the programmer, one
+  operation at a time: each side shows what the other runs, and the page links the last dump
+  of either side and shows it in hex. Without a password it does not start; any Host is taken
+  then, as a tunnel may come by a name.
+- Web mode: `web_stop`, device hooks around each operation, the app's own operations in the same
+  slot and the state as JSON, for the app; on Linux nothing changes. A Range of a dump is sought
+  with `lseek` (32-bit Android before 7.0 has no `fseeko` with a 64-bit offset).
+
 ## 1.43.2 — 2026-11-16
 
 - Android: `-PmicrosnanderAbis` must be a non-empty list of known ABIs (arm64-v8a, armeabi-v7a,

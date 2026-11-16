@@ -24,6 +24,12 @@
  *   POST /api/unprotect    clear the protection (as -u), then read them
  *   POST /api/selftest     -t on the first block
  *   GET  /dumps/<file>     a dump made by Read (Range: bytes=A-B gives a part, for the hex view)
+ *
+ * The Android app runs the same server in a service (web_serve in a thread of
+ * its own, web_stop to end it): it opens the USB device for each operation
+ * (web_device_open/web_device_close), its own buttons take the same slot as
+ * the page (web_local_begin/web_local_end), and its screen reads the state
+ * (web_state_json).
  */
 #include <errno.h>
 #include <pthread.h>
@@ -51,8 +57,8 @@
 #define WEB_MAX_CONN	16
 #define WEB_MAX_BODY	(512UL << 20)		/* largest file to write */
 
-enum { OP_NONE, OP_DETECT, OP_READ, OP_ERASE, OP_WRITE, OP_REGISTERS, OP_UNPROTECT, OP_SELFTEST };
-static const char *const op_names[] = { "", "detect", "read", "erase", "write", "registers", "unprotect", "selftest" };
+static const char *const op_names[] = { "", "detect", "read", "erase", "write", "registers", "unprotect", "selftest",
+				       "register" };
 
 static struct {
 	pthread_mutex_t lock;
@@ -70,6 +76,7 @@ static struct {
 	unsigned char sr[3];
 	int sr_macronix;
 	char file[160];
+	int local;				/* the operation is the app's own, not the page's */
 } st = { .lock = PTHREAD_MUTEX_INITIALIZER, .ok = -1 };
 
 extern const char *ms_version;
@@ -78,6 +85,10 @@ static const char *web_dir = ".";
 static const char *web_password;
 static unsigned long long web_addr, web_len;
 static FILE *upload;			/* the file to write, unlinked in the dump directory */
+static int web_any_host;		/* any Host: (a password is always set then) */
+
+int (*web_device_open)(void);
+void (*web_device_close)(void);
 
 static void set_msg(const char *fmt, ...)
 {
@@ -251,7 +262,12 @@ static void *worker(void *arg)
 	int op = (int)(long)arg, ret = -1;
 	struct ms_chip c = { .size = 0 };
 	char msg[512] = "";
+	int opened = !web_device_open || !web_device_open();
 
+	if (!opened) {
+		snprintf(msg, sizeof(msg), "No programmer, or no access to it.");
+		op = OP_NONE;
+	}
 	switch (op) {
 	case OP_DETECT:    ret = ms_detect(&c, msg, sizeof(msg)); break;
 	case OP_READ:      ret = op_read(&c, msg, sizeof(msg)); break;
@@ -275,6 +291,8 @@ static void *worker(void *arg)
 		break;
 	}
 	}
+	if (opened && web_device_close)
+		web_device_close();
 	keep_chip(&c, op == OP_DETECT || op == OP_REGISTERS || op == OP_UNPROTECT || op == OP_SELFTEST);
 	set_msg("%s", msg);
 	if (upload)
@@ -307,6 +325,7 @@ static int start(int op, FILE *body, const char *chip, long long size, unsigned 
 	if (body)
 		st.uploading = 0;		/* the upload is the operation's now */
 	st.busy = 1;
+	st.local = 0;
 	st.op = op;
 	st.ok = -1;
 	st.done = st.total = 0;
@@ -323,6 +342,58 @@ static int start(int op, FILE *body, const char *chip, long long size, unsigned 
 		return -1;
 	}
 	return 0;
+}
+
+/* ---- the app's own operations (Android): the same slot as the page's ---- */
+
+int web_local_begin(int op)
+{
+	pthread_mutex_lock(&st.lock);
+	if (st.busy || st.uploading) {
+		pthread_mutex_unlock(&st.lock);
+		return -1;
+	}
+	st.seq++;
+	st.busy = 1;
+	st.local = 1;
+	st.op = op;
+	st.ok = -1;
+	st.done = st.total = 0;
+	st.phase[0] = 0;
+	st.message[0] = 0;
+	if (op == OP_DETECT || op == OP_REGISTERS || op == OP_UNPROTECT || op == OP_SELFTEST || op == OP_REGISTER)
+		st.sr_valid = 0;
+	pthread_mutex_unlock(&st.lock);
+	return 0;
+}
+
+void web_local_progress(const char *phase, unsigned long long done, unsigned long long total)
+{
+	set_progress(phase, done, total);
+}
+
+void web_local_end(const struct ms_chip *c, int ok, const char *msg, const char *file)
+{
+	pthread_mutex_lock(&st.lock);
+	int op = st.op;
+	pthread_mutex_unlock(&st.lock);
+
+	keep_chip(c, op == OP_DETECT || op == OP_REGISTERS || op == OP_UNPROTECT || op == OP_SELFTEST || op == OP_REGISTER);
+	set_msg("%s", msg);
+	pthread_mutex_lock(&st.lock);
+	if (file && file[0])
+		snprintf(st.file, sizeof(st.file), "%s", file);
+	st.ok = ok;
+	st.busy = 0;
+	pthread_mutex_unlock(&st.lock);
+}
+
+/* a dump the app keeps in the dump directory: the page links it and shows it in hex */
+void web_show_dump(const char *name)
+{
+	pthread_mutex_lock(&st.lock);
+	snprintf(st.file, sizeof(st.file), "%s", name);
+	pthread_mutex_unlock(&st.lock);
 }
 
 /* ---- HTTP ---- */
@@ -374,9 +445,9 @@ static void json_str(char *out, size_t n, const char *s)
 	out[k] = 0;
 }
 
-static void reply_state(int fd)
+size_t web_state_json(char *body, size_t size)
 {
-	char body[3072], msg[1100], prg[64], chip[128], file[256], warn[640], sr[32] = "null";
+	char msg[1100], prg[64], chip[128], file[256], warn[640], sr[32] = "null";
 
 	pthread_mutex_lock(&st.lock);
 	json_str(msg, sizeof(msg), st.message);
@@ -386,15 +457,23 @@ static void reply_state(int fd)
 	json_str(warn, sizeof(warn), st.chip[0] ? st.warning : "");
 	if (st.sr_valid)
 		snprintf(sr, sizeof(sr), "[%u,%u,%u]", st.sr[0], st.sr[1], st.sr[2]);
-	int n = snprintf(body, sizeof(body),
-			 "{\"busy\":%d,\"op\":\"%s\",\"ok\":%s,\"phase\":\"%s\",\"done\":%llu,\"total\":%llu,"
+	int n = snprintf(body, size,
+			 "{\"busy\":%d,\"local\":%s,\"op\":\"%s\",\"ok\":%s,\"phase\":\"%s\",\"done\":%llu,\"total\":%llu,"
 			 "\"message\":\"%s\",\"programmer\":\"%s\",\"chip\":\"%s\",\"size\":%lld,\"voltage\":\"%s\","
 			 "\"warning\":\"%s\",\"sr\":%s,\"sr_macronix\":%s,\"file\":\"%s\","
 			 "\"seq\":%u,\"version\":\"%s\"}",
-			 st.busy, op_names[st.op], st.ok < 0 ? "null" : st.ok ? "true" : "false", st.phase,
+			 st.busy, st.local ? "true" : "false", op_names[st.op], st.ok < 0 ? "null" : st.ok ? "true" : "false", st.phase,
 			 st.done, st.total, msg, prg, chip, st.size, st.chip[0] ? ms_voltage_name(st.voltage) : "",
 			 warn, sr, st.sr_valid && st.sr_macronix ? "true" : "false", file, st.seq, ms_version);
 	pthread_mutex_unlock(&st.lock);
+	return n < 0 ? 0 : (size_t)n < size ? (size_t)n : size - 1;
+}
+
+static void reply_state(int fd)
+{
+	char body[3072];
+	size_t n = web_state_json(body, sizeof(body));
+
 	reply(fd, "200 OK", "application/json", NULL, body, n);
 }
 
@@ -547,7 +626,9 @@ static void send_dump(int fd, const char *name, const char *range)
 		fclose(f);
 		return;
 	}
-	if (part > 0 && fseeko(f, from, SEEK_SET)) {
+	/* nothing is read from f yet: the offset of its descriptor is where it starts
+	   (lseek, as 32-bit Android before 7.0 has no fseeko with a 64-bit off_t) */
+	if (part > 0 && lseek(fileno(f), (off_t)from, SEEK_SET) < 0) {
 		fclose(f);
 		reply_text(fd, "500 Internal Server Error", "Cannot read the dump.\n");
 		return;
@@ -647,7 +728,7 @@ static void handle(int fd)
 		reply_text(fd, "400 Bad Request", "Bad request.\n");
 		return;
 	}
-	if (!host_ok(head)) {
+	if (!web_any_host && !host_ok(head)) {
 		reply_text(fd, "403 Forbidden", "Use the address of this machine.\n");
 		return;
 	}
@@ -803,6 +884,18 @@ static void *conn_thread(void *arg)
 	return NULL;
 }
 
+static int web_sock = -1;
+static volatile int web_stopping;
+
+void web_stop(void)
+{
+	pthread_mutex_lock(&st.lock);
+	web_stopping = 1;
+	if (web_sock >= 0)
+		shutdown(web_sock, SHUT_RDWR);	/* accept() returns */
+	pthread_mutex_unlock(&st.lock);
+}
+
 int web_serve(const char *listen_on, const char *password, const char *dir,
 	      unsigned long long addr, unsigned long long len)
 {
@@ -841,8 +934,14 @@ int web_serve(const char *listen_on, const char *password, const char *dir,
 	setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
 	if (s < 0 || bind(s, (struct sockaddr *)&sa, sizeof(sa)) || listen(s, 8)) {
 		printf("Cannot listen on %s:%ld: %s\n", host, port, strerror(errno));
+		if (s >= 0)
+			close(s);
 		return 1;
 	}
+	pthread_mutex_lock(&st.lock);
+	web_sock = s;
+	int stopped = web_stopping;
+	pthread_mutex_unlock(&st.lock);
 	socklen_t sl = sizeof(sa);
 	getsockname(s, (struct sockaddr *)&sa, &sl);
 	printf("Web mode on http://%s:%d/%s, dumps in %s\n", host, ntohs(sa.sin_port),
@@ -852,11 +951,16 @@ int web_serve(const char *listen_on, const char *password, const char *dir,
 	fflush(stdout);
 
 	/* a thread for each connection, so a slow client does not hold the others */
-	for (;;) {
+	while (!stopped) {
 		int c = accept(s, NULL, NULL);
 		pthread_t t;
 
 		reap_threads();
+		if (web_stopping) {
+			if (c >= 0)
+				close(c);
+			break;
+		}
 		if (c < 0) {
 			if (errno == EMFILE || errno == ENFILE || errno == ENOBUFS || errno == ENOMEM)
 				usleep(100000);		/* out of resources: wait, do not stop */
@@ -880,4 +984,16 @@ int web_serve(const char *listen_on, const char *password, const char *dir,
 			close(c);
 		}
 	}
+	/* web_stop: the connections and an operation that runs end by themselves */
+	pthread_mutex_lock(&st.lock);
+	web_sock = -1;
+	web_stopping = 0;
+	pthread_mutex_unlock(&st.lock);
+	close(s);
+	return 0;
+}
+
+void web_allow_any_host(int on)
+{
+	web_any_host = on;
 }

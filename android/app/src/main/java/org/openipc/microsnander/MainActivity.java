@@ -32,11 +32,15 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.inputmethod.EditorInfo;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.GridLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -64,10 +68,10 @@ public class MainActivity extends Activity {
     private static final String ACTION_USB_PERMISSION = "org.openipc.microsnander.USB_PERMISSION";
     /** only senders with our signature: our own PendingIntent */
     private static final String RESULT_PERMISSION = "org.openipc.microsnander.permission.USB_RESULT";
-    private static final int PICK_WRITE = 1, SAVE_AS = 2, ASK_STORAGE = 3, ASK_READ = 4;
+    private static final int PICK_WRITE = 1, SAVE_AS = 2, ASK_STORAGE = 3, ASK_READ = 4, ASK_NOTIFY = 5;
 
     /** vendor, product of the programmers microsnander drives */
-    private static final int[][] PROGRAMMERS = {
+    static final int[][] PROGRAMMERS = {
         {0x1a86, 0x5512}, {0x1a86, 0x55db}, {0x1a86, 0x55de},
         {0x1fc8, 0x310b}, {0x1fc8, 0x310c}, {0x1fc8, 0x310d},
     };
@@ -111,6 +115,7 @@ public class MainActivity extends Activity {
     private TextView hexFile, hexText;
     private EditText hexAddr;
     private Button hexPrev, hexNext, hexGoButton;
+    private TextView remotePlate, remoteStatus;
     private Runnable afterPermission;
 
     @Override
@@ -144,6 +149,12 @@ public class MainActivity extends Activity {
             return true;
         });
         ((TextView) findViewById(R.id.version)).setText(getString(R.string.version, BuildConfig.VERSION_NAME));
+        remotePlate = findViewById(R.id.remote_plate);
+        remoteStatus = findViewById(R.id.remote_status);
+        findViewById(R.id.b_remote).setOnClickListener(v -> remoteSettings());
+        if (Settings.active(this) && RemoteService.instance == null)
+            RemoteService.send(this, RemoteService.ACTION_START);
+        showRemote();
         buttons = new Button[] {
             findViewById(R.id.b_detect), findViewById(R.id.b_read), findViewById(R.id.b_erase),
             findViewById(R.id.b_write), findViewById(R.id.b_registers), findViewById(R.id.b_unprotect),
@@ -205,6 +216,8 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         resumed = true;
+        MAIN.removeCallbacks(watchRemote);
+        MAIN.post(watchRemote);
         if (!busy && pendingNext != null) {	// Detect ended while no screen was in front
             Found f = pendingNext;
             Native.Result r = pendingFor;
@@ -219,6 +232,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onPause() {
         resumed = false;
+        MAIN.removeCallbacks(watchRemote);
         super.onPause();
     }
 
@@ -486,6 +500,7 @@ public class MainActivity extends Activity {
                 tmp.delete();
                 return app.getString(R.string.cannot_keep);
             }
+            Native.dumpKept(dump.getName());	// the remote page shows and links it too
             String where = toDownloads(app, dump);
             return where != null ? app.getString(R.string.dump_is, where) : app.getString(R.string.dump_kept);
         }, null);
@@ -706,6 +721,127 @@ public class MainActivity extends Activity {
             tmp.delete();
             return r;
         });
+    }
+
+    // ---- remote access ----
+
+    /** the service changed its status: the screen there is shows it */
+    static void remoteChanged() {
+        MainActivity a = current.get();
+        if (a != null)
+            a.showRemote();
+    }
+
+    private void showRemote() {
+        boolean on = RemoteService.instance != null && Settings.active(this);
+        remotePlate.setText(on ? R.string.remote_on_plate : R.string.remote_off);
+        remoteStatus.setText(on ? RemoteService.status : getString(R.string.remote_off_text));
+    }
+
+    private void remoteSettings() {
+        View v = getLayoutInflater().inflate(R.layout.remote_settings, null);
+        CheckBox on = v.findViewById(R.id.r_enabled);
+        EditText port = v.findViewById(R.id.r_port);
+        EditText password = v.findViewById(R.id.r_password);
+        on.setChecked(Settings.enabled(this));
+        port.setText(String.valueOf(Settings.port(this)));
+        password.setText(Settings.password(this));
+        AlertDialog d = new AlertDialog.Builder(this).setTitle(R.string.remote_access).setView(v)
+                .setPositiveButton(android.R.string.ok, null)
+                .setNegativeButton(android.R.string.cancel, null).show();
+        // OK checks the fields first: the dialog stays with what is wrong
+        d.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(b -> {
+            int p;
+            try {
+                p = Integer.parseInt(port.getText().toString().trim());
+            } catch (NumberFormatException e) {
+                p = 0;
+            }
+            String pw = password.getText().toString();
+            if (p < 1024 || p > 65535) {
+                port.setError(getString(R.string.remote_bad_port));
+                return;
+            }
+            if (on.isChecked() && pw.length() < Settings.MIN_PASSWORD) {
+                password.setError(getString(R.string.remote_bad_password, Settings.MIN_PASSWORD));
+                return;
+            }
+            boolean was = Settings.active(this);
+            boolean changed = p != Settings.port(this) || !pw.equals(Settings.password(this));
+            Settings.save(this, on.isChecked(), p, pw);
+            if (!Settings.active(this))
+                RemoteService.send(this, RemoteService.ACTION_STOP);
+            else
+                RemoteService.send(this, was && changed ? RemoteService.ACTION_RESTART : RemoteService.ACTION_START);
+            if (Settings.active(this) && Build.VERSION.SDK_INT >= 33
+                    && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
+                requestPermissions(new String[] {Manifest.permission.POST_NOTIFICATIONS}, ASK_NOTIFY);
+            d.dismiss();
+            showRemote();
+        });
+    }
+
+    /** the operations of the page, while the screen is in front: what runs and how it ended */
+    private static int remoteSeq = -1;	// the operation of the page last shown
+    private static boolean remoteRunning;
+    private final Runnable watchRemote = new Runnable() {
+        @Override
+        public void run() {
+            if (RemoteService.instance != null)
+                watch();
+            MAIN.postDelayed(this, 700);
+        }
+    };
+
+    private void watch() {
+        JSONObject s;
+        try {
+            s = new JSONObject(Native.state());
+        } catch (JSONException e) {
+            return;
+        }
+        if (s.optBoolean("local"))
+            return;			// the app's own: shown as always
+        int seq = s.optInt("seq");
+        boolean run = s.optInt("busy") != 0;	// 0 or 1, as web.c writes it
+        if (run) {
+            remoteRunning = true;
+            remoteSeq = seq;
+            long done = s.optLong("done"), total = s.optLong("total");
+            String phase = s.optString("phase");
+            String op = phase.isEmpty() ? s.optString("op") : phase;
+            enable(false);
+            bar.setVisibility(View.VISIBLE);
+            bar.setIndeterminate(total <= 0);
+            if (total > 0) bar.setProgress((int) (100 * done / total));
+            state.setTextColor(col(R.color.amber));
+            String what = getString(R.string.remote_busy, op.toUpperCase(Locale.ROOT));
+            state.setText(total > 0 ? String.format(Locale.ROOT, "%s %d%%", what, (int) (100 * done / total)) : what);
+            meta.setText(R.string.remote_working);
+            return;
+        }
+        if (!remoteRunning || seq != remoteSeq || busy)
+            return;
+        remoteRunning = false;	// it ended: its outcome, as the app's own
+        Native.Result r = fromState(s);
+        lastResult = r;
+        lastSaved = null;
+        if (r.sr >= 0 || "registers".equals(s.optString("op")) || "unprotect".equals(s.optString("op")))
+            lastSr = r.sr;
+        showResult(r, null);
+        meta.append("\n" + getString(R.string.remote_done, s.optString("op")));
+        showRegisters(lastSr);
+    }
+
+    /** the state of /api/state as a Result for the screen */
+    private static Native.Result fromState(JSONObject s) {
+        int sr = -1;
+        JSONArray a = s.optJSONArray("sr");
+        if (a != null && a.length() == 3)
+            sr = (s.optBoolean("sr_macronix") ? 1 << 24 : 0) | a.optInt(0) << 16 | a.optInt(1) << 8 | a.optInt(2);
+        return new Native.Result(s.optBoolean("ok"), s.optString("message"), s.optString("programmer"),
+                s.optString("chip"), s.optLong("size"), sr, s.optString("file"), s.optString("voltage"),
+                s.optString("warning"));
     }
 
     // ---- the screen ----

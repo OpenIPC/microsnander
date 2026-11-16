@@ -489,6 +489,23 @@ with the remote).
   Android USB manager opened (its file descriptor, through the usbfs code, no libusb). The signed APK is in the release:
   `microsnander-android.apk` in [latest](https://github.com/OpenIPC/microsnander/releases/latest).
 
+### Remote access
+
+The app can serve the page of the [web mode](#web-mode) itself, so an operator anywhere the
+device is reachable from (its network, a tunnel) drives the programmer from a browser, and the
+person at the bench only plugs it in. **Settings…** under **Remote access**: **Allow remote
+access**, the port (8080) and a password (4 characters or more; any user name in the browser).
+
+- The page listens on every network of the device: `http://ADDRESS:PORT`, the addresses are on
+  the screen. Without a password it does not start.
+- It runs as a foreground service: with the screen off, and by itself after a reboot.
+- Plug the programmer in once and choose the app with **Always**: from then on Android gives
+  it to the app on every plug-in and after a reboot, with nobody at the device.
+- The page and the app share one programmer, one operation at a time: what the operator runs
+  shows on the screen of the device (REMOTE: READ 42%), the buttons there wait for it, and the
+  page shows what is run on the device. Dumps of either side are in the app's dump folder, the
+  page links the last one and shows it in hex.
+
 Build: `cd android && gradle assembleDebug` with the Android SDK and NDK r27c.
 
 ## SigmaStar ISP

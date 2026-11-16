@@ -352,5 +352,58 @@
                 android:textColor="@color/dim"
                 android:textSize="11sp" />
         </LinearLayout>
+
+        <!-- remote access: the web page of the app for an operator elsewhere -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/panel"
+            android:orientation="vertical"
+            android:padding="18dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <TextView
+                    style="@style/Plate"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/remote_access" />
+
+                <View
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:layout_weight="1" />
+
+                <TextView
+                    android:id="@+id/remote_plate"
+                    style="@style/Plate"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/remote_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:fontFamily="monospace"
+                android:textColor="@color/dim"
+                android:textIsSelectable="false"
+                android:textSize="12sp" />
+
+            <Button
+                android:id="@+id/b_remote"
+                style="@style/Brass"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="end"
+                android:paddingLeft="24dp"
+                android:paddingRight="24dp"
+                android:text="@string/remote_settings" />
+        </LinearLayout>
     </LinearLayout>
 </ScrollView>
