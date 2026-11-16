@@ -4,6 +4,13 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.43.2 — 2026-11-16
+
+- Android: `-PmicrosnanderAbis` must be a non-empty list of known ABIs (arm64-v8a, armeabi-v7a,
+  x86_64, x86), otherwise the build stops with that list (#92); an empty entry
+  (`arm64-v8a,,x86_64`) is an error too. An empty value used to pack every ABI of the NDK into
+  the APK; the default `arm64-v8a,armeabi-v7a` is unchanged.
+
 ## 1.43.1 — 2026-11-16
 
 - Web mode, hex view: an answer that comes after a newer request changes nothing (before, it could
