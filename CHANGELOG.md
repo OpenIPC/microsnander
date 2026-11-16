@@ -4,6 +4,12 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.43.1 — 2026-11-16
+
+- Web mode, hex view: an answer that comes after a newer request changes nothing (before, it could
+  still set the dump size or go back to address 0, and Go then refused a valid address); a state
+  with no dump (the service started again) hides the panel instead of keeping the old bytes.
+
 ## 1.43.0 — 2026-11-16
 
 - Android app: a hex view of the last dump (#85), under the status registers, as in the web

@@ -200,7 +200,7 @@ function render(s){
   sr.forEach(function(v,i){h+='<div class="name">SR'+(i+1)+'</div>';names[i].forEach(function(n,k){var on=(v>>(7-k))&1;h+='<div class="bit"><span class="bulb'+(on?(protect[n]?' on':' ok'):'')+'"></span>'+n+'</div>'})});
   $('regs').innerHTML=h;
  }else if(!s.busy&&['detect','registers','unprotect'].indexOf(s.op)>=0)$('regpanel').hidden=true;
- if(s.file&&!s.busy)hexOpen(s.file);
+ if(!s.busy){if(s.file)hexOpen(s.file);else hexClose()}	/* no dump: the service started again */
  if(!s.busy&&lastOp==='read'&&s.op==='read'&&s.ok&&s.file){lastOp='';location.href=base+'/dumps/'+encodeURIComponent(s.file)}
  if(!document.body.classList.contains('ready'))setTimeout(function(){document.body.classList.add('ready')},50);	/* the first state is shown at once */
  if(s.busy&&!timer)timer=setInterval(poll,500);
@@ -209,15 +209,17 @@ function render(s){
 /* the hex view of the last dump: 512 bytes a page, read with Range */
 var hx={file:'',off:0,size:0,req:0},HXP=512;
 function h2(v,n){var s=v.toString(16).toUpperCase();while(s.length<n)s='0'+s;return s}
+function hexClose(){if(!hx.file)return;hx.file='';hx.off=hx.size=0;hx.req++;$('hexpanel').hidden=true;$('hex').textContent=''}
 function hexOpen(f){if(f===hx.file)return;hx.file=f;hx.off=0;hx.size=0;$('hexfile').textContent=f;$('hexpanel').hidden=false;hexLoad()}
 function hexLoad(){
  var a=hx.off,my=++hx.req;	/* only the last request is shown: an older answer is dropped */
  fetch(base+'/dumps/'+encodeURIComponent(hx.file),{headers:{Range:'bytes='+a+'-'+(a+HXP-1)},cache:'no-store'}).then(function(r){
+  if(my!==hx.req)return null;	/* an older answer changes nothing: not the size, not the address */
   if(r.status===416){hx.off=0;throw 'Past the end of the dump: press Go for an address inside it.'}
   if(r.status!==206)throw 'The dump cannot be read here.';
   var cr=r.headers.get('Content-Range');if(cr)hx.size=parseInt(cr.split('/')[1],10);
   return r.arrayBuffer();
- }).then(function(b){if(my===hx.req)hexDraw(new Uint8Array(b),a)}).catch(function(e){if(my===hx.req)$('hex').textContent=typeof e==='string'?e:'No link.'});
+ }).then(function(b){if(b&&my===hx.req)hexDraw(new Uint8Array(b),a)}).catch(function(e){if(my===hx.req)$('hex').textContent=typeof e==='string'?e:'No link.'});
 }
 function hexDraw(u,a){
  var h='';
