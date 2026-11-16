@@ -431,6 +431,17 @@ root；在电视盒子上会出现在主屏幕，可用遥控器操作）。
 - 页面和应用共用一个编程器，一次只运行一个操作：操作员运行的操作显示在设备屏幕上（REMOTE: READ 42%），
   设备上的按钮会等它结束；页面也会显示在设备上运行的操作。双方的转储都在应用的转储目录中，页面链接最近的一个并以十六进制显示。
 
+**通过 camex 服务器。** 开启远程访问后，**Tunnel…** 让设备加入 [camex](https://github.com/OpenIPC/camex) 服务器（camex 已内置于应用，无需其他应用）：
+填写服务器、客户端名称、UDP 或 TCP、服务器公钥和 psk，或粘贴/用应用打开包含这些设置的 camex 链接
+（`https://openipc.github.io/camex/connect/#…`，即 camex 的 `install.sh` 输出的链接）。操作员作为同一服务器的另一个客户端，
+通过设备在隧道中的地址打开页面，该地址显示在 Remote access 下方。隧道会自动重连，重启后自动恢复。
+
+- Android 只有在同意后才允许 VPN，只需一次：在屏幕上点 **Allow VPN…**；无人值守的设备可在准备时执行
+  `adb shell appops set org.openipc.microsnander ACTIVATE_VPN allow`，然后执行 `adb shell appops write-settings`
+  （Android 稍后才写入磁盘，在此之前重启会丢失该设置；无需 root）。Android 5.0 没有此操作，需在那里确认一次对话框。
+  未同意时页面仍可在本地网络使用，屏幕、通知和页面会说明缺少什么；应用每分钟重试一次。
+- 只有隧道网络和服务器的路由经过 VPN，绝不是全部流量。
+
 构建：在安装了 Android SDK 和 NDK r27c 的环境中运行 `cd android && gradle assembleDebug`。
 
 ## SigmaStar ISP

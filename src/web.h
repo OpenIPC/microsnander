@@ -45,6 +45,9 @@ void web_local_end(const struct ms_chip *c, int ok, const char *msg, const char 
 /* a dump the app put in the dump directory: the page shows it as the last one */
 void web_show_dump(const char *name);
 
+/* the state of the app's camex tunnel the page shows ("" none) */
+void web_set_tunnel(const char *text);
+
 /* the state the page reads at /api/state, as JSON; its length */
 size_t web_state_json(char *buf, size_t size);
 

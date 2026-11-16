@@ -2,10 +2,15 @@ package org.openipc.microsnander;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import java.util.HashMap;
+import java.util.Map;
+import org.openipc.camex.tunnel.CamexTunnel;
 
 /**
  * The settings of remote access: on or off, the port and the password of
  * the web page. Remote access runs only when it is on and has a password.
+ * The camex tunnel (the device joins a camex server, the operator reaches the
+ * page through it) runs only with remote access, when it is on too.
  */
 final class Settings {
     static final int DEFAULT_PORT = 8080;
@@ -37,5 +42,36 @@ final class Settings {
 
     static void save(Context c, boolean enabled, int port, String password) {
         prefs(c).edit().putBoolean("enabled", enabled).putInt("port", port).putString("password", password).apply();
+    }
+
+    // ---- the camex tunnel ----
+
+    /** the keys of CamexTunnel kept here: server, name, transport, pubkey, psk, mtu, keepalive */
+    static final String[] TUNNEL_KEYS = {
+        CamexTunnel.SERVER, CamexTunnel.NAME, CamexTunnel.TRANSPORT, CamexTunnel.PUBKEY, CamexTunnel.PSK,
+        CamexTunnel.MTU, CamexTunnel.KEEPALIVE,
+    };
+
+    static boolean tunnelEnabled(Context c) {
+        return prefs(c).getBoolean("camex", false);
+    }
+
+    /** remote access runs and the tunnel is on */
+    static boolean tunnelActive(Context c) {
+        return active(c) && tunnelEnabled(c);
+    }
+
+    static Map<String, String> tunnel(Context c) {
+        Map<String, String> v = new HashMap<>();
+        for (String k : TUNNEL_KEYS)
+            v.put(k, prefs(c).getString("camex." + k, CamexTunnel.TRANSPORT.equals(k) ? "UDP" : ""));
+        return v;
+    }
+
+    static void saveTunnel(Context c, boolean on, Map<String, String> v) {
+        SharedPreferences.Editor e = prefs(c).edit().putBoolean("camex", on);
+        for (String k : TUNNEL_KEYS)
+            e.putString("camex." + k, v.containsKey(k) ? v.get(k) : "");
+        e.apply();
     }
 }

@@ -506,6 +506,24 @@ access**, the port (8080) and a password (4 characters or more; any user name in
   page shows what is run on the device. Dumps of either side are in the app's dump folder, the
   page links the last one and shows it in hex.
 
+**Through a camex server.** With remote access on, **Tunnel…** makes the device join a
+[camex](https://github.com/OpenIPC/camex) server (built into the app, no other app needed): the
+server, the client name, UDP or TCP, the server's public key and the psk, or a camex link with
+them (`https://openipc.github.io/camex/connect/#…`, the one camex's `install.sh` prints) pasted
+there or opened with the app. The operator, another client of the same server, opens the page by
+the device's address in the tunnel, shown under Remote access. The tunnel reconnects by itself
+and comes back after a reboot.
+
+- Android allows a VPN only after a consent, once: **Allow VPN…** on the screen, or, on a device
+  with nobody at it, while it is prepared:
+  `adb shell appops set org.openipc.microsnander ACTIVATE_VPN allow`, then
+  `adb shell appops write-settings` (Android writes it to the disk only later, and a reboot
+  before that loses it; no root). Android 5.0 has no such operation: confirm the dialog once
+  there. Without the consent the page still works on
+  the local network, and the screen, the notification and the page say what is missing; the app
+  tries again every minute.
+- Only the tunnel network and the server's routes go through the VPN, never all the traffic.
+
 Build: `cd android && gradle assembleDebug` with the Android SDK and NDK r27c.
 
 ## SigmaStar ISP

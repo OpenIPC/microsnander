@@ -4,6 +4,23 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.45.0 — 2026-11-16
+
+- Android app: remote access through a camex server, built in. With remote access on, **Tunnel…**
+  makes the device join a [camex](https://github.com/OpenIPC/camex) server (the tunnel library of
+  camex, `bundles/camex`, a submodule pinned to a camex release): server, client name, UDP or
+  TCP, server public key, psk, or a camex link with them, pasted or opened with the app. The
+  operator, another client of that server, opens the page by the device's address in the
+  tunnel. The tunnel runs with the page, reconnects by itself, comes back after a reboot and
+  shares the page's notification; only the tunnel network and the server's routes go through
+  the VPN. The VPN consent is given once: **Allow VPN…**, or `adb shell appops set
+  org.openipc.microsnander ACTIVATE_VPN allow` and `adb shell appops write-settings` (or it is
+  lost by a reboot soon after) on a device with nobody at it; without it the
+  screen, the notification and the page (`"tunnel"` in `/api/state`) say so, and the app tries
+  again every minute.
+- `tests/android/remote-e2e.sh`: a camex server and an operator in Docker, the app on an
+  emulator, the page through the tunnel, before and after a reboot.
+
 ## 1.44.0 — 2026-11-16
 
 - Android app: remote access. With **Allow remote access** and a password in **Settings…**, the

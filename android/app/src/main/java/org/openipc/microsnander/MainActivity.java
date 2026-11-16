@@ -39,6 +39,7 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import org.json.JSONArray;
+import org.openipc.camex.tunnel.CamexTunnel;
 import org.json.JSONException;
 import org.json.JSONObject;
 import java.io.File;
@@ -68,7 +69,7 @@ public class MainActivity extends Activity {
     private static final String ACTION_USB_PERMISSION = "org.openipc.microsnander.USB_PERMISSION";
     /** only senders with our signature: our own PendingIntent */
     private static final String RESULT_PERMISSION = "org.openipc.microsnander.permission.USB_RESULT";
-    private static final int PICK_WRITE = 1, SAVE_AS = 2, ASK_STORAGE = 3, ASK_READ = 4, ASK_NOTIFY = 5;
+    private static final int PICK_WRITE = 1, SAVE_AS = 2, ASK_STORAGE = 3, ASK_READ = 4, ASK_NOTIFY = 5, ASK_VPN = 6;
 
     /** vendor, product of the programmers microsnander drives */
     static final int[][] PROGRAMMERS = {
@@ -115,7 +116,8 @@ public class MainActivity extends Activity {
     private TextView hexFile, hexText;
     private EditText hexAddr;
     private Button hexPrev, hexNext, hexGoButton;
-    private TextView remotePlate, remoteStatus;
+    private TextView remotePlate, remoteStatus, remoteTunnel;
+    private Button consent;
     private Runnable afterPermission;
 
     @Override
@@ -152,6 +154,12 @@ public class MainActivity extends Activity {
         remotePlate = findViewById(R.id.remote_plate);
         remoteStatus = findViewById(R.id.remote_status);
         findViewById(R.id.b_remote).setOnClickListener(v -> remoteSettings());
+        remoteTunnel = findViewById(R.id.remote_tunnel);
+        consent = findViewById(R.id.b_consent);
+        consent.setOnClickListener(v -> askConsent());
+        findViewById(R.id.b_tunnel).setOnClickListener(v -> tunnelSettings(null));
+        if (saved == null)
+            openLink(getIntent());
         if (Settings.active(this) && RemoteService.instance == null)
             RemoteService.send(this, RemoteService.ACTION_START);
         showRemote();
@@ -592,6 +600,13 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onActivityResult(int code, int result, Intent data) {
+        if (code == ASK_VPN) {
+            if (result == RESULT_OK && Settings.active(this))
+                RemoteService.send(this, RemoteService.ACTION_START);
+            else if (result != RESULT_OK)
+                meta.setText(R.string.tunnel_consent_refused);
+            return;
+        }
         if (result != RESULT_OK || data == null || data.getData() == null) return;
         Uri u = data.getData();
         if (code == SAVE_AS)
@@ -736,6 +751,53 @@ public class MainActivity extends Activity {
         boolean on = RemoteService.instance != null && Settings.active(this);
         remotePlate.setText(on ? R.string.remote_on_plate : R.string.remote_off);
         remoteStatus.setText(on ? RemoteService.status : getString(R.string.remote_off_text));
+        String t = on ? RemoteService.tunnelStatus : "";
+        remoteTunnel.setText(t);
+        remoteTunnel.setVisibility(t.isEmpty() ? View.GONE : View.VISIBLE);
+        consent.setVisibility(on && Settings.tunnelEnabled(this)
+                && CamexTunnel.state() == CamexTunnel.State.NEEDS_CONSENT ? View.VISIBLE : View.GONE);
+    }
+
+    // ---- the camex tunnel ----
+
+    @Override
+    protected void onNewIntent(Intent i) {
+        super.onNewIntent(i);
+        openLink(i);
+    }
+
+    /** a camex link the app was opened with: the tunnel settings, filled from it */
+    private void openLink(Intent i) {
+        if (i != null && Intent.ACTION_VIEW.equals(i.getAction()) && i.getData() != null)
+            tunnelSettings(i.getData().toString());
+    }
+
+    private void tunnelSettings(String link) {
+        TunnelDialog.show(this, link, on -> {
+            if (on && !Settings.active(this))
+                meta.setText(R.string.tunnel_needs_remote);
+            if (on && Settings.active(this) && CamexTunnel.consentIntent(this) != null) {
+                askConsent();		// the service starts it after the answer
+                return;
+            }
+            if (Settings.active(this))
+                RemoteService.send(this, RemoteService.ACTION_START);
+            showRemote();
+        });
+    }
+
+    /** the system's VPN dialog, once; the tunnel starts after OK */
+    private void askConsent() {
+        Intent i = CamexTunnel.consentIntent(this);
+        if (i == null) {
+            RemoteService.send(this, RemoteService.ACTION_START);
+            return;
+        }
+        try {
+            startActivityForResult(i, ASK_VPN);
+        } catch (ActivityNotFoundException e) {
+            meta.setText(R.string.tunnel_consent_refused);
+        }
     }
 
     private void remoteSettings() {

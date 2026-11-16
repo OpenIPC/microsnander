@@ -77,6 +77,7 @@ static struct {
 	int sr_macronix;
 	char file[160];
 	int local;				/* the operation is the app's own, not the page's */
+	char tunnel[160];			/* the app's camex tunnel: "connected 10.8.0.5", "" none */
 } st = { .lock = PTHREAD_MUTEX_INITIALIZER, .ok = -1 };
 
 extern const char *ms_version;
@@ -396,6 +397,14 @@ void web_show_dump(const char *name)
 	pthread_mutex_unlock(&st.lock);
 }
 
+/* the state of the app's camex tunnel, for the page ("" none) */
+void web_set_tunnel(const char *text)
+{
+	pthread_mutex_lock(&st.lock);
+	snprintf(st.tunnel, sizeof(st.tunnel), "%s", text);
+	pthread_mutex_unlock(&st.lock);
+}
+
 /* ---- HTTP ---- */
 
 #include "web_page.h"
@@ -447,7 +456,7 @@ static void json_str(char *out, size_t n, const char *s)
 
 size_t web_state_json(char *body, size_t size)
 {
-	char msg[1100], prg[64], chip[128], file[256], warn[640], sr[32] = "null";
+	char msg[1100], prg[64], chip[128], file[256], warn[640], sr[32] = "null", tun[400];
 
 	pthread_mutex_lock(&st.lock);
 	json_str(msg, sizeof(msg), st.message);
@@ -455,16 +464,17 @@ size_t web_state_json(char *body, size_t size)
 	json_str(chip, sizeof(chip), st.chip);
 	json_str(file, sizeof(file), st.file);
 	json_str(warn, sizeof(warn), st.chip[0] ? st.warning : "");
+	json_str(tun, sizeof(tun), st.tunnel);
 	if (st.sr_valid)
 		snprintf(sr, sizeof(sr), "[%u,%u,%u]", st.sr[0], st.sr[1], st.sr[2]);
 	int n = snprintf(body, size,
 			 "{\"busy\":%d,\"local\":%s,\"op\":\"%s\",\"ok\":%s,\"phase\":\"%s\",\"done\":%llu,\"total\":%llu,"
 			 "\"message\":\"%s\",\"programmer\":\"%s\",\"chip\":\"%s\",\"size\":%lld,\"voltage\":\"%s\","
 			 "\"warning\":\"%s\",\"sr\":%s,\"sr_macronix\":%s,\"file\":\"%s\","
-			 "\"seq\":%u,\"version\":\"%s\"}",
+			 "\"seq\":%u,\"version\":\"%s\",\"tunnel\":\"%s\"}",
 			 st.busy, st.local ? "true" : "false", op_names[st.op], st.ok < 0 ? "null" : st.ok ? "true" : "false", st.phase,
 			 st.done, st.total, msg, prg, chip, st.size, st.chip[0] ? ms_voltage_name(st.voltage) : "",
-			 warn, sr, st.sr_valid && st.sr_macronix ? "true" : "false", file, st.seq, ms_version);
+			 warn, sr, st.sr_valid && st.sr_macronix ? "true" : "false", file, st.seq, ms_version, tun);
 	pthread_mutex_unlock(&st.lock);
 	return n < 0 ? 0 : (size_t)n < size ? (size_t)n : size - 1;
 }

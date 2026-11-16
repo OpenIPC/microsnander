@@ -27,6 +27,8 @@ import java.net.NetworkInterface;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import org.openipc.camex.tunnel.CamexTunnel;
 
 /**
  * Remote access: the web mode of microsnander (src/web.c) in a foreground
@@ -40,6 +42,14 @@ import java.util.List;
  * app's own buttons do, so it can be replugged between operations. Access to
  * it comes from "use by default" when it was plugged in (UsbAttachActivity);
  * without it the operation fails and says so.
+ *
+ * With the camex tunnel on too, the device joins the camex server of the
+ * settings (org.openipc.camex.tunnel, the camex sources in bundles/camex) and
+ * the page is reached through it as well: the tunnel runs while the page
+ * does, reconnects by itself, and shares this service's notification.
+ * Without the VPN consent (a dialog once, or adb appops ACTIVATE_VPN allow)
+ * it says so on the screen, in the notification and on the page, and tries
+ * again every minute.
  */
 public class RemoteService extends Service {
     static final String ACTION_START = "org.openipc.microsnander.REMOTE_START";
@@ -50,11 +60,15 @@ public class RemoteService extends Service {
     private static final String CHANNEL = "remote";
     private static final int NOTIFY_ID = 1;
     private static final int RETRY_MS = 5000;
+    /** a tunnel without the consent (or refused) is started again this often */
+    private static final int TUNNEL_RETRY_MS = 60000;
 
     /** the running service, for openDevice and the screen; null if none */
     static volatile RemoteService instance;
     /** what the screen shows about remote access */
     static volatile String status = "";
+    /** what the screen shows about the tunnel; "" when it is off */
+    static volatile String tunnelStatus = "";
 
     private final Handler main = new Handler(Looper.getMainLooper());
     private final Object lock = new Object();
@@ -97,6 +111,9 @@ public class RemoteService extends Service {
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "microsnander:remote");
         wakeLock.setReferenceCounted(false);
         registerReceiver(netEvents, new IntentFilter(android.net.ConnectivityManager.CONNECTIVITY_ACTION));
+        // the tunnel's foreground service posts this service's notification: one for both
+        CamexTunnel.setNotification(NOTIFY_ID, (ctx, st, addr, err) -> notification(ctx));
+        CamexTunnel.addListener(tunnelState);
     }
 
     @Override
@@ -122,6 +139,7 @@ public class RemoteService extends Service {
     @Override
     public void onDestroy() {
         unregisterReceiver(netEvents);
+        CamexTunnel.removeListener(tunnelState);
         stopServing();
         instance = null;
         super.onDestroy();
@@ -138,8 +156,10 @@ public class RemoteService extends Service {
     @SuppressLint("WakelockTimeout")
     private void startServing() {
         synchronized (lock) {
-            if (server != null)
+            if (server != null) {		// serving: the tunnel may have been turned on or changed
+                main.post(this::startTunnel);
                 return;
+            }
             wanted = true;
             int gen = ++generation;
             int port = Settings.port(this);
@@ -150,6 +170,7 @@ public class RemoteService extends Service {
             server.start();
             setStatus(getString(R.string.remote_on, addresses(port)));
         }
+        startTunnel();
     }
 
     /** Native.webServe until webStop; a port it cannot take is tried again */
@@ -178,6 +199,9 @@ public class RemoteService extends Service {
     }
 
     private void stopServing() {
+        main.removeCallbacks(retryTunnel);
+        if (CamexTunnel.running() || CamexTunnel.state() != CamexTunnel.State.STOPPED)
+            CamexTunnel.stop();
         Thread t;
         synchronized (lock) {
             wanted = false;
@@ -224,25 +248,99 @@ public class RemoteService extends Service {
         });
     }
 
+    // ---- the camex tunnel ----
+
+    /** the tunnel of the settings, when it is on; a start refused now is tried again later */
+    private void startTunnel() {
+        main.removeCallbacks(retryTunnel);
+        if (!Settings.tunnelActive(this)) {
+            if (CamexTunnel.state() != CamexTunnel.State.STOPPED)
+                CamexTunnel.stop();
+            showTunnel(CamexTunnel.State.STOPPED, "", "");
+            return;
+        }
+        Map<String, String> v = Settings.tunnel(this);
+        if (CamexTunnel.running() && v.equals(tunnelValues))
+            return;		// up with these values: a plug-in of the programmer does not cut it
+        tunnelValues = v;
+        if (!CamexTunnel.start(this, v))
+            main.postDelayed(retryTunnel, TUNNEL_RETRY_MS);	// no consent yet: adb may give it meanwhile
+    }
+
+    /** the values the tunnel was last started with (main thread) */
+    private Map<String, String> tunnelValues;
+
+    private final Runnable retryTunnel = () -> {
+        synchronized (lock) {
+            if (!wanted)
+                return;
+        }
+        CamexTunnel.State s = CamexTunnel.state();
+        if (s == CamexTunnel.State.NEEDS_CONSENT || s == CamexTunnel.State.FAILED || s == CamexTunnel.State.STOPPED)
+            startTunnel();
+    };
+
+    private final CamexTunnel.Listener tunnelState = (st, addr, err) -> {
+        showTunnel(st, addr, err);
+        if (st == CamexTunnel.State.NEEDS_CONSENT && Settings.tunnelActive(this)) {
+            main.removeCallbacks(retryTunnel);	// consent revoked while it ran
+            main.postDelayed(retryTunnel, TUNNEL_RETRY_MS);
+        }
+    };
+
+    private void showTunnel(CamexTunnel.State st, String addr, String err) {
+        String t;
+        if (!Settings.tunnelActive(this))
+            t = "";
+        else if (st == CamexTunnel.State.CONNECTED)
+            t = getString(R.string.tunnel_connected, "http://" + addr + ":" + Settings.port(this));
+        else if (st == CamexTunnel.State.CONNECTING)
+            t = getString(R.string.tunnel_connecting, err.isEmpty() ? "" : " (" + err + ")");
+        else if (st == CamexTunnel.State.NEEDS_CONSENT)
+            t = getString(R.string.tunnel_needs_consent);
+        else if (st == CamexTunnel.State.FAILED)
+            t = getString(R.string.tunnel_failed, err);
+        else
+            t = getString(R.string.tunnel_stopped);
+        tunnelStatus = t;
+        Native.setTunnel(t);
+        main.post(() -> {
+            if (instance != null)
+                foreground(status);
+            MainActivity.remoteChanged();
+        });
+    }
+
     // ---- the notification ----
 
-    @SuppressWarnings("deprecation")   // Notification.Builder(Context): the one before Android 8
     private void foreground(String text) {
-        NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+        if (!text.isEmpty())
+            status = text;
+        startForeground(NOTIFY_ID, notification(this));
+    }
+
+    /** the one notification of remote access and its tunnel: the page's addresses, the tunnel's state */
+    @SuppressWarnings("deprecation")   // Notification.Builder(Context): the one before Android 8
+    static Notification notification(Context c) {
+        NotificationManager nm = (NotificationManager) c.getSystemService(NOTIFICATION_SERVICE);
         Notification.Builder b;
         if (Build.VERSION.SDK_INT >= 26) {
-            nm.createNotificationChannel(new NotificationChannel(CHANNEL, getString(R.string.remote_access),
+            nm.createNotificationChannel(new NotificationChannel(CHANNEL, c.getString(R.string.remote_access),
                     NotificationManager.IMPORTANCE_LOW));
-            b = new Notification.Builder(this, CHANNEL);
+            b = new Notification.Builder(c, CHANNEL);
         } else
-            b = new Notification.Builder(this);
+            b = new Notification.Builder(c);
         int f = Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0;
+        String text = status.isEmpty() ? c.getString(R.string.remote_starting) : status;
+        if (!tunnelStatus.isEmpty())
+            text += "\n" + tunnelStatus;
         b.setSmallIcon(R.drawable.ic_notify)
-         .setContentTitle(getString(R.string.remote_access))
+         .setContentTitle(c.getString(R.string.remote_access))
          .setContentText(text)
+         .setStyle(new Notification.BigTextStyle().bigText(text))
          .setOngoing(true)
-         .setContentIntent(PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class), f));
-        startForeground(NOTIFY_ID, b.build());
+         .setContentIntent(PendingIntent.getActivity(c, 0, new Intent(c, MainActivity.class), f));
+        return b.build();
     }
 
     // ---- the programmer of the page's operations (from the native thread) ----

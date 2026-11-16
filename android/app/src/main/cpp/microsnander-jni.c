@@ -374,6 +374,16 @@ JNIEXPORT jstring JNICALL FN(state)(JNIEnv *env, jclass cls)
 	return (*env)->NewStringUTF(env, buf);
 }
 
+/* the state of the camex tunnel, for the page ("" none) */
+JNIEXPORT void JNICALL FN(setTunnel)(JNIEnv *env, jclass cls, jstring jtext)
+{
+	const char *text = (*env)->GetStringUTFChars(env, jtext, NULL);
+	(void)cls;
+
+	web_set_tunnel(text);
+	(*env)->ReleaseStringUTFChars(env, jtext, text);
+}
+
 /* a dump the app kept in the dump directory: the page shows it as the last one */
 JNIEXPORT void JNICALL FN(dumpKept)(JNIEnv *env, jclass cls, jstring jname)
 {

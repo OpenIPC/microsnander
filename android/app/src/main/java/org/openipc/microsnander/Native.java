@@ -82,6 +82,9 @@ final class Native {
     /** the state of the last operation, the app's or the page's: the JSON of /api/state */
     static native String state();
 
+    /** the state of the camex tunnel, for the page ("" none) */
+    static native void setTunnel(String text);
+
     /** a dump the app kept in the dump directory: the page shows it as the last one */
     static native void dumpKept(String name);
 }

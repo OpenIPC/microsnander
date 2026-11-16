@@ -83,3 +83,7 @@ android {
         disable += listOf("GradleDependency", "OldTargetApi", "AndroidGradlePluginVersion", "ChromeOsAbiSupport")
     }
 }
+
+dependencies {
+    implementation(project(":camex-tunnel"))
+}
