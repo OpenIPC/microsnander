@@ -38,7 +38,8 @@ static int f_write(unsigned char a, const unsigned char *b, unsigned int n)
 	if (n == 5 && !memcmp(b, "MSTAR", 5)) { if (refuse_mstar) return -1; mstar++; return 0; }
 	switch (b[0]) {
 	case 0x10: if (reading) bad = 2; memcpy(cmd + ncmd, b + 1, n - 1); ncmd += n - 1; return 0;
-	case 0x11: if (n != 1) bad = 3; reading = 1; return 0;
+	/* a 0x11 again under the same CS costs a byte: the bridge clocks one in and drops it (#97) */
+	case 0x11: if (n != 1) bad = 3; if (reading) clocked++; reading = 1; return 0;
 	case 0x12: if (refuse_end) return -1; if (n != 1) bad = 4; ends++; ncmd = clocked = 0; reading = 0; return 0;
 	default: bad = 5; return -1;
 	}
@@ -88,12 +89,12 @@ int main(void)
 	check(!p->cs(true) && !p->send(1, 3, (const unsigned char[]){ 0x9f }, id) && !p->cs(false) &&
 	      id[0] == 0xef && id[1] == 0x40 && id[2] == 0x18 && ends == 1, "READ ID through the bridge: ef 40 18, then 0x12");
 
-	/* READ of 200 bytes at 0x1234: the read goes in parts of the I2C limit, each after a 0x11 */
+	/* READ of 200 bytes at 0x1234: one 0x11, then reads in parts of the I2C limit */
 	int same = 1;
 	p->cs(true);
 	check(!p->send(4, sizeof(buf), (const unsigned char[]){ 0x03, 0x00, 0x12, 0x34 }, buf) && !p->cs(false), "READ of 200 bytes");
 	for (unsigned int i = 0; i < sizeof(buf); i++) same &= buf[i] == pattern(0x1234 + i);
-	check(same && max_part <= 24 && !bad, "  the data comes back in order, no I2C transaction over 24 bytes");
+	check(same && max_part <= 24 && !bad, "  the data comes back in order, no byte lost between the parts, no I2C transaction over 24 bytes");
 
 	/* a page program: 4 bytes of command and 256 of data out in parts of 23, all under one CS */
 	for (unsigned int i = 0; i < sizeof(wr); i++) wr[i] = (unsigned char)i;

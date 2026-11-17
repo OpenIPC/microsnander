@@ -189,6 +189,7 @@ function render(s){
  if(s.warning)m+='<span class="warn'+(s.voltage==='1.8'?' v18':'')+'">'+esc(s.warning)+'</span><br>';
  if(s.file)m+='<b>DUMP</b><a href="/dumps/'+encodeURIComponent(s.file)+'" download>'+esc(s.file)+'</a><br>';
  if(s.message)m+=esc(s.message);
+ if(s.tunnel)m+=(m&&!/<br>$/.test(m)?'<br>':'')+'<b>TUNNEL</b>'+esc(s.tunnel);	/* the app's camex tunnel */
  $('meta').innerHTML=m||'Press Detect to find the chip.';
  /* what changes the chip only on a chip found: nothing to confirm or to pick without one */
  ops.forEach(function(o){var b=$('b-'+o);b.disabled=!!s.busy||((o==='erase'||o==='write'||o==='selftest'||o==='unprotect')&&!s.chip);b.classList.toggle('engaged',!!s.busy&&(s.op===o))});

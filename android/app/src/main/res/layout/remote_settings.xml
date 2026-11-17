@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- the remote access settings: on or off, the port, the password -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="20dp">
+
+    <CheckBox
+        android:id="@+id/r_enabled"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/remote_allow" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:labelFor="@+id/r_port"
+        android:text="@string/remote_port" />
+
+    <EditText
+        android:id="@+id/r_port"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:autofillHints=""
+        android:imeOptions="actionNext"
+        android:inputType="number"
+        android:maxLength="5" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:labelFor="@+id/r_password"
+        android:text="@string/remote_password" />
+
+    <EditText
+        android:id="@+id/r_password"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:autofillHints=""
+        android:imeOptions="actionDone"
+        android:inputType="textVisiblePassword"
+        android:maxLength="64" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:text="@string/remote_note"
+        android:textSize="12sp" />
+</LinearLayout>

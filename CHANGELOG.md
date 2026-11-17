@@ -4,6 +4,90 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.47.3 — 2026-11-17
+
+- SigmaStar ISP (`-m sigmastar`): a read sends the bridge's read command (0x11) once, not before
+  every I2C part; the bridge dropped a byte at each repeat, so every 25th byte of a CH341A read
+  was missing and a verify after a write failed at 0x18 (#97, by @igorssv).
+- `tests/ispsim.c`: the simulated bridge drops a byte at a repeated 0x11, as the real one does.
+
+## 1.47.2 — 2026-11-17
+
+- Android app: without a password the page takes only addresses and the names under the camex
+  server (its nginx), not any Host name, so a site cannot reach it by DNS rebinding. Web mode:
+  the machine's own name is never taken when it is `localhost` (`localhost.<a site>`).
+- Android app: the chip the user confirmed binds the app's operation only once it holds the slot
+  shared with the page; a busy answer no longer truncates the last dump or keeps a file open.
+- Web mode: a stop cuts the open connections and waits for the page's operation to end, so
+  stopping remote access no longer frees what a request or an operation still uses (and a port
+  that cannot be taken no longer costs memory on every try).
+- Android app: the buttons come back after the page's operations even when they ended unseen (the
+  screen was off), and the app's own operation after one is not shown as remote; the build takes
+  the page it generates, not a `src/web_page.h` left by `make`.
+- Android app: stopping or restarting remote access waits for a page's operation that runs (a
+  write may take minutes) with the wake lock held, and the new server starts only after it; the
+  service ends after it too.
+- Android app: the password goes to the page as UTF-8, so one with an emoji matches; a tunnel
+  setting the dialog rejects without a field of its own is shown.
+
+## 1.47.1 — 2026-11-17
+
+- Android app: `bundles/camex` on camex 4.0.0 (its server listens on UDP and TCP by default; the
+  tunnel library is the same).
+
+## 1.47.0 — 2026-11-17
+
+- Web mode: the password is optional everywhere and checked the same way as in vectis and
+  decoder. An empty `-K` means no password (it was refused); without `-K` the password comes
+  from `MICROSNANDER_WEB_PASSWORD`. The password is compared by the SHA-256 of both sides, in a
+  time that does not depend on it; a `401` says `charset="UTF-8"`.
+- Android app: remote access runs without a password too (the page is then open, and the screen
+  says so; it needed 4 characters or more). The page's port is 8085 by default, as in vectis and
+  decoder (it was 8080; a port saved before stays), and the app gives it to camex as the web
+  port by itself: the field in **Tunnel…** is gone.
+- `tests/android/remote-e2e.sh`: the default port, and the page without a password.
+
+## 1.46.0 — 2026-11-17
+
+- Android app: `bundles/camex` on camex 3.19.0. **Tunnel…** has the camex fields that came with
+  it: the web port for nginx on the server (`--web-port`: the server's nginx then opens the page
+  by the client's name without a block per device; it needs a camex server 3.19.0 or later, so
+  it is empty unless set) and the server timeout. The app keeps every field of the tunnel
+  library, so new ones need no change in the app.
+- `tests/android/remote-e2e.sh`: the server sees the web port the app declares.
+
+## 1.45.0 — 2026-11-16
+
+- Android app: remote access through a camex server, built in. With remote access on, **Tunnel…**
+  makes the device join a [camex](https://github.com/OpenIPC/camex) server (the tunnel library of
+  camex, `bundles/camex`, a submodule pinned to a camex release): server, client name, UDP or
+  TCP, server public key, psk, or a camex link with them, pasted or opened with the app. The
+  operator, another client of that server, opens the page by the device's address in the
+  tunnel. The tunnel runs with the page, reconnects by itself, comes back after a reboot and
+  shares the page's notification; only the tunnel network and the server's routes go through
+  the VPN. The VPN consent is given once: **Allow VPN…**, or `adb shell appops set
+  org.openipc.microsnander ACTIVATE_VPN allow` and `adb shell appops write-settings` (or it is
+  lost by a reboot soon after) on a device with nobody at it; without it the
+  screen, the notification and the page (`"tunnel"` in `/api/state`) say so, and the app tries
+  again every minute.
+- `tests/android/remote-e2e.sh`: a camex server and an operator in Docker, the app on an
+  emulator, the page through the tunnel, before and after a reboot.
+
+## 1.44.0 — 2026-11-16
+
+- Android app: remote access. With **Allow remote access** and a password in **Settings…**, the
+  app serves the page of the web mode (`src/web.c`) on every network of the device, port 8080 by
+  default, so an operator elsewhere (the local network, a tunnel) drives the programmer from a
+  browser and nobody has to be at the device: a foreground service, with the screen off and from
+  boot; a programmer once chosen with Always is the app's on every plug-in and after a reboot
+  (a new UsbAttachActivity takes the plug-in). The page and the app share the programmer, one
+  operation at a time: each side shows what the other runs, and the page links the last dump
+  of either side and shows it in hex. Without a password it does not start; any Host is taken
+  then, as a tunnel may come by a name.
+- Web mode: `web_stop`, device hooks around each operation, the app's own operations in the same
+  slot and the state as JSON, for the app; on Linux nothing changes. A Range of a dump is sought
+  with `lseek` (32-bit Android before 7.0 has no `fseeko` with a 64-bit offset).
+
 ## 1.43.2 — 2026-11-16
 
 - Android: `-PmicrosnanderAbis` must be a non-empty list of known ABIs (arm64-v8a, armeabi-v7a,

@@ -72,4 +72,42 @@
     <string name="hex_past_end">Past the end of the dump (%1$s): the last address is 0x%2$X.</string>
     <string name="hex_cannot">The dump cannot be read.</string>
     <string name="hex_empty">Empty.</string>
+    <!-- remote access -->
+    <string name="remote_access">REMOTE ACCESS</string>
+    <string name="remote_settings">Settings…</string>
+    <string name="remote_allow">Allow remote access</string>
+    <string name="remote_port">Port</string>
+    <string name="remote_password">Password (optional)</string>
+    <string name="remote_note">The page of the app on every network of this device, the same as microsnander -W: open http://ADDRESS:PORT in a browser, any user name, this password. Without a password the page is open to anyone who reaches the port. It starts by itself after a reboot and keeps running with the screen off. Plug the programmer in once and choose this app with Always: then nobody has to be at the device.</string>
+    <string name="remote_bad_port">A port from 1024 to 65535.</string>
+    <string name="remote_off">OFF</string>
+    <string name="remote_on_plate">ON</string>
+    <string name="remote_off_text">Off. Settings… to let an operator elsewhere drive the programmer from a browser.</string>
+    <string name="remote_starting">Starting…</string>
+    <string name="remote_stopping">Stopping: an operation of the page ends first…</string>
+    <string name="remote_on">Listening: %1$s</string>
+    <string name="remote_on_open">Listening, no password: %1$s</string>
+    <string name="remote_cannot_listen">Cannot listen on port %1$d (taken?): trying again.</string>
+    <string name="remote_busy">REMOTE: %1$s</string>
+    <string name="remote_working">An operator is working from the page.</string>
+    <string name="remote_done">Remote operation: %1$s</string>
+    <!-- the camex tunnel -->
+    <string name="tunnel_title">CAMEX TUNNEL</string>
+    <string name="tunnel_settings">Tunnel…</string>
+    <string name="tunnel_allow">Join a camex server</string>
+    <string name="tunnel_note">With remote access on, this device joins the camex server and the operator opens the page through it, by the address in the tunnel. It reconnects by itself. Android asks once for the VPN consent; on a device with nobody at it: adb shell appops set org.openipc.microsnander ACTIVATE_VPN allow, then adb shell appops write-settings.</string>
+    <string name="tunnel_link_hint">A camex link: https://openipc.github.io/camex/connect/#… or camex://connect?…</string>
+    <string name="tunnel_link_apply">Fill from the link</string>
+    <string name="tunnel_link_bad">Not a camex link.</string>
+    <string name="tunnel_link_field">The link\'s %1$s: %2$s</string>
+    <string name="tunnel_optional">%1$s (optional)</string>
+    <string name="tunnel_save">Save</string>
+    <string name="tunnel_consent">Allow VPN…</string>
+    <string name="tunnel_consent_refused">The VPN was not allowed: the tunnel waits for it.</string>
+    <string name="tunnel_connected">Tunnel: %1$s</string>
+    <string name="tunnel_connecting">Tunnel: connecting%1$s</string>
+    <string name="tunnel_needs_consent">Tunnel: the VPN consent is needed (Allow VPN…, or adb appops)</string>
+    <string name="tunnel_failed">Tunnel: failed: %1$s</string>
+    <string name="tunnel_stopped">Tunnel: stopped</string>
+    <string name="tunnel_needs_remote">Turn remote access on first: the tunnel runs with it.</string>
 </resources>

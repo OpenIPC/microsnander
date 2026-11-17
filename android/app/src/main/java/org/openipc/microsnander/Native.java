@@ -71,4 +71,23 @@ final class Native {
 
     /** -t on the first block (ms_expect first); a block that does not come back is saved in dir */
     static synchronized native Result selftest(int fd, int vid, int pid, String dir);
+
+    // ---- the web mode (remote access, RemoteService); not synchronized: webServe blocks ----
+
+    /** the page on listen ("[address:]port") until webStop: 0, or 1 when it cannot listen */
+    static native int webServe(String listen, byte[] password, String dir);
+
+    static native void webStop();
+
+    /** the state of the last operation, the app's or the page's: the JSON of /api/state */
+    static native String state();
+
+    /** the state of the camex tunnel, for the page ("" none) */
+    static native void setTunnel(String text);
+
+    /** the camex server's host: the page takes Host names under it without a password ("" none) */
+    static native void webTunnelHost(String host);
+
+    /** a dump the app kept in the dump directory: the page shows it as the last one */
+    static native void dumpKept(String name);
 }
