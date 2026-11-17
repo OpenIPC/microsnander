@@ -26,9 +26,14 @@ int web_serve(const char *listen, const char *password, const char *dir,
 /* web_serve returns; an operation that runs ends by itself */
 void web_stop(void);
 
-/* a request with any Host: is taken (the app always has a password, and a
-   tunnel may come by a name) */
+/* a request with any Host: is taken (the app with a password: a tunnel may
+   come by a name); without a password keep it off, or a site can reach the
+   page by DNS rebinding */
 void web_allow_any_host(int on);
+
+/* Host names under domain are taken too (the camex server: its nginx opens
+   the page as client.domain); NULL or "" none */
+void web_allow_host_domain(const char *domain);
 
 /* around each operation of the page: open the programmer (0, or -1: none or
    no access, the operation fails) and close it; NULL: nothing to do */

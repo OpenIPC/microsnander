@@ -533,6 +533,19 @@ int main(void)
 	web_allow_any_host(1);
 	check(request("GET", "/api/state", NULL, NULL, 0) == 200, "the app: a Host of any name, as a tunnel gives");
 	web_allow_any_host(0);
+	/* without a password: only names under the camex server, against DNS rebinding */
+	web_allow_host_domain("prx1.Example.org");
+	extra = "Host: box1.prx1.example.org:85\r\n";
+	check(request("GET", "/api/state", NULL, NULL, 0) == 200, "no password: a name under the camex server, as its nginx gives");
+	extra = "Host: box1.vpn.example.org\r\n";
+	check(request("GET", "/api/state", NULL, NULL, 0) == 403, "  another name: 403");
+	extra = "Host: xprx1.example.org\r\n";
+	check(request("GET", "/api/state", NULL, NULL, 0) == 403, "  a name that only ends the same: 403");
+	extra = "Host: prx1.example.org.evil.example\r\n";
+	check(request("GET", "/api/state", NULL, NULL, 0) == 403, "  the server's name inside another: 403");
+	web_allow_host_domain("");
+	extra = "Host: box1.prx1.example.org\r\n";
+	check(request("GET", "/api/state", NULL, NULL, 0) == 403, "  no tunnel: 403");
 	extra = "";
 
 	{

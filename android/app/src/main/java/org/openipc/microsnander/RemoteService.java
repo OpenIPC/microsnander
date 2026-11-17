@@ -263,9 +263,15 @@ public class RemoteService extends Service {
             if (CamexTunnel.state() != CamexTunnel.State.STOPPED)
                 CamexTunnel.stop();
             showTunnel(CamexTunnel.State.STOPPED, "", "");
+            Native.webTunnelHost("");
             return;
         }
         Map<String, String> v = Settings.tunnel(this);
+        // the server's nginx opens the page as client.server: those names pass the Host check
+        // without a password too
+        String server = v.get(CamexTunnel.SERVER) == null ? "" : v.get(CamexTunnel.SERVER).trim();
+        int colon = server.lastIndexOf(':');
+        Native.webTunnelHost(colon > 0 ? server.substring(0, colon) : server);
         if (CamexTunnel.running() && v.equals(tunnelValues))
             return;		// up with these values: a plug-in of the programmer does not cut it
         tunnelValues = v;

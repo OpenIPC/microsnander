@@ -86,7 +86,8 @@ static const char *web_dir = ".";
 static const char *web_password;
 static unsigned long long web_addr, web_len;
 static FILE *upload;			/* the file to write, unlinked in the dump directory */
-static int web_any_host;		/* any Host: (the app, reached by a tunnel name) */
+static int web_any_host;		/* any Host: (the app with a password, reached by a tunnel name) */
+static char web_host_domain[128];	/* Host names under it are taken too (the camex server), "" none */
 
 int (*web_device_open)(void);
 void (*web_device_close)(void);
@@ -649,7 +650,11 @@ static int host_ok(const char *headers)
 		if (!strcasecmp(host, me) || (!strncasecmp(host, me, m) && host[m] == '.'))
 			return 1;	/* name or name.local / name.domain */
 	}
-	return 0;
+	pthread_mutex_lock(&st.lock);
+	size_t d = strlen(web_host_domain);
+	int under = d && n > d + 1 && host[n - d - 1] == '.' && !strcasecmp(host + n - d, web_host_domain);
+	pthread_mutex_unlock(&st.lock);
+	return under;			/* client.server: the tunnel's nginx */
 }
 
 /* a dump name made by Read (flash-*.bin) or the block a self-test saved
@@ -1081,6 +1086,13 @@ int web_serve(const char *listen_on, const char *password, const char *dir,
 	pthread_mutex_unlock(&st.lock);
 	close(s);
 	return 0;
+}
+
+void web_allow_host_domain(const char *domain)
+{
+	pthread_mutex_lock(&st.lock);
+	snprintf(web_host_domain, sizeof(web_host_domain), "%s", domain ? domain : "");
+	pthread_mutex_unlock(&st.lock);
 }
 
 void web_allow_any_host(int on)

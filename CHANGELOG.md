@@ -4,6 +4,15 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.47.2 — 2026-11-17
+
+- Android app: without a password the page takes only addresses and the names under the camex
+  server (its nginx), not any Host name, so a site cannot reach it by DNS rebinding.
+- Android app: the chip the user confirmed binds the app's operation only once it holds the slot
+  shared with the page; a busy answer no longer truncates the last dump or keeps a file open.
+- Android app: stopping remote access while a page's request or operation runs no longer frees
+  what they still use.
+
 ## 1.47.1 — 2026-11-17
 
 - Android app: `bundles/camex` on camex 4.0.0 (its server listens on UDP and TCP by default; the

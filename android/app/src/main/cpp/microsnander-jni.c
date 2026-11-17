@@ -16,6 +16,7 @@
  * (at your option) any later version.
  */
 #include <jni.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -148,6 +149,35 @@ static void use_device(jint fd, jint vid, jint pid)
 	ms_usb_pid = (uint16_t)pid;
 }
 
+/* The chip the user confirmed (Native.expect) waits here until its operation
+   holds the shared slot: a page's operation between the two cannot take it
+   or change it. */
+static pthread_mutex_t expect_lock = PTHREAD_MUTEX_INITIALIZER;
+static char expect_chip[64];
+static long long expect_size;
+static int expect_set;
+
+/* the pending expectation: to ms_expect for a confirmed operation (apply), or dropped */
+static void take_expect(int apply)
+{
+	pthread_mutex_lock(&expect_lock);
+	if (apply && expect_set)
+		ms_expect(expect_chip, expect_size);
+	expect_set = 0;
+	pthread_mutex_unlock(&expect_lock);
+}
+
+/* the shared slot for op: 0, or -1 when the page runs one (the confirmation is dropped) */
+static int local_begin(int op, int confirmed)
+{
+	if (web_local_begin(op)) {
+		take_expect(0);
+		return -1;
+	}
+	take_expect(confirmed);
+	return 0;
+}
+
 static struct cb make_cb(JNIEnv *env, jobject progress)
 {
 	struct cb c = { env, progress, NULL };
@@ -167,7 +197,7 @@ JNIEXPORT jobject JNICALL FN(detect)(JNIEnv *env, jclass cls, jint fd, jint vid,
 	char msg[256] = "";
 	(void)cls;
 
-	if (web_local_begin(OP_DETECT))
+	if (local_begin(OP_DETECT, 0))
 		return busy_result(env);
 
 	use_device(fd, vid, pid);
@@ -182,13 +212,13 @@ JNIEXPORT jobject JNICALL FN(read)(JNIEnv *env, jclass cls, jint fd, jint vid, j
 	struct ms_chip c;
 	char msg[256] = "", name[160] = "";
 	struct cb cb = make_cb(env, progress);
-	const char *path = (*env)->GetStringUTFChars(env, jpath, NULL);
-	FILE *f = fopen(path, "wb");
 	int ret = -1;
 	(void)cls;
 
-	if (web_local_begin(OP_READ))
+	if (local_begin(OP_READ, 0))		/* before the file: a busy read keeps the last dump */
 		return busy_result(env);
+	const char *path = (*env)->GetStringUTFChars(env, jpath, NULL);
+	FILE *f = fopen(path, "wb");
 
 	use_device(fd, vid, pid);
 	memset(&c, 0, sizeof(c));
@@ -215,7 +245,7 @@ JNIEXPORT jobject JNICALL FN(erase)(JNIEnv *env, jclass cls, jint fd, jint vid, 
 	struct cb cb = make_cb(env, progress);
 	(void)cls;
 
-	if (web_local_begin(OP_ERASE))
+	if (local_begin(OP_ERASE, 1))
 		return busy_result(env);
 
 	use_device(fd, vid, pid);
@@ -229,12 +259,12 @@ JNIEXPORT jobject JNICALL FN(selftest)(JNIEnv *env, jclass cls, jint fd, jint vi
 {
 	struct ms_chip c;
 	char msg[512] = "", saved[160] = "";
-	const char *dir = (*env)->GetStringUTFChars(env, jdir, NULL);
 	int ret;
 	(void)cls;
 
-	if (web_local_begin(OP_SELFTEST))
+	if (local_begin(OP_SELFTEST, 1))
 		return busy_result(env);
+	const char *dir = (*env)->GetStringUTFChars(env, jdir, NULL);
 
 	use_device(fd, vid, pid);
 	mkdir(dir, 0700);
@@ -244,13 +274,18 @@ JNIEXPORT jobject JNICALL FN(selftest)(JNIEnv *env, jclass cls, jint fd, jint vi
 	return result(env, ret == 0, msg, &c, saved);	/* name: the block saved in dir, "" */
 }
 
-/* the chip the next operation must find (the one the user confirmed) */
+/* the chip the next operation must find (the one the user confirmed): it binds
+   that operation once it holds the shared slot */
 JNIEXPORT void JNICALL FN(expect)(JNIEnv *env, jclass cls, jstring jchip, jlong size)
 {
 	const char *chip = (*env)->GetStringUTFChars(env, jchip, NULL);
 	(void)cls;
 
-	ms_expect(chip, (long long)size);
+	pthread_mutex_lock(&expect_lock);
+	snprintf(expect_chip, sizeof(expect_chip), "%s", chip ? chip : "");
+	expect_size = (long long)size;
+	expect_set = 1;
+	pthread_mutex_unlock(&expect_lock);
 	(*env)->ReleaseStringUTFChars(env, jchip, chip);
 }
 
@@ -260,13 +295,13 @@ JNIEXPORT jobject JNICALL FN(write)(JNIEnv *env, jclass cls, jint fd, jint vid, 
 	struct ms_chip c;
 	char msg[256] = "";
 	struct cb cb = make_cb(env, progress);
-	const char *path = (*env)->GetStringUTFChars(env, jpath, NULL);
-	FILE *f = fopen(path, "rb");
 	int ret = -1;
 	(void)cls;
 
-	if (web_local_begin(OP_WRITE))
+	if (local_begin(OP_WRITE, 1))
 		return busy_result(env);
+	const char *path = (*env)->GetStringUTFChars(env, jpath, NULL);
+	FILE *f = fopen(path, "rb");
 
 	use_device(fd, vid, pid);
 	memset(&c, 0, sizeof(c));
@@ -289,7 +324,7 @@ JNIEXPORT jobject JNICALL FN(registers)(JNIEnv *env, jclass cls, jint fd, jint v
 	char msg[256] = "";
 	(void)cls;
 
-	if (web_local_begin(OP_REGISTERS))
+	if (local_begin(OP_REGISTERS, 0))
 		return busy_result(env);
 
 	use_device(fd, vid, pid);
@@ -304,7 +339,7 @@ JNIEXPORT jobject JNICALL FN(unprotect)(JNIEnv *env, jclass cls, jint fd, jint v
 	char msg[256] = "";
 	(void)cls;
 
-	if (web_local_begin(OP_UNPROTECT))
+	if (local_begin(OP_UNPROTECT, 1))
 		return busy_result(env);
 
 	use_device(fd, vid, pid);
@@ -319,7 +354,7 @@ JNIEXPORT jobject JNICALL FN(writeRegister)(JNIEnv *env, jclass cls, jint fd, ji
 	char msg[256] = "";
 	(void)cls;
 
-	if (web_local_begin(OP_REGISTER))
+	if (local_begin(OP_REGISTER, 1))
 		return busy_result(env);
 
 	use_device(fd, vid, pid);
@@ -336,7 +371,9 @@ JNIEXPORT jint JNICALL FN(webServe)(JNIEnv *env, jclass cls, jstring jlisten, js
 	const char *listen = (*env)->GetStringUTFChars(env, jlisten, NULL);
 	const char *password = (*env)->GetStringUTFChars(env, jpassword, NULL);
 	const char *dir = (*env)->GetStringUTFChars(env, jdir, NULL);
-	/* web.c keeps the password (empty: none) and the directory while it serves */
+	/* web.c keeps the password (empty: none) and the directory while it
+	   serves, and a connection or an operation may outlive a stop: they are
+	   never freed (one copy per start of the server) */
 	char *pw = strdup(password), *d = strdup(dir), *l = strdup(listen);
 	int ret = 1;
 	(void)cls;
@@ -348,11 +385,12 @@ JNIEXPORT jint JNICALL FN(webServe)(JNIEnv *env, jclass cls, jstring jlisten, js
 		mkdir(d, 0700);
 		web_device_open = page_device_open;
 		web_device_close = page_device_close;
-		web_allow_any_host(1);		/* a tunnel (camex, nginx) may come by a name */
+		/* a tunnel (camex, nginx) comes by a name: any name with a password;
+		   without one only names under the camex server (webTunnelHost), so a
+		   site cannot reach the page by DNS rebinding */
+		web_allow_any_host(*pw != 0);
 		ret = web_serve(l, pw, d, 0, 0);
 	}
-	free(pw);
-	free(d);
 	free(l);
 	return ret;
 }
@@ -392,4 +430,14 @@ JNIEXPORT void JNICALL FN(dumpKept)(JNIEnv *env, jclass cls, jstring jname)
 
 	web_show_dump(name);
 	(*env)->ReleaseStringUTFChars(env, jname, name);
+}
+
+/* the camex server's host name: the page takes Host names under it without a password ("" none) */
+JNIEXPORT void JNICALL FN(webTunnelHost)(JNIEnv *env, jclass cls, jstring jhost)
+{
+	const char *host = (*env)->GetStringUTFChars(env, jhost, NULL);
+	(void)cls;
+
+	web_allow_host_domain(host);
+	(*env)->ReleaseStringUTFChars(env, jhost, host);
 }
