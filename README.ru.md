@@ -365,8 +365,8 @@ microsnander -O security.bin
 
 <p align="center">
   <img src="screenshots/web-reading.png" alt="MicroSNANDer Web во время чтения: лампы, дисплей, индикаторная линейка, латунные кнопки" width="45%">
-  <img src="screenshots/web-registers.png" alt="MicroSNANDer Web после чтения: ссылка на дамп и лампы битов регистров" width="45%">
   <img src="screenshots/web-selftest.png" alt="MicroSNANDer Web после самотеста: SELF-TEST OK, защита и итог" width="45%">
+  <img src="screenshots/web-registers.png" alt="MicroSNANDer Web после чтения: ссылка на дамп, лампы битов регистров и hex-просмотр дампа" width="45%">
 </p>
 
 ```sh
@@ -475,7 +475,8 @@ Android TV (Android 5.0 и новее, без root; на приставке он
 
 <p align="center">
   <img src="screenshots/android-main.png" alt="MicroSNANDer для Android: дисплей, латунные кнопки" height="360">
-  <img src="screenshots/android-tv.png" alt="MicroSNANDer на приставке Android TV: найдены CH341A и W25Q128, лампы битов регистров" height="360">
+  <img src="screenshots/android-tv.png" alt="MicroSNANDer на приставке Android TV: найдены CH341A и BY25Q64AS; нажатие на лампу бита регистра спрашивает, прежде чем менять бит" height="360">
+  <img src="screenshots/android-hexview.png" alt="MicroSNANDer на приставке Android TV: hex-просмотр последнего дампа с адреса 0x8400" height="360">
 </p>
 
 - Подключите программатор (к телефону — через OTG-переходник; на приставке один из портов может

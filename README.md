@@ -361,8 +361,8 @@ progress and runs the operations.
 
 <p align="center">
   <img src="screenshots/web-reading.png" alt="MicroSNANDer Web while reading: lamps, display, progress bar, brass buttons" width="45%">
-  <img src="screenshots/web-registers.png" alt="MicroSNANDer Web after a read: dump link and status register lamps" width="45%">
   <img src="screenshots/web-selftest.png" alt="MicroSNANDer Web after a self-test: SELF-TEST OK, the protection and the verdict" width="45%">
+  <img src="screenshots/web-registers.png" alt="MicroSNANDer Web after a read: the dump link, the status register lamps and the hex view of the dump" width="45%">
 </p>
 
 ```sh
@@ -470,7 +470,8 @@ with the remote).
 
 <p align="center">
   <img src="screenshots/android-main.png" alt="MicroSNANDer for Android: display, brass buttons" height="360">
-  <img src="screenshots/android-tv.png" alt="MicroSNANDer on an Android TV box: CH341A and W25Q128 found, status register lamps" height="360">
+  <img src="screenshots/android-tv.png" alt="MicroSNANDer on an Android TV box: CH341A and BY25Q64AS found; a tap on a status register lamp asks before it flips the bit" height="360">
+  <img src="screenshots/android-hexview.png" alt="MicroSNANDer on an Android TV box: the hex view of the last dump at 0x8400" height="360">
 </p>
 
 - Plug the programmer in (through an OTG adapter on a phone; on a TV box one of its ports may
