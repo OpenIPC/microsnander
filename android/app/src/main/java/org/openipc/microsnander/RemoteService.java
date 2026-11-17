@@ -273,13 +273,13 @@ public class RemoteService extends Service {
         }
     }
 
-    /** http://ADDRESS:PORT of each IPv4 address of the device (Ethernet, Wi-Fi, a tunnel) */
     /** "Listening: http://…", and that the page is open when it has no password */
     private String listening(int port) {
         return getString(Settings.password(this).isEmpty() ? R.string.remote_on_open : R.string.remote_on,
                 addresses(port));
     }
 
+    /** http://ADDRESS:PORT of each IPv4 address of the device (Ethernet, Wi-Fi, a tunnel) */
     static String addresses(int port) {
         List<String> l = new ArrayList<>();
         try {

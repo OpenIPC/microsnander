@@ -73,6 +73,7 @@
              reboot without asking (remote access needs nobody at the device) -->
         <activity
             android:name=".UsbAttachActivity"
+            android:directBootAware="true"
             android:excludeFromRecents="true"
             android:exported="true"
             android:noHistory="true"
