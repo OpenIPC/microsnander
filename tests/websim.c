@@ -116,6 +116,12 @@ static void wait_idle(void)
 	}
 }
 
+static int dev_fails, dev_opens, dev_closes;
+static int dev_open(void) { dev_opens++; return dev_fails ? -1 : 0; }
+static void dev_close(void) { dev_closes++; }
+static volatile int served;
+static void *serve_thread(void *dir) { long r = web_serve("127.0.0.1:0", NULL, dir, 0, 0); served = 1; return (void *)r; }
+
 static int fail;
 static void check(int ok, const char *what) { printf("%s %s\n", ok ? "ok  " : "FAIL", what); if (!ok) fail = 1; }
 
@@ -140,7 +146,8 @@ int main(void)
 	      "  Erase and Write wait for a chip: off without one, a Detect before the question");
 
 	web_password = "secret";
-	check(request("GET", "/api/state", NULL, NULL, 0) == 401 && strstr(resp, "WWW-Authenticate: Basic"), "with -K: no password, 401");
+	check(request("GET", "/api/state", NULL, NULL, 0) == 401 &&
+	      strstr(resp, "WWW-Authenticate: Basic realm=\"microsnander\", charset=\"UTF-8\""), "with -K: no password, 401");
 	check(request("GET", "/api/state", "eDp3cm9uZw==", NULL, 0) == 401, "  a wrong password, 401");	/* x:wrong */
 	check(request("GET", "/api/state", "eDpzZWNyZXQ=", NULL, 0) == 200, "  the right one (any user name), 200");	/* x:secret */
 	web_password = NULL;
@@ -456,9 +463,130 @@ int main(void)
 	extra = "Host: localhost:8080\r\n";
 	check(request("GET", "/api/state", NULL, NULL, 0) == 200, "  localhost: 200");
 	extra = "";
-	check(web_serve("127.0.0.1:0", "", dir, 0, 0) == 1, "an empty -K password is refused");
+	check(password_of("") == NULL && password_of(NULL) == NULL && !strcmp(password_of("x"), "x"),
+	      "an empty password is none: the page is open");
+	{
+		unsigned char h[32];
+		static const unsigned char abc[32] = {
+			0xba, 0x78, 0x16, 0xbf, 0x8f, 0x01, 0xcf, 0xea, 0x41, 0x41, 0x40, 0xde, 0x5d, 0xae, 0x22, 0x23,
+			0xb0, 0x03, 0x61, 0xa3, 0x96, 0x17, 0x7a, 0x9c, 0xb4, 0x10, 0xff, 0x61, 0xf2, 0x00, 0x15, 0xad };
+		static const unsigned char two[32] = {	/* the 56-byte FIPS 180-2 message: two blocks */
+			0x24, 0x8d, 0x6a, 0x61, 0xd2, 0x06, 0x38, 0xb8, 0xe5, 0xc0, 0x26, 0x93, 0x0c, 0x3e, 0x60, 0x39,
+			0xa3, 0x3c, 0xe4, 0x59, 0x64, 0xff, 0x21, 0x67, 0xf6, 0xec, 0xed, 0xd4, 0x19, 0xdb, 0x06, 0xc1 };
+		const char *m = "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq";
+		int ok = 1;
+
+		sha256("abc", 3, h);
+		ok &= !memcmp(h, abc, 32);
+		sha256(m, strlen(m), h);
+		ok &= !memcmp(h, two, 32);
+		check(ok && password_equal("secret", "secret") && !password_equal("secret", "secreT") &&
+		      !password_equal("", "secret"), "SHA-256 of the FIPS vectors; the password compared by it");
+	}
 
 	check(request("GET", "/nope", NULL, NULL, 0) == 404 && request("POST", "/api/nope", NULL, NULL, 0) == 404, "unknown paths: 404");
+
+	/* ---- the Android app: device hooks, its own operations, any Host, stop ---- */
+	web_device_open = dev_open;
+	web_device_close = dev_close;
+	dev_fails = 1;
+	request("POST", "/api/detect", NULL, NULL, 0);
+	wait_idle();
+	request("GET", "/api/state", NULL, NULL, 0);
+	check(strstr(body_of(), "\"ok\":false") && strstr(body_of(), "No programmer, or no access to it.") && dev_opens == 1 && dev_closes == 0,
+	      "the app has no programmer for the page: the operation fails, nothing to close");
+	dev_fails = 0;
+	request("POST", "/api/detect", NULL, NULL, 0);
+	wait_idle();
+	request("GET", "/api/state", NULL, NULL, 0);
+	check(strstr(body_of(), "\"ok\":true") && dev_opens == 2 && dev_closes == 1, "  with one: opened for the operation and closed after it");
+	web_device_open = NULL;
+	web_device_close = NULL;
+
+	check(web_local_begin(OP_READ) == 0, "the app's own operation takes the slot");
+	check(web_local_begin(OP_DETECT) == -1, "  a second one of the app: refused");
+	check(request("POST", "/api/detect", NULL, NULL, 0) == 409, "  the page's while it runs: 409");
+	web_local_progress("read", 50, 100);
+	request("GET", "/api/state", NULL, NULL, 0);
+	check(strstr(body_of(), "\"busy\":1,\"local\":true,\"op\":\"read\"") && strstr(body_of(), "\"done\":50,\"total\":100"),
+	      "  the page shows it with its progress");
+	{
+		struct ms_chip c = { .programmer = "CH341A", .chip = "W25Q80", .size = SIM_SIZE };
+
+		web_local_end(&c, 1, "Read by the app.", NULL);
+	}
+	request("GET", "/api/state", NULL, NULL, 0);
+	check(strstr(body_of(), "\"busy\":0,\"local\":true") && strstr(body_of(), "\"ok\":true") &&
+	      strstr(body_of(), "Read by the app.") && strstr(body_of(), "\"programmer\":\"CH341A\""), "  and how it ended");
+	web_show_dump("flash-202611161200-W25Q80.bin");
+	{
+		char js[3072];
+
+		web_state_json(js, sizeof(js));
+		check(strstr(js, "\"file\":\"flash-202611161200-W25Q80.bin\"") != NULL, "a dump the app kept: the page links it");
+	}
+	request("POST", "/api/detect", NULL, NULL, 0);
+	wait_idle();
+	request("GET", "/api/state", NULL, NULL, 0);
+	check(strstr(body_of(), "\"local\":false") != NULL, "  the page's operation after it is the page's");
+
+	extra = "Host: box1.vpn.example.org\r\n";
+	web_allow_any_host(1);
+	check(request("GET", "/api/state", NULL, NULL, 0) == 200, "the app: a Host of any name, as a tunnel gives");
+	web_allow_any_host(0);
+	/* without a password: only names under the camex server, against DNS rebinding */
+	web_allow_host_domain("prx1.Example.org");
+	extra = "Host: box1.prx1.example.org:85\r\n";
+	check(request("GET", "/api/state", NULL, NULL, 0) == 200, "no password: a name under the camex server, as its nginx gives");
+	extra = "Host: box1.vpn.example.org\r\n";
+	check(request("GET", "/api/state", NULL, NULL, 0) == 403, "  another name: 403");
+	extra = "Host: xprx1.example.org\r\n";
+	check(request("GET", "/api/state", NULL, NULL, 0) == 403, "  a name that only ends the same: 403");
+	extra = "Host: prx1.example.org.evil.example\r\n";
+	check(request("GET", "/api/state", NULL, NULL, 0) == 403, "  the server's name inside another: 403");
+	web_allow_host_domain("");
+	extra = "Host: box1.prx1.example.org\r\n";
+	check(request("GET", "/api/state", NULL, NULL, 0) == 403, "  no tunnel: 403");
+	extra = "";
+
+	{
+		pthread_t t;
+		void *ret;
+
+		web_stop();				/* before it serves: it returns at once */
+		check(web_serve("127.0.0.1:0", NULL, dir, 0, 0) == 0, "web_stop before web_serve: it returns 0 at once");
+		pthread_create(&t, NULL, serve_thread, dir);
+		usleep(100000);
+		web_stop();
+		pthread_join(t, &ret);
+		check((long)ret == 0, "  while it serves: it returns 0");
+		pthread_create(&t, NULL, serve_thread, dir);	/* and it serves again */
+		usleep(100000);
+		web_stop();
+		pthread_join(t, &ret);
+		check((long)ret == 0, "  served again and stopped again");
+
+		/* a page's operation runs: web_serve returns only after it, so its
+		   password and directory can be freed then */
+		pthread_mutex_lock(&st.lock);
+		st.busy = 1;
+		st.local = 0;
+		pthread_mutex_unlock(&st.lock);
+		served = 0;
+		pthread_create(&t, NULL, serve_thread, dir);
+		usleep(100000);
+		web_stop();
+		usleep(300000);
+		int waited = !served;
+		pthread_mutex_lock(&st.lock);
+		st.busy = 0;
+		pthread_mutex_unlock(&st.lock);
+		pthread_join(t, &ret);
+		check(waited && served && (long)ret == 0, "  a stop waits for the page's operation to end");
+	}
+	check(!name_ok("localhost.evil.example", "localhost") && !name_ok("localhost.evil.example", "localhost.localdomain") &&
+	      name_ok("box", "box") && name_ok("BOX.local", "box") && !name_ok("boxer", "box"),
+	      "this machine's name: box, box.local; never localhost.<a site> (Android's name is localhost)");
 
 	char cmd[300];
 	snprintf(cmd, sizeof(cmd), "rm -rf %s", dir);

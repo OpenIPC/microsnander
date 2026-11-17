@@ -1,0 +1,3 @@
+[submodule "bundles/camex"]
+	path = bundles/camex
+	url = https://github.com/OpenIPC/camex

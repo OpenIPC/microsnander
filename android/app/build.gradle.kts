@@ -40,6 +40,7 @@ android {
             "-PmicrosnanderAbis=${abis.joinToString(",")}: one or more of ${knownAbis.joinToString(",")}"
         }
         ndk { abiFilters += abis }
+        externalNativeBuild { cmake { arguments += "-DMS_VERSION=$msVersion" } }
         resourceConfigurations += listOf("en", "ru", "zh-rCN")
     }
     signingConfigs {
@@ -81,4 +82,8 @@ android {
         // ChromeOsAbiSupport: phones and TV boxes, no x86 by default
         disable += listOf("GradleDependency", "OldTargetApi", "AndroidGradlePluginVersion", "ChromeOsAbiSupport")
     }
+}
+
+dependencies {
+    implementation(project(":camex-tunnel"))
 }
