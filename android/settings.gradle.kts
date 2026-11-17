@@ -16,3 +16,7 @@ dependencyResolutionManagement {
 
 rootProject.name = "microsnander"
 include(":app")
+// camex built in (remote access over a camex server): the tunnel library of the
+// camex sources, a submodule pinned to a camex release
+include(":camex-tunnel")
+project(":camex-tunnel").projectDir = file("../bundles/camex/android/tunnel")

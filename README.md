@@ -217,7 +217,8 @@ microsnander [options]
  -q             list the addresses that answer on the I2C of the programmer (alone, or
                 before the operation: -m sigmastar -i -q)
  -W [addr:]port web mode: a page with Detect, Read, Erase, Write, Registers
- -K <password>  web mode: ask for this password (any user name)
+ -K <password>  web mode: ask for this password (any user name); without -K the
+                MICROSNANDER_WEB_PASSWORD environment variable, empty: no password
  -o <dir>       web mode: where Read saves the dumps (default: the current one)
 ```
 
@@ -423,7 +424,8 @@ Access:
 
 - Without `-K` anyone who reaches the port can erase the chip, and the service says so at the
   start unless it listens on a 127.x address. With `-K` the browser asks for
-  the password (any user name); an empty password is refused.
+  the password (any user name); an empty one means no password. The password can come from the
+  `MICROSNANDER_WEB_PASSWORD` environment variable instead, off the command line; `-K` goes first.
 - The page is plain HTTP, so the password crosses the network unencrypted: use a trusted
   network, or `-W 127.0.0.1:8080` and an SSH tunnel.
 - Operations need a header that only the page sends, so a page of another site cannot start an
@@ -488,6 +490,43 @@ with the remote).
 - The app runs the same C code as microsnander (`src/`), built with the NDK, on the device the
   Android USB manager opened (its file descriptor, through the usbfs code, no libusb). The signed APK is in the release:
   `microsnander-android.apk` in [latest](https://github.com/OpenIPC/microsnander/releases/latest).
+
+### Remote access
+
+The app can serve the page of the [web mode](#web-mode) itself, so an operator anywhere the
+device is reachable from (its network, a tunnel) drives the programmer from a browser, and the
+person at the bench only plugs it in. **Settings…** under **Remote access**: **Allow remote
+access**, the port (8085) and an optional password (any user name in the browser).
+
+- The page listens on every network of the device: `http://ADDRESS:PORT`, the addresses are on
+  the screen. Without a password it is open to anyone who reaches the port, and the screen says
+  so: for a trusted network.
+- It runs as a foreground service: with the screen off, and by itself after a reboot.
+- Plug the programmer in once and choose the app with **Always**: from then on Android gives
+  it to the app on every plug-in and after a reboot, with nobody at the device.
+- The page and the app share one programmer, one operation at a time: what the operator runs
+  shows on the screen of the device (REMOTE: READ 42%), the buttons there wait for it, and the
+  page shows what is run on the device. Dumps of either side are in the app's dump folder, the
+  page links the last one and shows it in hex.
+
+**Through a camex server.** With remote access on, **Tunnel…** makes the device join a
+[camex](https://github.com/OpenIPC/camex) server (built into the app, no other app needed): the
+server, the client name, UDP or TCP, the server's public key and the psk, or a camex link with
+them (`https://openipc.github.io/camex/connect/#…`, the one camex's `install.sh` prints) pasted
+there or opened with the app. The operator, another client of the same server, opens the page by
+the device's address in the tunnel, shown under Remote access. The tunnel reconnects by itself
+and comes back after a reboot. The app gives camex the page's port (`--web-port`), so the
+server's nginx opens the page by the client's name; that needs a camex server 3.19.0 or later.
+
+- Android allows a VPN only after a consent, once: **Allow VPN…** on the screen, or, on a device
+  with nobody at it, while it is prepared:
+  `adb shell appops set org.openipc.microsnander ACTIVATE_VPN allow`, then
+  `adb shell appops write-settings` (Android writes it to the disk only later, and a reboot
+  before that loses it; no root). Android 5.0 has no such operation: confirm the dialog once
+  there. Without the consent the page still works on
+  the local network, and the screen, the notification and the page say what is missing; the app
+  tries again every minute.
+- Only the tunnel network and the server's routes go through the VPN, never all the traffic.
 
 Build: `cd android && gradle assembleDebug` with the Android SDK and NDK r27c.
 
