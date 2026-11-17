@@ -33,7 +33,7 @@ import org.openipc.camex.tunnel.CamexTunnel;
 /**
  * Remote access: the web mode of microsnander (src/web.c) in a foreground
  * service, on every interface of the device, with the password of the
- * settings. An operator anywhere the device is reachable from (the local
+ * settings, or open without one. An operator anywhere the device is reachable from (the local
  * network, a tunnel) opens the page and drives the programmer; nobody has
  * to be at the device.
  *
@@ -88,7 +88,7 @@ public class RemoteService extends Service {
             main.postDelayed(() -> {
                 synchronized (lock) {
                     if (wanted && server != null)
-                        setStatus(getString(R.string.remote_on, addresses(Settings.port(RemoteService.this))));
+                        setStatus(listening(Settings.port(RemoteService.this)));
                 }
             }, 1500);
         }
@@ -168,7 +168,7 @@ public class RemoteService extends Service {
             wakeLock.acquire();
             server = new Thread(() -> serve(gen, port, password, dir), "microsnander-web");
             server.start();
-            setStatus(getString(R.string.remote_on, addresses(port)));
+            setStatus(listening(port));
         }
         startTunnel();
     }
@@ -193,7 +193,7 @@ public class RemoteService extends Service {
             synchronized (lock) {
                 if (!wanted || gen != generation)
                     return;
-                setStatus(getString(R.string.remote_on, addresses(port)));
+                setStatus(listening(port));
             }
         }
     }
@@ -223,6 +223,12 @@ public class RemoteService extends Service {
     }
 
     /** http://ADDRESS:PORT of each IPv4 address of the device (Ethernet, Wi-Fi, a tunnel) */
+    /** "Listening: http://…", and that the page is open when it has no password */
+    private String listening(int port) {
+        return getString(Settings.password(this).isEmpty() ? R.string.remote_on_open : R.string.remote_on,
+                addresses(port));
+    }
+
     static String addresses(int port) {
         List<String> l = new ArrayList<>();
         try {

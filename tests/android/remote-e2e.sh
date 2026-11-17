@@ -38,7 +38,7 @@ NET=$NAME-net
 PKG=org.openipc.microsnander
 PSK="e2e-secret"
 PASSWORD="e2e-page"
-PORT=8080
+PORT=8085	# the app's default: the prefs below give none
 UID_GID="$(id -u):$(id -g)"
 pass=0
 fail=0
@@ -105,13 +105,14 @@ ADB="docker exec $NAME /emu/platform-tools/adb"
 
 $ADB install -r /w/app.apk >/dev/null
 [ "$API" -lt 33 ] || $ADB shell pm grant $PKG android.permission.POST_NOTIFICATIONS
-# the settings as the setup screen saves them: remote access with a password, the tunnel on
-cat > "$OUT/w/remote.xml" <<EOF
+# the settings as the setup screen saves them: remote access with a password (or none), the
+# port left at its default, the tunnel on; the web port goes to camex from the page's port
+write_prefs() {
+    cat > "$OUT/w/remote.xml" <<EOF
 <?xml version='1.0' encoding='utf-8' standalone='yes' ?>
 <map>
     <boolean name="enabled" value="true" />
-    <int name="port" value="$PORT" />
-    <string name="password">$PASSWORD</string>
+    <string name="password">$1</string>
     <boolean name="camex" value="true" />
     <string name="camex.server">$SRV_IP:5800</string>
     <string name="camex.name">box-1</string>
@@ -120,11 +121,12 @@ cat > "$OUT/w/remote.xml" <<EOF
     <string name="camex.psk">$PSK</string>
     <string name="camex.mtu"></string>
     <string name="camex.keepalive"></string>
-    <string name="camex.web_port">$PORT</string>
 </map>
 EOF
-$ADB push /w/remote.xml /data/local/tmp/remote.xml >/dev/null
-$ADB shell "run-as $PKG sh -c 'mkdir -p shared_prefs && cat /data/local/tmp/remote.xml > shared_prefs/remote.xml'"
+    $ADB push /w/remote.xml /data/local/tmp/remote.xml >/dev/null
+    $ADB shell "run-as $PKG sh -c 'mkdir -p shared_prefs && cat /data/local/tmp/remote.xml > shared_prefs/remote.xml'"
+}
+write_prefs "$PASSWORD"
 
 # the state of the page, read on the device itself (no tunnel needed)
 page_state() {
@@ -210,6 +212,19 @@ for k in $(seq 1 60); do
     sleep 2
 done
 grep -q '"version":' <<<"$s" && ok "after the reboot the operator reaches the page through the tunnel" || bad "after reboot: $s"
+
+echo "== without a password: the page is open"
+$ADB shell am force-stop $PKG
+write_prefs ""
+$ADB shell am start -n $PKG/.MainActivity >/dev/null
+s=""
+for k in $(seq 1 45); do
+    IP3=$(page_state | sed -n 's/.*"tunnel":"Tunnel: http:\/\/\([0-9.]*\):.*/\1/p')
+    [ -z "$IP3" ] || s=$(op -w ' %{http_code}' "http://$IP3:$PORT/api/state")
+    grep -q '"version":.* 200$' <<<"$s" && break
+    sleep 2
+done
+grep -q '"version":.* 200$' <<<"$s" && ok "no password: the operator opens the page without one" || bad "no password: $s"
 
 echo
 echo "passed $pass, failed $fail (API $API)"

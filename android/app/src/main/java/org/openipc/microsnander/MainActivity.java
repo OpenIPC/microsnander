@@ -824,10 +824,6 @@ public class MainActivity extends Activity {
                 port.setError(getString(R.string.remote_bad_port));
                 return;
             }
-            if (on.isChecked() && pw.length() < Settings.MIN_PASSWORD) {
-                password.setError(getString(R.string.remote_bad_password, Settings.MIN_PASSWORD));
-                return;
-            }
             boolean was = Settings.active(this);
             boolean changed = p != Settings.port(this) || !pw.equals(Settings.password(this));
             Settings.save(this, on.isChecked(), p, pw);

@@ -336,7 +336,7 @@ JNIEXPORT jint JNICALL FN(webServe)(JNIEnv *env, jclass cls, jstring jlisten, js
 	const char *listen = (*env)->GetStringUTFChars(env, jlisten, NULL);
 	const char *password = (*env)->GetStringUTFChars(env, jpassword, NULL);
 	const char *dir = (*env)->GetStringUTFChars(env, jdir, NULL);
-	/* web.c keeps the password and the directory while it serves */
+	/* web.c keeps the password (empty: none) and the directory while it serves */
 	char *pw = strdup(password), *d = strdup(dir), *l = strdup(listen);
 	int ret = 1;
 	(void)cls;
@@ -344,11 +344,11 @@ JNIEXPORT jint JNICALL FN(webServe)(JNIEnv *env, jclass cls, jstring jlisten, js
 	(*env)->ReleaseStringUTFChars(env, jlisten, listen);
 	(*env)->ReleaseStringUTFChars(env, jpassword, password);
 	(*env)->ReleaseStringUTFChars(env, jdir, dir);
-	if (pw && d && l && *pw) {
+	if (pw && d && l) {		/* an empty password: the page is open */
 		mkdir(d, 0700);
 		web_device_open = page_device_open;
 		web_device_close = page_device_close;
-		web_allow_any_host(1);		/* a password always; a tunnel may come by a name */
+		web_allow_any_host(1);		/* a tunnel (camex, nginx) may come by a name */
 		ret = web_serve(l, pw, d, 0, 0);
 	}
 	free(pw);

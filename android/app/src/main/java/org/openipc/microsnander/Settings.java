@@ -11,13 +11,15 @@ import org.openipc.camex.tunnel.Field;
 
 /**
  * The settings of remote access: on or off, the port and the password of
- * the web page. Remote access runs only when it is on and has a password.
+ * the web page. Remote access runs when it is on; the password is optional:
+ * without one the page is open to anyone who reaches the port (a lab tool on
+ * a trusted network: it guards against accidents, not attacks).
  * The camex tunnel (the device joins a camex server, the operator reaches the
  * page through it) runs only with remote access, when it is on too.
  */
 final class Settings {
-    static final int DEFAULT_PORT = 8080;
-    static final int MIN_PASSWORD = 4;
+    /** the same as vectis and decoder: camex's nginx finds the page by it */
+    static final int DEFAULT_PORT = 8085;
 
     private Settings() {
     }
@@ -38,9 +40,9 @@ final class Settings {
         return prefs(c).getString("password", "");
     }
 
-    /** on, with a password: the service serves the page */
+    /** on: the service serves the page */
     static boolean active(Context c) {
-        return enabled(c) && password(c).length() >= MIN_PASSWORD;
+        return enabled(c);
     }
 
     static void save(Context c, boolean enabled, int port, String password) {
@@ -49,11 +51,13 @@ final class Settings {
 
     // ---- the camex tunnel ----
 
-    /** the keys of CamexTunnel kept here: every field of the library, so a new one needs no change here */
-    private static List<String> tunnelKeys() {
+    /** the keys of CamexTunnel kept here: every field of the library, so a new one needs no
+     *  change here; but the web port, which is the page's port */
+    static List<String> tunnelKeys() {
         List<String> k = new ArrayList<>();
         for (Field f : CamexTunnel.fields())
-            k.add(f.key);
+            if (!CamexTunnel.WEB_PORT.equals(f.key))
+                k.add(f.key);
         return k;
     }
 
@@ -70,6 +74,8 @@ final class Settings {
         Map<String, String> v = new HashMap<>();
         for (String k : tunnelKeys())
             v.put(k, prefs(c).getString("camex." + k, CamexTunnel.TRANSPORT.equals(k) ? "UDP" : ""));
+        // the server's nginx opens the page by the client's name on this port (camex 3.19.0+)
+        v.put(CamexTunnel.WEB_PORT, String.valueOf(port(c)));
         return v;
     }
 

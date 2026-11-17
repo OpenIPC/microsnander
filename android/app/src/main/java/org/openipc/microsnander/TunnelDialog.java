@@ -68,6 +68,8 @@ final class TunnelDialog {
         Map<String, EditText> texts = new LinkedHashMap<>();
         Map<String, RadioGroup> choices = new HashMap<>();
         for (Field f : CamexTunnel.fields()) {
+            if (CamexTunnel.WEB_PORT.equals(f.key))
+                continue;		// the page's port, from the remote access settings
             TextView label = new TextView(a);
             label.setText(f.required ? f.label : a.getString(R.string.tunnel_optional, f.label));
             label.setPadding(0, pad / 2, 0, 0);

@@ -4,6 +4,18 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.47.0 — 2026-11-17
+
+- Web mode: the password is optional everywhere and checked the same way as in vectis and
+  decoder. An empty `-K` means no password (it was refused); without `-K` the password comes
+  from `MICROSNANDER_WEB_PASSWORD`. The password is compared by the SHA-256 of both sides, in a
+  time that does not depend on it; a `401` says `charset="UTF-8"`.
+- Android app: remote access runs without a password too (the page is then open, and the screen
+  says so; it needed 4 characters or more). The page's port is 8085 by default, as in vectis and
+  decoder (it was 8080; a port saved before stays), and the app gives it to camex as the web
+  port by itself: the field in **Tunnel…** is gone.
+- `tests/android/remote-e2e.sh`: the default port, and the page without a password.
+
 ## 1.46.0 — 2026-11-17
 
 - Android app: `bundles/camex` on camex 3.19.0. **Tunnel…** has the camex fields that came with

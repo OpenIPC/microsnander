@@ -217,7 +217,8 @@ microsnander [options]
  -q             list the addresses that answer on the I2C of the programmer (alone, or
                 before the operation: -m sigmastar -i -q)
  -W [addr:]port web mode: a page with Detect, Read, Erase, Write, Registers
- -K <password>  web mode: ask for this password (any user name)
+ -K <password>  web mode: ask for this password (any user name); without -K the
+                MICROSNANDER_WEB_PASSWORD environment variable, empty: no password
  -o <dir>       web mode: where Read saves the dumps (default: the current one)
 ```
 
@@ -423,7 +424,8 @@ Access:
 
 - Without `-K` anyone who reaches the port can erase the chip, and the service says so at the
   start unless it listens on a 127.x address. With `-K` the browser asks for
-  the password (any user name); an empty password is refused.
+  the password (any user name); an empty one means no password. The password can come from the
+  `MICROSNANDER_WEB_PASSWORD` environment variable instead, off the command line; `-K` goes first.
 - The page is plain HTTP, so the password crosses the network unencrypted: use a trusted
   network, or `-W 127.0.0.1:8080` and an SSH tunnel.
 - Operations need a header that only the page sends, so a page of another site cannot start an
@@ -494,10 +496,11 @@ with the remote).
 The app can serve the page of the [web mode](#web-mode) itself, so an operator anywhere the
 device is reachable from (its network, a tunnel) drives the programmer from a browser, and the
 person at the bench only plugs it in. **Settings…** under **Remote access**: **Allow remote
-access**, the port (8080) and a password (4 characters or more; any user name in the browser).
+access**, the port (8085) and an optional password (any user name in the browser).
 
 - The page listens on every network of the device: `http://ADDRESS:PORT`, the addresses are on
-  the screen. Without a password it does not start.
+  the screen. Without a password it is open to anyone who reaches the port, and the screen says
+  so: for a trusted network.
 - It runs as a foreground service: with the screen off, and by itself after a reboot.
 - Plug the programmer in once and choose the app with **Always**: from then on Android gives
   it to the app on every plug-in and after a reboot, with nobody at the device.
@@ -512,9 +515,8 @@ server, the client name, UDP or TCP, the server's public key and the psk, or a c
 them (`https://openipc.github.io/camex/connect/#…`, the one camex's `install.sh` prints) pasted
 there or opened with the app. The operator, another client of the same server, opens the page by
 the device's address in the tunnel, shown under Remote access. The tunnel reconnects by itself
-and comes back after a reboot. With a camex
-server 3.19.0 or later, **Web port for nginx on the server** set to the page's port lets the
-server's nginx open the page by the client's name.
+and comes back after a reboot. The app gives camex the page's port (`--web-port`), so the
+server's nginx opens the page by the client's name; that needs a camex server 3.19.0 or later.
 
 - Android allows a VPN only after a consent, once: **Allow VPN…** on the screen, or, on a device
   with nobody at it, while it is prepared:

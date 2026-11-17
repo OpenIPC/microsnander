@@ -195,7 +195,8 @@ microsnander [options]
  -q             list the addresses that answer on the I2C of the programmer (alone, or
                 before the operation: -m sigmastar -i -q)
  -W [addr:]port web mode: a page with Detect, Read, Erase, Write, Registers
- -K <password>  web mode: ask for this password (any user name)
+ -K <password>  web mode: ask for this password (any user name); without -K the
+                MICROSNANDER_WEB_PASSWORD environment variable, empty: no password
  -o <dir>       web mode: where Read saves the dumps (default: the current one)
 ```
 
@@ -363,7 +364,7 @@ microsnander -P ch347 -W 8080 -o /srv/dumps
 访问：
 
 - 不带 `-K` 时，任何能访问该端口的人都可以擦除芯片；除非监听 127.x 地址，服务启动时会提示这一点。带 `-K` 时浏览器会要求输入密码（用户名任意）；
-  空密码会被拒绝。
+  空密码等于不设密码。密码也可以通过环境变量 `MICROSNANDER_WEB_PASSWORD` 提供（不出现在命令行中）；`-K` 优先。
 - 页面使用普通 HTTP，密码以明文在网络上传输：请在可信网络中使用，或使用 `-W 127.0.0.1:8080` 加
   SSH 隧道。
 - 操作需要一个只有本页面才会发送的请求头，因此其他网站的页面无法发起擦除或写入。请求必须通过 IP
@@ -422,10 +423,10 @@ root；在电视盒子上会出现在主屏幕，可用遥控器操作）。
 ### 远程访问
 
 应用本身可以提供 [Web 模式](#web-模式) 的页面：操作员在任何能访问到该设备的地方（同一网络、隧道）用浏览器操作编程器，
-现场的人只需插上编程器。在 **Remote access** 面板中点 **Settings…**：**Allow remote access**、端口（8080）和密码
-（至少 4 个字符；浏览器中的用户名任意）。
+现场的人只需插上编程器。在 **Remote access** 面板中点 **Settings…**：**Allow remote access**、端口（8085）和可选的密码
+（浏览器中的用户名任意）。
 
-- 页面监听设备的所有网络：`http://地址:端口`，地址显示在屏幕上。没有密码则不启动。
+- 页面监听设备的所有网络：`http://地址:端口`，地址显示在屏幕上。没有密码时，任何能访问该端口的人都能打开页面，屏幕上会提示这一点：仅用于可信网络。
 - 以前台服务运行：熄屏时也工作，重启后自动启动。
 - 首次插上编程器时选择本应用并勾选 **Always**（始终）：此后每次插入和重启后 Android 都会把它交给应用，设备旁无需有人。
 - 页面和应用共用一个编程器，一次只运行一个操作：操作员运行的操作显示在设备屏幕上（REMOTE: READ 42%），
@@ -434,7 +435,7 @@ root；在电视盒子上会出现在主屏幕，可用遥控器操作）。
 **通过 camex 服务器。** 开启远程访问后，**Tunnel…** 让设备加入 [camex](https://github.com/OpenIPC/camex) 服务器（camex 已内置于应用，无需其他应用）：
 填写服务器、客户端名称、UDP 或 TCP、服务器公钥和 psk，或粘贴/用应用打开包含这些设置的 camex 链接
 （`https://openipc.github.io/camex/connect/#…`，即 camex 的 `install.sh` 输出的链接）。操作员作为同一服务器的另一个客户端，
-通过设备在隧道中的地址打开页面，该地址显示在 Remote access 下方。隧道会自动重连，重启后自动恢复。camex 服务器为 3.19.0 或更新版本时，在 **Web port for nginx on the server** 中填写页面端口，服务器的 nginx 即可按客户端名称打开页面。
+通过设备在隧道中的地址打开页面，该地址显示在 Remote access 下方。隧道会自动重连，重启后自动恢复。应用会把页面端口（`--web-port`）告诉 camex，服务器的 nginx 即可按客户端名称打开页面；这需要 camex 服务器 3.19.0 或更新版本。
 
 - Android 只有在同意后才允许 VPN，只需一次：在屏幕上点 **Allow VPN…**；无人值守的设备可在准备时执行
   `adb shell appops set org.openipc.microsnander ACTIVATE_VPN allow`，然后执行 `adb shell appops write-settings`

@@ -145,7 +145,8 @@ int main(void)
 	      "  Erase and Write wait for a chip: off without one, a Detect before the question");
 
 	web_password = "secret";
-	check(request("GET", "/api/state", NULL, NULL, 0) == 401 && strstr(resp, "WWW-Authenticate: Basic"), "with -K: no password, 401");
+	check(request("GET", "/api/state", NULL, NULL, 0) == 401 &&
+	      strstr(resp, "WWW-Authenticate: Basic realm=\"microsnander\", charset=\"UTF-8\""), "with -K: no password, 401");
 	check(request("GET", "/api/state", "eDp3cm9uZw==", NULL, 0) == 401, "  a wrong password, 401");	/* x:wrong */
 	check(request("GET", "/api/state", "eDpzZWNyZXQ=", NULL, 0) == 200, "  the right one (any user name), 200");	/* x:secret */
 	web_password = NULL;
@@ -461,7 +462,26 @@ int main(void)
 	extra = "Host: localhost:8080\r\n";
 	check(request("GET", "/api/state", NULL, NULL, 0) == 200, "  localhost: 200");
 	extra = "";
-	check(web_serve("127.0.0.1:0", "", dir, 0, 0) == 1, "an empty -K password is refused");
+	check(password_of("") == NULL && password_of(NULL) == NULL && !strcmp(password_of("x"), "x"),
+	      "an empty password is none: the page is open");
+	{
+		unsigned char h[32];
+		static const unsigned char abc[32] = {
+			0xba, 0x78, 0x16, 0xbf, 0x8f, 0x01, 0xcf, 0xea, 0x41, 0x41, 0x40, 0xde, 0x5d, 0xae, 0x22, 0x23,
+			0xb0, 0x03, 0x61, 0xa3, 0x96, 0x17, 0x7a, 0x9c, 0xb4, 0x10, 0xff, 0x61, 0xf2, 0x00, 0x15, 0xad };
+		static const unsigned char two[32] = {	/* the 56-byte FIPS 180-2 message: two blocks */
+			0x24, 0x8d, 0x6a, 0x61, 0xd2, 0x06, 0x38, 0xb8, 0xe5, 0xc0, 0x26, 0x93, 0x0c, 0x3e, 0x60, 0x39,
+			0xa3, 0x3c, 0xe4, 0x59, 0x64, 0xff, 0x21, 0x67, 0xf6, 0xec, 0xed, 0xd4, 0x19, 0xdb, 0x06, 0xc1 };
+		const char *m = "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq";
+		int ok = 1;
+
+		sha256("abc", 3, h);
+		ok &= !memcmp(h, abc, 32);
+		sha256(m, strlen(m), h);
+		ok &= !memcmp(h, two, 32);
+		check(ok && password_equal("secret", "secret") && !password_equal("secret", "secreT") &&
+		      !password_equal("", "secret"), "SHA-256 of the FIPS vectors; the password compared by it");
+	}
 
 	check(request("GET", "/nope", NULL, NULL, 0) == 404 && request("POST", "/api/nope", NULL, NULL, 0) == 404, "unknown paths: 404");
 
@@ -511,7 +531,7 @@ int main(void)
 
 	extra = "Host: box1.vpn.example.org\r\n";
 	web_allow_any_host(1);
-	check(request("GET", "/api/state", NULL, NULL, 0) == 200, "the app (a password always): a Host of any name, as a tunnel gives");
+	check(request("GET", "/api/state", NULL, NULL, 0) == 200, "the app: a Host of any name, as a tunnel gives");
 	web_allow_any_host(0);
 	extra = "";
 

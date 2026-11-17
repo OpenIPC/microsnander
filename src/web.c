@@ -86,7 +86,7 @@ static const char *web_dir = ".";
 static const char *web_password;
 static unsigned long long web_addr, web_len;
 static FILE *upload;			/* the file to write, unlinked in the dump directory */
-static int web_any_host;		/* any Host: (a password is always set then) */
+static int web_any_host;		/* any Host: (the app, reached by a tunnel name) */
 
 int (*web_device_open)(void);
 void (*web_device_close)(void);
@@ -508,6 +508,90 @@ static int b64val(int c)
 	return -1;
 }
 
+/* SHA-256 (FIPS 180-4), for the password check only */
+static const unsigned int sha_k[64] = {
+	0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+	0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+	0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+	0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+	0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+	0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+	0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+	0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
+};
+
+#define ROR(x, n) (((x) >> (n)) | ((x) << (32 - (n))))
+
+static void sha256_block(unsigned int h[8], const unsigned char *b)
+{
+	unsigned int w[64], v[8];
+
+	for (int i = 0; i < 16; i++)
+		w[i] = (unsigned int)b[4 * i] << 24 | b[4 * i + 1] << 16 | b[4 * i + 2] << 8 | b[4 * i + 3];
+	for (int i = 16; i < 64; i++) {
+		unsigned int s0 = ROR(w[i - 15], 7) ^ ROR(w[i - 15], 18) ^ (w[i - 15] >> 3);
+		unsigned int s1 = ROR(w[i - 2], 17) ^ ROR(w[i - 2], 19) ^ (w[i - 2] >> 10);
+
+		w[i] = w[i - 16] + s0 + w[i - 7] + s1;
+	}
+	memcpy(v, h, sizeof(v));
+	for (int i = 0; i < 64; i++) {
+		unsigned int t1 = v[7] + (ROR(v[4], 6) ^ ROR(v[4], 11) ^ ROR(v[4], 25)) +
+				  ((v[4] & v[5]) ^ (~v[4] & v[6])) + sha_k[i] + w[i];
+		unsigned int t2 = (ROR(v[0], 2) ^ ROR(v[0], 13) ^ ROR(v[0], 22)) +
+				  ((v[0] & v[1]) ^ (v[0] & v[2]) ^ (v[1] & v[2]));
+
+		memmove(v + 1, v, 7 * sizeof(v[0]));
+		v[4] += t1;
+		v[0] = t1 + t2;
+	}
+	for (int i = 0; i < 8; i++)
+		h[i] += v[i];
+}
+
+static void sha256(const void *data, size_t n, unsigned char out[32])
+{
+	unsigned int h[8] = { 0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+			      0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19 };
+	const unsigned char *p = data;
+	unsigned char b[64];
+	size_t left = n;
+
+	for (; left >= 64; left -= 64, p += 64)
+		sha256_block(h, p);
+	memset(b, 0, sizeof(b));
+	memcpy(b, p, left);
+	b[left] = 0x80;
+	if (left >= 56) {
+		sha256_block(h, b);
+		memset(b, 0, sizeof(b));
+	}
+	for (int i = 0; i < 8; i++)
+		b[63 - i] = (unsigned char)((unsigned long long)n * 8 >> (8 * i));
+	sha256_block(h, b);
+	for (int i = 0; i < 32; i++)
+		out[i] = h[i / 4] >> (24 - 8 * (i % 4));
+}
+
+/* the two passwords match, in a time that does not depend on where they differ:
+   the SHA-256 of both, compared whole */
+static int password_equal(const char *given, const char *want)
+{
+	unsigned char a[32], b[32], d = 0;
+
+	sha256(given, strlen(given), a);
+	sha256(want, strlen(want), b);
+	for (int i = 0; i < 32; i++)
+		d |= a[i] ^ b[i];
+	return d == 0;
+}
+
+/* the password to ask for: an empty one is none, the page is open */
+static const char *password_of(const char *p)
+{
+	return p && *p ? p : NULL;
+}
+
 /* the password of "Authorization: Basic ..." matches (any user name) */
 static int authorized(const char *headers)
 {
@@ -534,7 +618,7 @@ static int authorized(const char *headers)
 	}
 	dec[k] = 0;
 	h = strchr(dec, ':');
-	return h && !strcmp(h + 1, web_password);
+	return h && password_equal(h + 1, web_password);
 }
 
 /* The Host of the request: an IP address, localhost, or this machine's name.
@@ -743,7 +827,7 @@ static void handle(int fd)
 		return;
 	}
 	if (!authorized(head)) {
-		reply(fd, "401 Unauthorized", "text/plain", "WWW-Authenticate: Basic realm=\"microsnander\"\r\n", "Password needed.\n", 17);
+		reply(fd, "401 Unauthorized", "text/plain", "WWW-Authenticate: Basic realm=\"microsnander\", charset=\"UTF-8\"\r\n", "Password needed.\n", 17);
 		return;
 	}
 	const char *cl = find_header(head, "Content-Length:");
@@ -931,11 +1015,7 @@ int web_serve(const char *listen_on, const char *password, const char *dir,
 		printf("-W: give [address:]port, for example 8080 or 127.0.0.1:8080.\n");
 		return 1;
 	}
-	if (password && !*password) {
-		printf("-K: the password is empty.\n");
-		return 1;
-	}
-	web_password = password;
+	web_password = password_of(password);
 	web_dir = dir && *dir ? dir : ".";
 	web_addr = addr;
 	web_len = len;
@@ -957,7 +1037,7 @@ int web_serve(const char *listen_on, const char *password, const char *dir,
 	printf("Web mode on http://%s:%d/%s, dumps in %s\n", host, ntohs(sa.sin_port),
 	       web_password ? " (password)" : "", web_dir);
 	if (!web_password && (ntohl(sa.sin_addr.s_addr) >> 24) != 127)
-		printf("No password (-K): anyone who reaches this port can erase or write the chip.\n");
+		printf("No password (-K, MICROSNANDER_WEB_PASSWORD): anyone who reaches this port can erase or write the chip.\n");
 	fflush(stdout);
 
 	/* a thread for each connection, so a slow client does not hold the others */

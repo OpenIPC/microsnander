@@ -4,7 +4,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 
-/** Remote access after a reboot, with nobody at the device: when it is on and has a password. */
+/** Remote access after a reboot, with nobody at the device: when it is on. */
 public class BootReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context c, Intent intent) {

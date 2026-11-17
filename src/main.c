@@ -42,7 +42,7 @@
 struct flash_cmd prog;
 extern unsigned int bsize;
 
-#define _VER	"1.46.0"
+#define _VER	"1.47.0"
 
 const char *ms_version = _VER;
 
@@ -105,7 +105,8 @@ void usage(int code)
 		" -q             list the addresses that answer on the I2C of the programmer (alone, or\n"\
 		"                before the operation: -m sigmastar -i -q)\n"\
 		" -W [addr:]port web mode: a page with Detect, Read, Erase, Write, Registers\n"\
-		" -K <password>  web mode: ask for this password (any user name)\n"\
+		" -K <password>  web mode: ask for this password (any user name); without -K the\n"\
+		"                MICROSNANDER_WEB_PASSWORD environment variable, empty: no password\n"\
 		" -o <dir>       web mode: where Read saves the dumps (default: the current one)\n";
 	printf(use);
 	exit(code);
@@ -442,6 +443,8 @@ int main(int argc, char* argv[])
 			printf("-W runs the web mode: give no -i, -r, -w, -c, -O, -e, -u, -t, -b, -q, -v, -S, -m, -d, -I or -k with it.\n\n");
 			return 1;
 		}
+		if (!web_key)		/* -K first, then the environment */
+			web_key = getenv("MICROSNANDER_WEB_PASSWORD");
 		return web_serve(web, web_key, web_dir, addr, len);
 	}
 	if (web_key || web_dir) {
