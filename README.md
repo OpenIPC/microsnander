@@ -512,7 +512,9 @@ server, the client name, UDP or TCP, the server's public key and the psk, or a c
 them (`https://openipc.github.io/camex/connect/#…`, the one camex's `install.sh` prints) pasted
 there or opened with the app. The operator, another client of the same server, opens the page by
 the device's address in the tunnel, shown under Remote access. The tunnel reconnects by itself
-and comes back after a reboot.
+and comes back after a reboot. With a camex
+server 3.19.0 or later, **Web port for nginx on the server** set to the page's port lets the
+server's nginx open the page by the client's name.
 
 - Android allows a VPN only after a consent, once: **Allow VPN…** on the screen, or, on a device
   with nobody at it, while it is prepared:

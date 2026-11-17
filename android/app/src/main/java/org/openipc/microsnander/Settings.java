@@ -2,9 +2,12 @@ package org.openipc.microsnander;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import org.openipc.camex.tunnel.CamexTunnel;
+import org.openipc.camex.tunnel.Field;
 
 /**
  * The settings of remote access: on or off, the port and the password of
@@ -46,11 +49,13 @@ final class Settings {
 
     // ---- the camex tunnel ----
 
-    /** the keys of CamexTunnel kept here: server, name, transport, pubkey, psk, mtu, keepalive */
-    static final String[] TUNNEL_KEYS = {
-        CamexTunnel.SERVER, CamexTunnel.NAME, CamexTunnel.TRANSPORT, CamexTunnel.PUBKEY, CamexTunnel.PSK,
-        CamexTunnel.MTU, CamexTunnel.KEEPALIVE,
-    };
+    /** the keys of CamexTunnel kept here: every field of the library, so a new one needs no change here */
+    private static List<String> tunnelKeys() {
+        List<String> k = new ArrayList<>();
+        for (Field f : CamexTunnel.fields())
+            k.add(f.key);
+        return k;
+    }
 
     static boolean tunnelEnabled(Context c) {
         return prefs(c).getBoolean("camex", false);
@@ -63,14 +68,14 @@ final class Settings {
 
     static Map<String, String> tunnel(Context c) {
         Map<String, String> v = new HashMap<>();
-        for (String k : TUNNEL_KEYS)
+        for (String k : tunnelKeys())
             v.put(k, prefs(c).getString("camex." + k, CamexTunnel.TRANSPORT.equals(k) ? "UDP" : ""));
         return v;
     }
 
     static void saveTunnel(Context c, boolean on, Map<String, String> v) {
         SharedPreferences.Editor e = prefs(c).edit().putBoolean("camex", on);
-        for (String k : TUNNEL_KEYS)
+        for (String k : tunnelKeys())
             e.putString("camex." + k, v.containsKey(k) ? v.get(k) : "");
         e.apply();
     }

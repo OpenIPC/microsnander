@@ -4,6 +4,15 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.46.0 — 2026-11-17
+
+- Android app: `bundles/camex` on camex 3.19.0. **Tunnel…** has the camex fields that came with
+  it: the web port for nginx on the server (`--web-port`: the server's nginx then opens the page
+  by the client's name without a block per device; it needs a camex server 3.19.0 or later, so
+  it is empty unless set) and the server timeout. The app keeps every field of the tunnel
+  library, so new ones need no change in the app.
+- `tests/android/remote-e2e.sh`: the server sees the web port the app declares.
+
 ## 1.45.0 — 2026-11-16
 
 - Android app: remote access through a camex server, built in. With remote access on, **Tunnel…**

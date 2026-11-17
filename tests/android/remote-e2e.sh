@@ -120,6 +120,7 @@ cat > "$OUT/w/remote.xml" <<EOF
     <string name="camex.psk">$PSK</string>
     <string name="camex.mtu"></string>
     <string name="camex.keepalive"></string>
+    <string name="camex.web_port">$PORT</string>
 </map>
 EOF
 $ADB push /w/remote.xml /data/local/tmp/remote.xml >/dev/null
@@ -176,6 +177,10 @@ for k in $(seq 1 45); do
     sleep 2
 done
 if [ -n "$APP_IP" ]; then ok "the tunnel is up: the app's address $APP_IP"; else bad "no tunnel: $(page_state)"; fi
+# the client declares its web port, for nginx on the server (camex 3.19.0)
+st=$(docker exec "$SRV" /w/camex --status --json 2>&1)
+grep -q "\"id\":\"box-1\"[^}]*\"web_port\":$PORT" <<<"$st" &&
+    ok "the server knows the web port $PORT" || bad "web_port: $st"
 
 echo "== the operator, through the server"
 op() { docker exec "$OP" curl -s -m 10 "$@" 2>&1; }
