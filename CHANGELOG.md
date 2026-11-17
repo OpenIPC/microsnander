@@ -15,7 +15,13 @@ from every push to `main`; this file is the change history.
   stopping remote access no longer frees what a request or an operation still uses (and a port
   that cannot be taken no longer costs memory on every try).
 - Android app: the buttons come back after the page's operations even when they ended unseen (the
-  screen was off); the build takes the page it generates, not a `src/web_page.h` left by `make`.
+  screen was off), and the app's own operation after one is not shown as remote; the build takes
+  the page it generates, not a `src/web_page.h` left by `make`.
+- Android app: stopping or restarting remote access waits for a page's operation that runs (a
+  write may take minutes) with the wake lock held, and the new server starts only after it; the
+  service ends after it too.
+- Android app: the password goes to the page as UTF-8, so one with an emoji matches; a tunnel
+  setting the dialog rejects without a field of its own is shown.
 
 ## 1.47.1 — 2026-11-17
 

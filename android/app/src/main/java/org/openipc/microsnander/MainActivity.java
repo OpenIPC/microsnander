@@ -857,8 +857,10 @@ public class MainActivity extends Activity {
         } catch (JSONException e) {
             return;
         }
-        if (s.optBoolean("local") && !remoteRunning)
-            return;			// the app's own: shown as always
+        if (s.optBoolean("local")) {	// the app's own: shown by its own call, as always
+            remoteRunning = false;	// a page's operation seen before ended: the app's own runs now
+            return;
+        }
         boolean run = s.optInt("busy") != 0;	// 0 or 1, as web.c writes it
         if (run) {
             remoteRunning = true;

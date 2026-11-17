@@ -122,8 +122,10 @@ final class TunnelDialog {
                     if (e != null) {
                         e.setError(bad[1]);
                         e.requestFocus();
-                    } else
+                    } else {
                         linkErrors.setText(bad[1]);
+                        linkErrors.setVisibility(View.VISIBLE);
+                    }
                     return;
                 }
             }

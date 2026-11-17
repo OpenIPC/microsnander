@@ -84,6 +84,7 @@
     <string name="remote_on_plate">ON</string>
     <string name="remote_off_text">Off. Settings… to let an operator elsewhere drive the programmer from a browser.</string>
     <string name="remote_starting">Starting…</string>
+    <string name="remote_stopping">Stopping: an operation of the page ends first…</string>
     <string name="remote_on">Listening: %1$s</string>
     <string name="remote_on_open">Listening, no password: %1$s</string>
     <string name="remote_cannot_listen">Cannot listen on port %1$d (taken?): trying again.</string>

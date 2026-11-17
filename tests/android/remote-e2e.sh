@@ -226,6 +226,21 @@ for k in $(seq 1 45); do
 done
 grep -q '"version":.* 200$' <<<"$s" && ok "no password: the operator opens the page without one" || bad "no password: $s"
 
+echo "== a password with an emoji: UTF-8 as the browser sends it"
+EMOJI_PW="key-😀"
+$ADB shell am force-stop $PKG
+write_prefs "$EMOJI_PW"
+$ADB shell am start -n $PKG/.MainActivity >/dev/null
+s=""
+for k in $(seq 1 45); do
+    IP4=$(docker exec "$NAME" sh -c "curl -s -m 5 -u 'op:$EMOJI_PW' http://127.0.0.1:18080/api/state" 2>/dev/null |
+        sed -n 's/.*"tunnel":"Tunnel: http:\/\/\([0-9.]*\):.*/\1/p')
+    [ -z "$IP4" ] || s=$(op -u "op:$EMOJI_PW" -w ' %{http_code}' "http://$IP4:$PORT/api/state")
+    grep -q '"version":.* 200$' <<<"$s" && break
+    sleep 2
+done
+grep -q '"version":.* 200$' <<<"$s" && ok "a password with an emoji matches" || bad "emoji password: $s"
+
 echo
 echo "passed $pass, failed $fail (API $API)"
 [ $fail = 0 ]

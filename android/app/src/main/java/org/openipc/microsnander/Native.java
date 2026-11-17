@@ -75,7 +75,7 @@ final class Native {
     // ---- the web mode (remote access, RemoteService); not synchronized: webServe blocks ----
 
     /** the page on listen ("[address:]port") until webStop: 0, or 1 when it cannot listen */
-    static native int webServe(String listen, String password, String dir);
+    static native int webServe(String listen, byte[] password, String dir);
 
     static native void webStop();
 

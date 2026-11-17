@@ -24,6 +24,7 @@ import java.io.File;
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -75,6 +76,9 @@ public class RemoteService extends Service {
     private Thread server;              // guarded by lock: the thread in Native.webServe
     private boolean wanted;             // guarded by lock: keep serving
     private int generation;             // guarded by lock: which server thread is the current one
+    private Thread stopping;            // guarded by lock: a server thread stopped, still ending
+    private boolean startAfterStop;     // guarded by lock: serve again once it has ended
+    private boolean finishAfterStop;    // guarded by lock: the service ends once it has ended
     private PowerManager.WakeLock wakeLock;
 
     // the programmer of the page's operation; one at a time (web.c runs one)
@@ -121,14 +125,15 @@ public class RemoteService extends Service {
         String action = intent != null && intent.getAction() != null ? intent.getAction() : ACTION_START;
         foreground(getString(R.string.remote_starting));
         if (action.equals(ACTION_STOP) || !Settings.active(this)) {
+            synchronized (lock) {
+                startAfterStop = false;
+                finishAfterStop = true;		// once a page's operation that runs has ended
+            }
             stopServing();
-            setStatus("");
-            if (Build.VERSION.SDK_INT >= 24)
-                stopForeground(STOP_FOREGROUND_REMOVE);
-            else
-                stopForeground(true);
-            stopSelf();
             return START_NOT_STICKY;
+        }
+        synchronized (lock) {
+            finishAfterStop = false;
         }
         if (action.equals(ACTION_RESTART))
             stopServing();
@@ -156,6 +161,10 @@ public class RemoteService extends Service {
     @SuppressLint("WakelockTimeout")
     private void startServing() {
         synchronized (lock) {
+            if (stopping != null) {		// the old server still ends: after it, not over it
+                startAfterStop = true;
+                return;
+            }
             if (server != null) {		// serving: the tunnel may have been turned on or changed
                 main.post(this::startTunnel);
                 return;
@@ -176,7 +185,8 @@ public class RemoteService extends Service {
     /** Native.webServe until webStop; a port it cannot take is tried again */
     private void serve(int gen, int port, String password, String dir) {
         while (true) {
-            int ret = Native.webServe("0.0.0.0:" + port, password, dir);
+            // UTF-8 as a browser sends it (JNI strings are modified UTF-8: an emoji would differ)
+            int ret = Native.webServe("0.0.0.0:" + port, password.getBytes(StandardCharsets.UTF_8), dir);
             synchronized (lock) {
                 if (!wanted || gen != generation)
                     return;
@@ -208,18 +218,59 @@ public class RemoteService extends Service {
             generation++;
             t = server;
             server = null;
+            if (t == null) {
+                if (stopping == null)
+                    main.post(this::stopped);
+                return;
+            }
+            stopping = t;
         }
-        if (t == null)
+        setStatus(getString(R.string.remote_stopping));
+        // webServe returns once a page's operation that runs has ended (a write may take
+        // minutes): waited for off the main thread, with the wake lock still held
+        new Thread(() -> {
+            Native.webStop();
+            t.interrupt();
+            boolean done = false;
+            while (!done) {
+                try {
+                    t.join();
+                    done = true;
+                } catch (InterruptedException ignored) {
+                    // keep waiting: the native server still uses the settings
+                }
+            }
+            synchronized (lock) {
+                stopping = null;
+            }
+            main.post(this::stopped);
+        }, "microsnander-stop").start();
+    }
+
+    /** the old server has ended: serve again, or let the wake lock and the service go */
+    private void stopped() {
+        boolean again, finish;
+        synchronized (lock) {
+            if (stopping != null || server != null)
+                return;
+            again = startAfterStop && Settings.active(this);
+            finish = finishAfterStop;
+            startAfterStop = false;
+        }
+        if (again) {
+            startServing();
             return;
-        Native.webStop();
-        t.interrupt();
-        try {
-            t.join(3000);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
         }
         if (wakeLock.isHeld())
             wakeLock.release();
+        if (finish) {
+            setStatus("");
+            if (Build.VERSION.SDK_INT >= 24)
+                stopForeground(STOP_FOREGROUND_REMOVE);
+            else
+                stopForeground(true);
+            stopSelf();
+        }
     }
 
     /** http://ADDRESS:PORT of each IPv4 address of the device (Ethernet, Wi-Fi, a tunnel) */

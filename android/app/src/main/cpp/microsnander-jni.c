@@ -366,19 +366,20 @@ JNIEXPORT jobject JNICALL FN(writeRegister)(JNIEnv *env, jclass cls, jint fd, ji
 /* ---- the web mode, for remote access ---- */
 
 /* serves the page on listen ("[address:]port") until webStop; 0, or 1 when it cannot listen */
-JNIEXPORT jint JNICALL FN(webServe)(JNIEnv *env, jclass cls, jstring jlisten, jstring jpassword, jstring jdir)
+JNIEXPORT jint JNICALL FN(webServe)(JNIEnv *env, jclass cls, jstring jlisten, jbyteArray jpassword, jstring jdir)
 {
 	const char *listen = (*env)->GetStringUTFChars(env, jlisten, NULL);
-	const char *password = (*env)->GetStringUTFChars(env, jpassword, NULL);
 	const char *dir = (*env)->GetStringUTFChars(env, jdir, NULL);
+	jsize pn = (*env)->GetArrayLength(env, jpassword);
 	/* web.c keeps the password (empty: none) and the directory while it
 	   serves; web_serve returns once nothing of it uses them */
-	char *pw = strdup(password), *d = strdup(dir), *l = strdup(listen);
+	char *pw = calloc(1, (size_t)pn + 1), *d = strdup(dir), *l = strdup(listen);
 	int ret = 1;
 	(void)cls;
 
 	(*env)->ReleaseStringUTFChars(env, jlisten, listen);
-	(*env)->ReleaseStringUTFChars(env, jpassword, password);
+	if (pw)		/* the password's UTF-8, as a browser sends it */
+		(*env)->GetByteArrayRegion(env, jpassword, 0, pn, (jbyte *)pw);
 	(*env)->ReleaseStringUTFChars(env, jdir, dir);
 	if (pw && d && l) {		/* an empty password: the page is open */
 		mkdir(d, 0700);
