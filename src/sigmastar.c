@@ -81,7 +81,7 @@ static int isp_send(unsigned int writecnt, unsigned int readcnt, const unsigned 
 		unsigned int n = readcnt - done < bus->i2c_max ? readcnt - done : bus->i2c_max;
 
 		buf[0] = ISP_READ;
-		if (bus->i2c_write(ISP_ADDR, buf, 1) || bus->i2c_read(ISP_ADDR, readarr + done, n))
+		if ((done == 0 && bus->i2c_write(ISP_ADDR, buf, 1)) || bus->i2c_read(ISP_ADDR, readarr + done, n))
 			return -1;
 		done += n;
 	}
