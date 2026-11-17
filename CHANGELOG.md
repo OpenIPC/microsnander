@@ -4,6 +4,11 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.47.1 — 2026-11-17
+
+- Android app: `bundles/camex` on camex 4.0.0 (its server listens on UDP and TCP by default; the
+  tunnel library is the same).
+
 ## 1.47.0 — 2026-11-17
 
 - Web mode: the password is optional everywhere and checked the same way as in vectis and
