@@ -5,7 +5,8 @@
  * UART of the SoC goes to it, TX to SDA, RX to SCL, and GND.
  *
  * The bridge answers at 0x49: 0x10 and bytes — they go out on the SPI bus;
- * 0x11 — the next I2C read clocks bytes in from it; 0x12 — the end of the
+ * 0x11 — the next I2C reads clock bytes in from it (once per command: a 0x11
+ * again under the same CS drops a byte); 0x12 — the end of the
  * SPI command (CS high). Before that the SoC's debug port, 0x59, is told to
  * let the pins of its UART be the bridge, and "MSTAR" to 0x49 starts it.
  * The flash drivers do not know: the programmer's send and cs go here.
@@ -81,7 +82,7 @@ static int isp_send(unsigned int writecnt, unsigned int readcnt, const unsigned 
 		unsigned int n = readcnt - done < bus->i2c_max ? readcnt - done : bus->i2c_max;
 
 		buf[0] = ISP_READ;
-		if (bus->i2c_write(ISP_ADDR, buf, 1) || bus->i2c_read(ISP_ADDR, readarr + done, n))
+		if ((done == 0 && bus->i2c_write(ISP_ADDR, buf, 1)) || bus->i2c_read(ISP_ADDR, readarr + done, n))
 			return -1;
 		done += n;
 	}

@@ -4,6 +4,13 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.47.3 — 2026-11-17
+
+- SigmaStar ISP (`-m sigmastar`): a read sends the bridge's read command (0x11) once, not before
+  every I2C part; the bridge dropped a byte at each repeat, so every 25th byte of a CH341A read
+  was missing and a verify after a write failed at 0x18 (#97, by @igorssv).
+- `tests/ispsim.c`: the simulated bridge drops a byte at a repeated 0x11, as the real one does.
+
 ## 1.47.2 — 2026-11-17
 
 - Android app: without a password the page takes only addresses and the names under the camex
