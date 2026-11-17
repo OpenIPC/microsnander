@@ -840,7 +840,6 @@ public class MainActivity extends Activity {
     }
 
     /** the operations of the page, while the screen is in front: what runs and how it ended */
-    private static int remoteSeq = -1;	// the operation of the page last shown
     private static boolean remoteRunning;
     private final Runnable watchRemote = new Runnable() {
         @Override
@@ -858,13 +857,11 @@ public class MainActivity extends Activity {
         } catch (JSONException e) {
             return;
         }
-        if (s.optBoolean("local"))
+        if (s.optBoolean("local") && !remoteRunning)
             return;			// the app's own: shown as always
-        int seq = s.optInt("seq");
         boolean run = s.optInt("busy") != 0;	// 0 or 1, as web.c writes it
         if (run) {
             remoteRunning = true;
-            remoteSeq = seq;
             long done = s.optLong("done"), total = s.optLong("total");
             String phase = s.optString("phase");
             String op = phase.isEmpty() ? s.optString("op") : phase;
@@ -878,9 +875,11 @@ public class MainActivity extends Activity {
             meta.setText(R.string.remote_working);
             return;
         }
-        if (!remoteRunning || seq != remoteSeq || busy)
+        // it ended, or more ended unseen (the screen was off, or within one poll): the
+        // newest outcome unlocks the screen either way
+        if (!remoteRunning || busy)
             return;
-        remoteRunning = false;	// it ended: its outcome, as the app's own
+        remoteRunning = false;	// its outcome, as the app's own
         Native.Result r = fromState(s);
         lastResult = r;
         lastSaved = null;

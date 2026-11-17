@@ -372,8 +372,7 @@ JNIEXPORT jint JNICALL FN(webServe)(JNIEnv *env, jclass cls, jstring jlisten, js
 	const char *password = (*env)->GetStringUTFChars(env, jpassword, NULL);
 	const char *dir = (*env)->GetStringUTFChars(env, jdir, NULL);
 	/* web.c keeps the password (empty: none) and the directory while it
-	   serves, and a connection or an operation may outlive a stop: they are
-	   never freed (one copy per start of the server) */
+	   serves; web_serve returns once nothing of it uses them */
 	char *pw = strdup(password), *d = strdup(dir), *l = strdup(listen);
 	int ret = 1;
 	(void)cls;
@@ -391,6 +390,8 @@ JNIEXPORT jint JNICALL FN(webServe)(JNIEnv *env, jclass cls, jstring jlisten, js
 		web_allow_any_host(*pw != 0);
 		ret = web_serve(l, pw, d, 0, 0);
 	}
+	free(pw);
+	free(d);
 	free(l);
 	return ret;
 }

@@ -119,7 +119,8 @@ static void wait_idle(void)
 static int dev_fails, dev_opens, dev_closes;
 static int dev_open(void) { dev_opens++; return dev_fails ? -1 : 0; }
 static void dev_close(void) { dev_closes++; }
-static void *serve_thread(void *dir) { return (void *)(long)web_serve("127.0.0.1:0", NULL, dir, 0, 0); }
+static volatile int served;
+static void *serve_thread(void *dir) { long r = web_serve("127.0.0.1:0", NULL, dir, 0, 0); served = 1; return (void *)r; }
 
 static int fail;
 static void check(int ok, const char *what) { printf("%s %s\n", ok ? "ok  " : "FAIL", what); if (!ok) fail = 1; }
@@ -564,7 +565,28 @@ int main(void)
 		web_stop();
 		pthread_join(t, &ret);
 		check((long)ret == 0, "  served again and stopped again");
+
+		/* a page's operation runs: web_serve returns only after it, so its
+		   password and directory can be freed then */
+		pthread_mutex_lock(&st.lock);
+		st.busy = 1;
+		st.local = 0;
+		pthread_mutex_unlock(&st.lock);
+		served = 0;
+		pthread_create(&t, NULL, serve_thread, dir);
+		usleep(100000);
+		web_stop();
+		usleep(300000);
+		int waited = !served;
+		pthread_mutex_lock(&st.lock);
+		st.busy = 0;
+		pthread_mutex_unlock(&st.lock);
+		pthread_join(t, &ret);
+		check(waited && served && (long)ret == 0, "  a stop waits for the page's operation to end");
 	}
+	check(!name_ok("localhost.evil.example", "localhost") && !name_ok("localhost.evil.example", "localhost.localdomain") &&
+	      name_ok("box", "box") && name_ok("BOX.local", "box") && !name_ok("boxer", "box"),
+	      "this machine's name: box, box.local; never localhost.<a site> (Android's name is localhost)");
 
 	char cmd[300];
 	snprintf(cmd, sizeof(cmd), "rm -rf %s", dir);

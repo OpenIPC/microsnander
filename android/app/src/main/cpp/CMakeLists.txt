@@ -20,9 +20,10 @@ add_library(microsnander SHARED
     microsnander-jni.c
     ${S}/ops.c ${S}/voltage.c ${S}/selftest.c ${S}/usb.c ${S}/usbfs.c ${S}/programmer.c ${S}/flashcmd_api.c ${S}/spi_controller.c
     ${S}/spi_nand_flash.c ${S}/spi_nor_flash.c ${S}/ch341a_spi.c ${S}/ch347_spi.c ${S}/ezp.c ${S}/timer.c ${S}/web.c)
-# web.c includes "web_page.h" from its own directory first: a src/web_page.h
-# that make left there (it is in .gitignore) wins over gen/, as in CI it is not there
-target_include_directories(microsnander PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/gen ${S})
+# web.c takes this page by its full path: a src/web_page.h that make left
+# there (it is in .gitignore, maybe older) cannot win over it
+target_include_directories(microsnander PRIVATE ${S})
+target_compile_definitions(microsnander PRIVATE WEB_PAGE_H="${CMAKE_CURRENT_BINARY_DIR}/gen/web_page.h")
 target_compile_options(microsnander PRIVATE -std=gnu99 -Wall -D_FILE_OFFSET_BITS=64)
 # the version of _VER in src/main.c, from build.gradle.kts, for the page
 target_compile_definitions(microsnander PRIVATE MS_VERSION="${MS_VERSION}")

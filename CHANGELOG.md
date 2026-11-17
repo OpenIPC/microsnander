@@ -7,11 +7,15 @@ from every push to `main`; this file is the change history.
 ## 1.47.2 — 2026-11-17
 
 - Android app: without a password the page takes only addresses and the names under the camex
-  server (its nginx), not any Host name, so a site cannot reach it by DNS rebinding.
+  server (its nginx), not any Host name, so a site cannot reach it by DNS rebinding. Web mode:
+  the machine's own name is never taken when it is `localhost` (`localhost.<a site>`).
 - Android app: the chip the user confirmed binds the app's operation only once it holds the slot
   shared with the page; a busy answer no longer truncates the last dump or keeps a file open.
-- Android app: stopping remote access while a page's request or operation runs no longer frees
-  what they still use.
+- Web mode: a stop cuts the open connections and waits for the page's operation to end, so
+  stopping remote access no longer frees what a request or an operation still uses (and a port
+  that cannot be taken no longer costs memory on every try).
+- Android app: the buttons come back after the page's operations even when they ended unseen (the
+  screen was off); the build takes the page it generates, not a `src/web_page.h` left by `make`.
 
 ## 1.47.1 — 2026-11-17
 

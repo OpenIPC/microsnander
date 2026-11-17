@@ -408,7 +408,11 @@ void web_set_tunnel(const char *text)
 
 /* ---- HTTP ---- */
 
+#ifdef WEB_PAGE_H		/* the Android build's own copy, by its full path */
+#include WEB_PAGE_H
+#else
 #include "web_page.h"
+#endif
 
 static int send_all(int fd, const void *p, size_t n)
 {
@@ -625,6 +629,17 @@ static int authorized(const char *headers)
 /* The Host of the request: an IP address, localhost, or this machine's name.
    A page of another site that resolves its own name to this address (DNS
    rebinding) sends its own name, and is refused. */
+/* host is this machine's name me, or me.local / me.domain; not when me is
+   localhost (Android): localhost.<a site> would let that site in by DNS rebinding */
+static int name_ok(const char *host, const char *me)
+{
+	size_t m = strlen(me);
+
+	if (!m || !strcasecmp(me, "localhost") || !strncasecmp(me, "localhost.", 10))
+		return 0;
+	return !strcasecmp(host, me) || (!strncasecmp(host, me, m) && host[m] == '.');
+}
+
 static int host_ok(const char *headers)
 {
 	const char *h = find_header(headers, "Host:");
@@ -645,10 +660,8 @@ static int host_ok(const char *headers)
 		return 1;
 	if (!gethostname(me, sizeof(me))) {
 		me[sizeof(me) - 1] = 0;
-		size_t m = strlen(me);
-
-		if (!strcasecmp(host, me) || (!strncasecmp(host, me, m) && host[m] == '.'))
-			return 1;	/* name or name.local / name.domain */
+		if (name_ok(host, me))
+			return 1;
 	}
 	pthread_mutex_lock(&st.lock);
 	size_t d = strlen(web_host_domain);
@@ -969,14 +982,18 @@ static void handle(int fd)
 }
 
 static int connections;
+static int conn_fd[WEB_MAX_CONN];		/* the open connections, for web_stop; -1 free */
 
 static void *conn_thread(void *arg)
 {
 	int c = (int)(long)arg;
 
 	handle(c);
-	close(c);
 	pthread_mutex_lock(&st.lock);
+	for (int i = 0; i < WEB_MAX_CONN; i++)
+		if (conn_fd[i] == c)
+			conn_fd[i] = -1;
+	close(c);
 	connections--;
 	thread_ended();
 	pthread_mutex_unlock(&st.lock);
@@ -990,8 +1007,12 @@ void web_stop(void)
 {
 	pthread_mutex_lock(&st.lock);
 	web_stopping = 1;
-	if (web_sock >= 0)
+	if (web_sock >= 0) {
 		shutdown(web_sock, SHUT_RDWR);	/* accept() returns */
+		for (int i = 0; i < WEB_MAX_CONN; i++)
+			if (conn_fd[i] >= 0)
+				shutdown(conn_fd[i], SHUT_RDWR);	/* their requests end */
+	}
 	pthread_mutex_unlock(&st.lock);
 }
 
@@ -1021,6 +1042,10 @@ int web_serve(const char *listen_on, const char *password, const char *dir,
 		return 1;
 	}
 	web_password = password_of(password);
+	pthread_mutex_lock(&st.lock);
+	for (int i = 0; i < WEB_MAX_CONN; i++)
+		conn_fd[i] = -1;
+	pthread_mutex_unlock(&st.lock);
 	web_dir = dir && *dir ? dir : ".";
 	web_addr = addr;
 	web_len = len;
@@ -1066,25 +1091,47 @@ int web_serve(const char *listen_on, const char *password, const char *dir,
 		setsockopt(c, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
 		pthread_mutex_lock(&st.lock);
 		int many = connections >= WEB_MAX_CONN;
-		if (!many)
+		if (!many) {
 			connections++;
+			for (int i = 0; i < WEB_MAX_CONN; i++)
+				if (conn_fd[i] < 0) {
+					conn_fd[i] = c;
+					break;
+				}
+		}
 		pthread_mutex_unlock(&st.lock);
 		if (many || pthread_create(&t, NULL, conn_thread, (void *)(long)c)) {
 			if (!many) {
 				pthread_mutex_lock(&st.lock);
 				connections--;
+				for (int i = 0; i < WEB_MAX_CONN; i++)
+					if (conn_fd[i] == c)
+						conn_fd[i] = -1;
 				pthread_mutex_unlock(&st.lock);
 			}
 			reply_text(c, "503 Service Unavailable", "Too many connections.\n");
 			close(c);
 		}
 	}
-	/* web_stop: the connections and an operation that runs end by themselves */
+	/* web_stop: the connections are cut; an operation of the page that runs
+	   ends by itself, waited for here, so nothing uses the password or the
+	   dump directory once this returns (the caller may free them) */
 	pthread_mutex_lock(&st.lock);
 	web_sock = -1;
-	web_stopping = 0;
 	pthread_mutex_unlock(&st.lock);
 	close(s);
+	for (;;) {
+		pthread_mutex_lock(&st.lock);
+		int left = connections || (st.busy && !st.local);
+		pthread_mutex_unlock(&st.lock);
+		reap_threads();
+		if (!left)
+			break;
+		usleep(100000);
+	}
+	pthread_mutex_lock(&st.lock);
+	web_stopping = 0;
+	pthread_mutex_unlock(&st.lock);
 	return 0;
 }
 
