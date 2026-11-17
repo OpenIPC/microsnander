@@ -504,7 +504,8 @@ access**, the port (8085) and an optional password (any user name in the browser
   so: for a trusted network.
 - It runs as a foreground service: with the screen off, and by itself after a reboot.
 - Plug the programmer in once and choose the app with **Always**: from then on Android gives
-  it to the app on every plug-in and after a reboot, with nobody at the device.
+  it to the app on every plug-in and after a reboot, with nobody at the device. After an update
+  of the app Android takes it back until a replug or a reboot (`adb reboot` will do).
 - The page and the app share one programmer, one operation at a time: what the operator runs
   shows on the screen of the device (REMOTE: READ 42%), the buttons there wait for it, and the
   page shows what is run on the device. Dumps of either side are in the app's dump folder, the

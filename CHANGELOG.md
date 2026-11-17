@@ -4,6 +4,15 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.47.4 — 2026-11-17
+
+- Android app: a programmer that stays plugged in is the app's again after a reboot. Android finds
+  it before the user's storage is unlocked and then sees only direct-boot-aware components, so it
+  did not find the app chosen with **Always** and did not grant it the programmer; the attach
+  activity is direct-boot-aware now (checked on a TV box with Android 10: after a reboot the page
+  detects the chip through a camex tunnel, nobody at the device). After an update of the app
+  Android takes the grant back until a replug or a reboot.
+
 ## 1.47.3 — 2026-11-17
 
 - SigmaStar ISP (`-m sigmastar`): a read sends the bridge's read command (0x11) once, not before
