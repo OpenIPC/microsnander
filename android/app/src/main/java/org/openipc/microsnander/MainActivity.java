@@ -844,7 +844,9 @@ public class MainActivity extends Activity {
     private final Runnable watchRemote = new Runnable() {
         @Override
         public void run() {
-            if (RemoteService.instance != null)
+            // after the service has gone too, while a page's operation was shown: its end
+            // (static native state) unlocks the screen
+            if (RemoteService.instance != null || remoteRunning)
                 watch();
             MAIN.postDelayed(this, 700);
         }
