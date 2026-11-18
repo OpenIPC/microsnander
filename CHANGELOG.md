@@ -14,6 +14,7 @@ The interface review of brass 1.3.0, in the app and on the web page.
   Export… (the dump shown, to the computer) and Import… (a file to the dump folder as
   `import-NAME.bin`, not written to the chip: it becomes the dump shown). Write writes the dump
   shown (with none, a file from the computer), after Detect and a question naming the file.
+  The three newest imports are kept, in the app too.
 - Web mode: `POST /api/upload` keeps the body in the dump folder (`X-MicroSNANDer-Name` gives
   its name); `POST /api/write` with no body and `X-MicroSNANDer-File: <dump>` writes that dump,
   with no upload.

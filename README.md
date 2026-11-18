@@ -395,7 +395,7 @@ The page:
 - **Export…**: the dump shown, to this computer.
 - **Import…**: a file from this computer (a loader or a full image) to the `-o` directory as
   `import-NAME.bin`, not written to the chip: it becomes the dump shown, in hex too, and Write
-  writes it.
+  writes it. The three newest imports are kept, older ones go.
 - **Registers**: a lamp for every bit of status registers 1–3 (bit names as on Winbond-type
   chips; amber: a protection bit, green: another bit) and **Clear protection**, which does
   what `-u` does, after Detect and a question naming the chip found: it clears BP, SRP and CMP and keeps QE. SPI NOR through the CH341A or the
