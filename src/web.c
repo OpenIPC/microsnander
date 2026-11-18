@@ -19,11 +19,14 @@
  *   POST /api/detect       find the programmer and the chip
  *   POST /api/read         read the chip (or -a/-l) into a file in the dump directory
  *   POST /api/erase        erase the whole chip
- *   POST /api/write        write the request body from address 0, then verify
+ *   POST /api/write        write the request body from address 0, then verify; with no body and
+ *                          X-MicroSNANDer-File: <dump>, that file of the dump directory
  *   POST /api/registers    read the status registers (SPI NOR)
  *   POST /api/unprotect    clear the protection (as -u), then read them
  *   POST /api/selftest     -t on the first block
- *   GET  /dumps/<file>     a dump made by Read (Range: bytes=A-B gives a part, for the hex view)
+ *   POST /api/upload       the request body into the dump directory, not written to the chip
+ *                          (X-MicroSNANDer-Name: its file name): the dump shown, Write takes it
+ *   GET  /dumps/<file>     a dump made by Read or Upload (Range: bytes=A-B gives a part, for the hex view)
  *
  * The Android app runs the same server in a service (web_serve in a thread of
  * its own, web_stop to end it): it opens the USB device for each operation
@@ -670,14 +673,96 @@ static int host_ok(const char *headers)
 	return under;			/* client.server: the tunnel's nginx */
 }
 
-/* a dump name made by Read (flash-*.bin) or the block a self-test saved
-   (selftest-*.bin): no path */
+/* a dump name made by Read (flash-*.bin), the block a self-test saved
+   (selftest-*.bin) or a file uploaded (import-*.bin): no path */
 static int dump_ok(const char *name)
 {
 	size_t n = strlen(name);
-	int read = n > 10 && !strncmp(name, "flash-", 6), saved = n > 13 && !strncmp(name, "selftest-", 9);
+	int read = n > 10 && !strncmp(name, "flash-", 6), saved = n > 13 && !strncmp(name, "selftest-", 9),
+	    imported = n > 11 && !strncmp(name, "import-", 7);
 
-	return (read || saved) && !strcmp(name + n - 4, ".bin") && !strchr(name, '/') && !strstr(name, "..");
+	return (read || saved || imported) && !strcmp(name + n - 4, ".bin") && !strchr(name, '/') && !strstr(name, "..");
+}
+
+/* the value of header h ("\r\nName: value"), its blanks skipped, into out (up to the line end) */
+static void header_value(const char *h, const char *name, char *out, size_t n)
+{
+	size_t k = 0;
+
+	for (h += 2 + strlen(name); *h == ' ' || *h == '\t'; h++)
+		;
+	while (*h && *h != '\r' && k < n - 1)
+		out[k++] = *h++;
+	out[k] = 0;
+}
+
+/* import-<name>.bin from the name a browser gives (%XX as it sends them): letters,
+   digits, '.', '-' and '_' kept, anything else '_', without its .bin; a second
+   one with the same name gets -2, -3, ... (O_EXCL), a link is never followed */
+static FILE *import_create(const char *given, char *name, size_t n, char *path, size_t pn)
+{
+	char base[64];
+	size_t k = 0;
+	int fd = -1;
+	FILE *f;
+
+	for (const char *p = given; *p && k < sizeof(base) - 1; p++) {
+		int c = (unsigned char)*p;
+
+		if (c == '%' && p[1] && p[2]) {		/* an escaped byte: one '_' for it */
+			c = '_';
+			p += 2;
+		}
+		int keep = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-'
+			   || c == '_' || (c == '.' && k);	/* not a leading '.' */
+
+		base[k++] = keep ? c : '_';
+	}
+	base[k] = 0;
+	if (k > 4 && !strcasecmp(base + k - 4, ".bin")) {
+		k -= 4;
+		base[k] = 0;
+	}
+	while (k && base[k - 1] == '.')		/* no "..": dump_ok refuses it */
+		base[--k] = 0;
+	for (char *d; (d = strstr(base, "..")); )
+		*d = '_';
+	if (!k)
+		snprintf(base, sizeof(base), "file");
+	for (int i = 1; i < 100 && fd < 0; i++) {
+		if (i == 1)
+			snprintf(name, n, "import-%s.bin", base);
+		else
+			snprintf(name, n, "import-%s-%d.bin", base, i);
+		snprintf(path, pn, "%s/%s", web_dir, name);
+		fd = open(path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0644);
+		if (fd < 0 && errno != EEXIST)
+			break;
+	}
+	if (fd < 0)
+		return NULL;
+	if (!(f = fdopen(fd, "wb")))
+		close(fd);
+	return f;
+}
+
+/* a dump of the dump directory to write: a regular file, not a link to elsewhere; NULL none */
+static FILE *dump_open(const char *name)
+{
+	char path[1024];
+	struct stat sb;
+	FILE *f = NULL;
+	int in = -1;
+
+	snprintf(path, sizeof(path), "%s/%s", web_dir, name);
+	if (dump_ok(name))
+		in = open(path, O_RDONLY | O_NOFOLLOW);
+	if (in < 0 || fstat(in, &sb) || !S_ISREG(sb.st_mode) || !sb.st_size || !(f = fdopen(in, "rb"))) {
+		if (in >= 0)
+			close(in);
+		return NULL;
+	}
+	return f;
 }
 
 /* Range: bytes=A-B or bytes=A- of a file of size bytes: 1 and the part in
@@ -820,6 +905,89 @@ static FILE *upload_file(void)
 	return f;
 }
 
+/* the rest of a request body after the have bytes of it that came with the
+   headers (first), into body: 0 all of it; 1 it stopped coming (*have: how
+   much came, *timeout: no data for the socket's timeout); 2 the disk refused it */
+static int recv_body(int fd, FILE *body, const char *first, unsigned long long *have, unsigned long long clen,
+		     int *timeout)
+{
+	char part[16384];
+	int bad = fwrite(first, 1, *have, body) != *have;
+
+	while (!bad && *have < clen) {
+		ssize_t r = recv(fd, part, clen - *have < sizeof(part) ? clen - *have : sizeof(part), 0);
+
+		if (r <= 0) {
+			*timeout = r < 0 && (errno == EAGAIN || errno == EWOULDBLOCK);
+			return 1;
+		}
+		bad = fwrite(part, 1, r, body) != (size_t)r;
+		*have += r;
+	}
+	return bad || fflush(body) ? 2 : 0;
+}
+
+/* POST /api/upload: the body into import-<name>.bin of the dump directory,
+   nothing written to the chip; it becomes the dump shown (its link, the hex
+   view) and Write takes it from there. One upload at a time, not while an
+   operation runs: the slot of an upload to write. */
+static void upload_import(int fd, const char *head, const char *end, size_t got, unsigned long clen)
+{
+	char given[160] = "", name[140], path[1024], msg[256];
+	const char *h = find_header(head, "X-MicroSNANDer-Name:");
+	unsigned long long have = got - (end + 4 - head);
+	int timeout = 0, ret;
+	FILE *f;
+
+	if (h && h < end)
+		header_value(h, "X-MicroSNANDer-Name:", given, sizeof(given));
+	pthread_mutex_lock(&st.lock);
+	int busy = st.busy || st.uploading;
+	if (!busy)
+		st.uploading = 1;
+	pthread_mutex_unlock(&st.lock);
+	if (busy) {
+		reply_text(fd, "409 Conflict", "An operation is running.\n");
+		return;
+	}
+	if (!clen || clen > WEB_MAX_BODY || have > clen) {
+		upload_done();
+		reply_text(fd, "413 Payload Too Large", "No file, or too large.\n");
+		return;
+	}
+	if (!(f = import_create(given, name, sizeof(name), path, sizeof(path)))) {
+		upload_done();
+		reply_text(fd, "500 Internal Server Error", "Cannot store the file in the dump directory.\n");
+		return;
+	}
+	ret = recv_body(fd, f, end + 4, &have, clen, &timeout);
+	if (fclose(f) && !ret)
+		ret = 2;
+	if (ret) {
+		unlink(path);
+		upload_done();
+		if (ret == 2)
+			reply_text(fd, "507 Insufficient Storage", "Cannot store the file in the dump directory.\n");
+		else if (timeout)
+			reply_text(fd, "408 Request Timeout", "The file stopped coming: nothing was kept.\n");
+		return;
+	}
+	snprintf(msg, sizeof(msg), "Imported %llu bytes as %s: Write writes it into the chip.", (unsigned long long)clen, name);
+	pthread_mutex_lock(&st.lock);
+	st.uploading = 0;
+	st.seq++;
+	st.op = OP_NONE;
+	st.ok = 1;
+	st.local = 0;
+	st.phase[0] = 0;
+	st.done = st.total = 0;
+	snprintf(st.file, sizeof(st.file), "%s", name);
+	snprintf(st.message, sizeof(st.message), "%s", msg);
+	pthread_mutex_unlock(&st.lock);
+	snprintf(msg, sizeof(msg), "Imported %s.\n", name);
+	reply_text(fd, "200 OK", msg);
+}
+
 static void handle(int fd)
 {
 	char head[WEB_HEADERS + 1];
@@ -880,6 +1048,11 @@ static void handle(int fd)
 		return;
 	}
 
+	if (!strcmp(path, "/api/upload")) {
+		upload_import(fd, head, end, got, clen);
+		return;
+	}
+
 	static const struct { const char *path; int op; } routes[] = {
 		{ "/api/detect", OP_DETECT }, { "/api/read", OP_READ }, { "/api/erase", OP_ERASE },
 		{ "/api/write", OP_WRITE }, { "/api/registers", OP_REGISTERS }, { "/api/unprotect", OP_UNPROTECT },
@@ -928,9 +1101,21 @@ static void handle(int fd)
 		return;
 	}
 	FILE *body = NULL;
-	if (op == OP_WRITE) {
-		char part[16384];
-		size_t have = got - (end + 4 - head);
+	const char *from = find_header(head, "X-MicroSNANDer-File:");
+
+	if (op == OP_WRITE && !clen && from && from < end) {
+		/* a dump already here (a Read, an Import): no upload */
+		char name[160];
+
+		header_value(from, "X-MicroSNANDer-File:", name, sizeof(name));
+		if (!(body = dump_open(name))) {
+			upload_done();
+			reply_text(fd, "404 Not Found", "No such dump to write.\n");
+			return;
+		}
+	} else if (op == OP_WRITE) {
+		unsigned long long have = got - (end + 4 - head);
+		int timeout = 0, ret;
 
 		if (!clen || clen > WEB_MAX_BODY || have > clen) {
 			upload_done();
@@ -942,23 +1127,15 @@ static void handle(int fd)
 			reply_text(fd, "500 Internal Server Error", "Cannot store the file in the dump directory.\n");
 			return;
 		}
-		int bad = fwrite(end + 4, 1, have, body) != have;
-		while (!bad && have < clen) {
-			ssize_t r = recv(fd, part, clen - have < sizeof(part) ? clen - have : sizeof(part), 0);
-
-			if (r <= 0) {
-				int timeout = r < 0 && (errno == EAGAIN || errno == EWOULDBLOCK);
-
-				fclose(body);
-				upload_cut(have, clen, timeout);
-				if (timeout)	/* the browser may still be there to read it */
-					reply_text(fd, "408 Request Timeout", "The file stopped coming: nothing was written.\n");
-				return;
-			}
-			bad = fwrite(part, 1, r, body) != (size_t)r;
-			have += r;
+		ret = recv_body(fd, body, end + 4, &have, clen, &timeout);
+		if (ret == 1) {
+			fclose(body);
+			upload_cut(have, clen, timeout);
+			if (timeout)	/* the browser may still be there to read it */
+				reply_text(fd, "408 Request Timeout", "The file stopped coming: nothing was written.\n");
+			return;
 		}
-		if (bad || fflush(body)) {
+		if (ret) {
 			fclose(body);
 			upload_done();
 			reply_text(fd, "507 Insufficient Storage", "Cannot store the file in the dump directory.\n");

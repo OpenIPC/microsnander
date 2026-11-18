@@ -21,9 +21,12 @@ import android.os.PowerManager;
 import android.text.TextUtils;
 import android.util.Log;
 import java.io.File;
+import java.io.IOException;
 import java.net.Inet4Address;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.NetworkInterface;
+import java.net.ServerSocket;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -51,6 +54,10 @@ import org.openipc.camex.tunnel.CamexTunnel;
  * Without the VPN consent (a dialog once, or adb appops ACTIVATE_VPN allow)
  * it says so on the screen, in the notification and on the page, and tries
  * again every minute.
+ *
+ * The page takes the port of the settings (8085), or the next free one when
+ * another of our apps holds it (8086, 8087...): the screen shows the one it
+ * took, the log says why, and the tunnel lets connections through to it.
  */
 public class RemoteService extends Service {
     static final String ACTION_START = "org.openipc.microsnander.REMOTE_START";
@@ -70,6 +77,10 @@ public class RemoteService extends Service {
     static volatile String status = "";
     /** what the screen shows about the tunnel; "" when it is off */
     static volatile String tunnelStatus = "";
+    /** the WEB row of the screen: off, starting, listening on Settings.webPort, or failed (webFailure) */
+    enum Web { OFF, STARTING, LISTENING, FAILED }
+    static volatile Web web = Web.OFF;
+    static volatile String webFailure = "";
 
     private final Handler main = new Handler(Looper.getMainLooper());
     private final Object lock = new Object();
@@ -91,8 +102,8 @@ public class RemoteService extends Service {
         public void onReceive(Context c, Intent i) {
             main.postDelayed(() -> {
                 synchronized (lock) {
-                    if (wanted && server != null)
-                        setStatus(listening(Settings.port(RemoteService.this)));
+                    if (wanted && server != null && web == Web.LISTENING)
+                        setStatus(listening(Settings.webPort));
                 }
             }, 1500);
         }
@@ -175,35 +186,71 @@ public class RemoteService extends Service {
             String password = Settings.password(this);
             String dir = new File(getFilesDir(), "dumps").getPath();	// the app's dumps, the same as its own
             wakeLock.acquire();
+            Settings.webPort = 0;		// the tunnel waits for the port the page takes
+            web = Web.STARTING;
             server = new Thread(() -> serve(gen, port, password, dir), "microsnander-web");
             server.start();
-            setStatus(listening(port));
+            setStatus(getString(R.string.remote_starting));
         }
-        startTunnel();
+        startTunnel();				// off: stopped now; on: once the page listens
     }
 
-    /** Native.webServe until webStop; a port it cannot take is tried again */
-    private void serve(int gen, int port, String password, String dir) {
+    /** the first port from base that nobody listens on (another of our apps may hold base), or -1 */
+    static int freePort(int base) {
+        for (int p = base; p < base + Settings.PORTS && p <= 65535; p++) {
+            try (ServerSocket s = new ServerSocket()) {
+                s.setReuseAddress(true);
+                s.bind(new InetSocketAddress(p));	// the wildcard, as the page: any listener on p refuses it
+                return p;
+            } catch (IOException e) {
+                // taken: the next one
+            }
+        }
+        return -1;
+    }
+
+    /** Native.webServe until webStop, on base or the next free port; none free is tried again */
+    private void serve(int gen, int base, String password, String dir) {
+        boolean open = password.isEmpty();
         while (true) {
-            // UTF-8 as a browser sends it (JNI strings are modified UTF-8: an emoji would differ)
-            int ret = Native.webServe("0.0.0.0:" + port, password.getBytes(StandardCharsets.UTF_8), dir);
+            int port = freePort(base);
             synchronized (lock) {
                 if (!wanted || gen != generation)
                     return;
-                if (ret == 0)		// a stop meant for the server before this one: serve again
-                    continue;
-                setStatus(getString(R.string.remote_cannot_listen, port));
+                if (port > 0) {
+                    Settings.webPort = port;
+                    web = Web.LISTENING;
+                    setStatus(listening(port));
+                } else {
+                    Settings.webPort = 0;
+                    web = Web.FAILED;
+                    webFailure = getString(R.string.remote_ports_taken, base, Math.min(65535, base + Settings.PORTS - 1));
+                    setStatus(getString(R.string.remote_cannot_listen, base));
+                }
             }
-            Log.w(TAG, "web mode: cannot listen on port " + port + ", again in " + RETRY_MS / 1000 + " s");
+            if (port > 0) {
+                AppLog.add("web", (port != base ? "port " + base + " is taken: " : "")
+                        + "the page on port " + port + (open ? ", no password" : ""));
+                main.post(this::startTunnel);	// the tunnel's web port: this one
+                // UTF-8 as a browser sends it (JNI strings are modified UTF-8: an emoji would differ)
+                int ret = Native.webServe("0.0.0.0:" + port, password.getBytes(StandardCharsets.UTF_8), dir);
+                synchronized (lock) {
+                    if (!wanted || gen != generation)
+                        return;
+                    if (ret == 0)		// a stop meant for the server before this one: serve again
+                        continue;
+                    Settings.webPort = 0;
+                    web = Web.FAILED;
+                    webFailure = getString(R.string.remote_cannot_listen, port);
+                    setStatus(webFailure);
+                }
+            }
+            AppLog.add("web", port > 0 ? "cannot listen on port " + port : webFailure);
+            Log.w(TAG, "web mode: cannot listen from port " + base + ", again in " + RETRY_MS / 1000 + " s");
             try {
                 Thread.sleep(RETRY_MS);
             } catch (InterruptedException e) {
                 return;
-            }
-            synchronized (lock) {
-                if (!wanted || gen != generation)
-                    return;
-                setStatus(listening(port));
             }
         }
     }
@@ -216,6 +263,8 @@ public class RemoteService extends Service {
         synchronized (lock) {
             wanted = false;
             generation++;
+            Settings.webPort = 0;	// under the lock: serve() sets them only while wanted
+            web = Web.OFF;
             t = server;
             server = null;
             if (t == null) {
@@ -264,6 +313,7 @@ public class RemoteService extends Service {
         if (wakeLock.isHeld())
             wakeLock.release();
         if (finish) {
+            AppLog.add("web", "remote access is off");
             setStatus("");
             if (Build.VERSION.SDK_INT >= 24)
                 stopForeground(STOP_FOREGROUND_REMOVE);
@@ -296,6 +346,23 @@ public class RemoteService extends Service {
         return l.isEmpty() ? ":" + port : TextUtils.join("  ", l);
     }
 
+    /** ADDRESS:PORT of each IPv4 address of the local networks (not the tunnel: its row shows it) */
+    static String hosts(int port) {
+        List<String> l = new ArrayList<>();
+        try {
+            for (NetworkInterface n : Collections.list(NetworkInterface.getNetworkInterfaces())) {
+                if (!n.isUp() || n.isLoopback() || n.getName().startsWith("tun"))
+                    continue;
+                for (InetAddress a : Collections.list(n.getInetAddresses()))
+                    if (a instanceof Inet4Address)
+                        l.add(a.getHostAddress() + ":" + port);
+            }
+        } catch (Exception e) {
+            // no list: the port alone
+        }
+        return l.isEmpty() ? ":" + port : TextUtils.join(" · ", l);
+    }
+
     private void setStatus(String s) {
         status = s;
         main.post(() -> {
@@ -317,6 +384,8 @@ public class RemoteService extends Service {
             Native.webTunnelHost("");
             return;
         }
+        if (Settings.webPort == 0)
+            return;		// the page has no port yet: serve() starts the tunnel once it has one
         Map<String, String> v = Settings.tunnel(this);
         // the server's nginx opens the page as client.server: those names pass the Host check
         // without a password too
@@ -356,7 +425,7 @@ public class RemoteService extends Service {
         if (!Settings.tunnelActive(this))
             t = "";
         else if (st == CamexTunnel.State.CONNECTED)
-            t = getString(R.string.tunnel_connected, "http://" + addr + ":" + Settings.port(this));
+            t = getString(R.string.tunnel_connected, "http://" + addr + ":" + Settings.webPort);
         else if (st == CamexTunnel.State.CONNECTING)
             t = getString(R.string.tunnel_connecting, err.isEmpty() ? "" : " (" + err + ")");
         else if (st == CamexTunnel.State.NEEDS_CONSENT)
@@ -365,6 +434,8 @@ public class RemoteService extends Service {
             t = getString(R.string.tunnel_failed, err);
         else
             t = getString(R.string.tunnel_stopped);
+        if (!t.equals(tunnelStatus) && !t.isEmpty())
+            AppLog.add("camex", t.replaceFirst("^Tunnel: ", ""));
         tunnelStatus = t;
         Native.setTunnel(t);
         main.post(() -> {

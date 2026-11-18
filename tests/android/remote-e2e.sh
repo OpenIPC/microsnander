@@ -190,7 +190,7 @@ code=$(op -o /dev/null -w '%{http_code}' "http://$APP_IP:$PORT/api/state")
 [ "$code" = 401 ] && ok "without the password: 401" || bad "without the password: '$code'"
 s=$(op -u op:$PASSWORD "http://$APP_IP:$PORT/api/state")
 grep -q '"version":' <<<"$s" && ok "with the password: the state through the tunnel" || bad "state: $s"
-grep -q '<title>MicroSNANDer Web</title>' <<<"$(op -u op:$PASSWORD "http://$APP_IP:$PORT/")" && ok "the page" || bad "the page"
+grep -q '<title>MicroSNANDer</title>' <<<"$(op -u op:$PASSWORD "http://$APP_IP:$PORT/")" && ok "the page" || bad "the page"
 r=$(op -u op:$PASSWORD -X POST -H 'X-MicroSNANDer: 1' "http://$APP_IP:$PORT/api/detect")
 sleep 2
 s=$(op -u op:$PASSWORD "http://$APP_IP:$PORT/api/state")

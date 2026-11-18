@@ -134,7 +134,7 @@ int main(void)
 	web_dir = dir;
 	for (unsigned i = 0; i < SIM_SIZE; i++) mem[i] = (unsigned char)(i * 7 + (i >> 9));
 
-	check(request("GET", "/", NULL, NULL, 0) == 200 && strstr(body_of(), "<title>MicroSNANDer Web</title>") && strstr(body_of(), "Registers"),
+	check(request("GET", "/", NULL, NULL, 0) == 200 && strstr(body_of(), "<title>MicroSNANDer</title>") && strstr(body_of(), "Registers"),
 	      "GET / gives the page");
 	check(strstr(body_of(), "if(s.seq<seen&&s.seq!==0)return") != NULL, "  an older state does not replace a newer one on the page");
 	check(strstr(body_of(), "id=\"hexpanel\"") && strstr(body_of(), "Range:'bytes='+a+'-'+(a+HXP-1)") &&
@@ -304,6 +304,49 @@ int main(void)
 	request("GET", "/api/state", NULL, NULL, 0);
 	check(strstr(body_of(), "\"ok\":false") && strstr(body_of(), "Verify failed"), "  a write that does not take fails the verify");
 	check(strstr(body_of(), "\"phase\":\"verify\"") && !strstr(body_of(), "\"total\":0,"), "  the phase and the progress stay after the failure, for the bar");
+
+	/* Import: a file to the dump directory, not to the chip; Write takes it from there */
+	for (unsigned i = 0; i < sizeof(img); i++) img[i] = (unsigned char)(i * 7 + 5);
+	extra = "Host: 127.0.0.1:8080\r\nX-MicroSNANDer-Name: my image.BIN\r\n";
+	memset(mem, 0xff, SIM_SIZE);
+	check(request("POST", "/api/upload", NULL, img, sizeof(img)) == 200 && strstr(resp, "Imported import-my_image.bin.")
+	      && mem[0] == 0xff && !st.uploading, "Import: the file is kept as import-my_image.bin, nothing written");
+	request("GET", "/api/state", NULL, NULL, 0);
+	check(strstr(body_of(), "\"file\":\"import-my_image.bin\"") && strstr(body_of(), "\"ok\":true")
+	      && strstr(body_of(), "Write writes it"), "  it is the dump shown, and the state says Write takes it");
+	check(request("GET", "/dumps/import-my_image.bin", NULL, NULL, 0) == 200 && !memcmp(body_of(), img, 64),
+	      "  the page can download it and show it in hex");
+	check(request("POST", "/api/upload", NULL, img, 16) == 200 && strstr(resp, "Imported import-my_image-2.bin."),
+	      "  the same name again: import-my_image-2.bin, the first one kept");
+	extra = "Host: 127.0.0.1:8080\r\nX-MicroSNANDer-Name: ../../etc/passwd\r\n";
+	check(request("POST", "/api/upload", NULL, img, 16) == 200 && !strchr(strstr(resp, "import-"), '/')
+	      && !strstr(resp, "..") , "  a name with a path: kept in the dump directory, no '/' and no '..'");
+	extra = "Host: 127.0.0.1:8080\r\n";
+	check(request("POST", "/api/upload", NULL, img, 16) == 200 && strstr(resp, "Imported import-file.bin."),
+	      "  no name: import-file.bin");
+	check(request("POST", "/api/upload", NULL, NULL, 0) == 413 && !st.uploading, "  no file: 413, the slot free");
+	pthread_mutex_lock(&st.lock); st.busy = 1; pthread_mutex_unlock(&st.lock);
+	check(request("POST", "/api/upload", NULL, img, 16) == 409, "  while an operation runs: 409");
+	pthread_mutex_lock(&st.lock); st.busy = 0; pthread_mutex_unlock(&st.lock);
+	extra = CHIP80 "X-MicroSNANDer-File: import-my_image.bin\r\n";
+	check(request("POST", "/api/write", NULL, NULL, 0) == 202, "Write of the imported file: no upload");
+	wait_idle();
+	request("GET", "/api/state", NULL, NULL, 0);
+	check(!memcmp(mem, img, sizeof(img)) && mem[sizeof(img)] == 0xff && strstr(body_of(), "\"ok\":true") && strstr(body_of(), "verified"),
+	      "  written from address 0 and verified");
+	{
+		struct stat sb;
+		char path[256];
+		snprintf(path, sizeof(path), "%s/import-my_image.bin", web_dir);
+		check(!stat(path, &sb) && sb.st_size == (off_t)sizeof(img), "  and the file stays for another chip");
+	}
+	extra = CHIP80 "X-MicroSNANDer-File: import-none.bin\r\n";
+	check(request("POST", "/api/write", NULL, NULL, 0) == 404 && !st.uploading, "  a dump that is not there: 404, the slot free");
+	extra = CHIP80 "X-MicroSNANDer-File: ../websim.log\r\n";
+	check(request("POST", "/api/write", NULL, NULL, 0) == 404, "  a path: 404");
+	extra = "Host: 127.0.0.1:8080\r\nX-MicroSNANDer-File: import-my_image.bin\r\n";
+	check(request("POST", "/api/write", NULL, NULL, 0) == 400, "  without the chip confirmed: 400");
+	extra = CHIP80;
 	{
 		int opens_before = opens;
 		struct ms_chip c;
@@ -399,15 +442,23 @@ int main(void)
 	sim_sr1 = 0x1c;
 	check(strstr(web_page, "id=\"b-selftest\" disabled") != NULL, "  the page has the Self-test button, off without a chip");
 	check(strstr(web_page, "id=\"bar\"") && strstr(web_page, "document.title=") && !strstr(web_page, "needle"), "  the page has the bar and the state in the tab title");
-	check(strstr(web_page, "show('Link offline','bad');$('bar').className='bg';[].forEach.call($('bar').children,function(e){e.className=''})") != NULL,
+	check(strstr(web_page, "show('No link','bad');$('bar').className='bg';[].forEach.call($('bar').children,function(e){e.className=''})") != NULL,
 	      "  no link: the bar goes dark, it does not keep the last result");
 	check(strstr(web_page, "rel=\"icon\" id=\"icon\"") && strstr(web_page, "icon(s.busy?'ffb347':s.ok===true?'5ad38f':s.ok===false?'c8452c':'b09873')")
-	      && strstr(web_page, "function offline(){bulb('l-link','bad');icon('c8452c');"),
+	      && strstr(web_page, "function offline(){icon('c8452c');show('No link','bad');"),
 	      "  the tab icon: a lamp in the colour of the state, red with no link");
-	check(strstr(web_page, "@media (prefers-reduced-motion:reduce)") && strstr(web_page, "m+=speed(s);")
+	check(strstr(web_page, "@media (prefers-reduced-motion:reduce)") && strstr(web_page, "var m=speed(s);")
 	      && strstr(web_page, "rate.seq!==s.seq||rate.phase!==s.phase){") && strstr(web_page, "dt>=0.25&&s.done>=rate.d")
 	      && strstr(web_page, "var now=performance.now();"),
 	      "  less motion: no running light; the speed starts again with each operation and phase");
+	check(strstr(web_page, "<h1 class=\"ttl\">MicroSNANDer<span class=\"ver\" id=\"ver\">") && strstr(web_page, "<span class=\"br\">and NAND programmer")
+	      && strstr(web_page, "<span class=\"k\">Adapter</span>") && strstr(web_page, "<span class=\"k\">Chip</span>")
+	      && strstr(web_page, "<span class=\"k\">State</span>") && strstr(web_page, "<span class=\"k\">Dump</span>")
+	      && strstr(web_page, "<span class=\"k\">Camex</span>") && strstr(web_page, ".board .r[hidden]{display:none}") && !strstr(web_page, "MicroSNANDer Web"),
+	      "  the page: the name with the version, the board of ADAPTER, CHIP, STATE, DUMP and CAMEX");
+	check(strstr(web_page, "class=\"btns\" style=\"--cols:4\"") && strstr(web_page, "id=\"b-export\" disabled")
+	      && strstr(web_page, "id=\"b-import\"") && strstr(web_page, "'/api/upload'") && strstr(web_page, "h['X-MicroSNANDer-File']=file"),
+	      "  eight buttons, four a row: Export off without a dump, Import uploads, Write takes the dump shown");
 	check(strstr(web_page, ".btn:disabled.engaged{filter:none}") && strstr(web_page, "detectThen(b,function(s){if(confirm('Clear the protection"),
 	      "  the running button keeps its colour; Clear protection asks about the chip found");
 
