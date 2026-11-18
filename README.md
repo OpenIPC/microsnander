@@ -360,9 +360,9 @@ bench connects the programmer and the chip, and a specialist elsewhere opens the
 progress and runs the operations.
 
 <p align="center">
-  <img src="screenshots/web-reading.png" alt="MicroSNANDer Web while reading: lamps, display, progress bar, brass buttons" width="45%">
-  <img src="screenshots/web-selftest.png" alt="MicroSNANDer Web after a self-test: SELF-TEST OK, the protection and the verdict" width="45%">
-  <img src="screenshots/web-registers.png" alt="MicroSNANDer Web after a read: the dump link, the status register lamps and the hex view of the dump" width="45%">
+  <img src="screenshots/web-reading.png" alt="MicroSNANDer web page while reading: the board of lamp rows, the bar, eight brass buttons" width="45%">
+  <img src="screenshots/web-selftest.png" alt="MicroSNANDer web page after a self-test: SELF-TEST OK, the protection and the verdict" width="45%">
+  <img src="screenshots/web-registers.png" alt="MicroSNANDer web page after a read: the dump link, the status register lamps and the hex view of the dump" width="45%">
 </p>
 
 ```sh
@@ -373,13 +373,14 @@ microsnander -P ch347 -W 8080 -o /srv/dumps
 
 The page:
 
-- **Lamps**: Link (the page reaches the service), Programmer, Chip, Busy.
-- **Display and bar**: the state of the operation (Reading, Writing, Verifying, Erasing, Saved,
-  Written, Erased, Failed) with its percent, also in the title of the browser tab. The bar of 20
-  segments fills amber, the verify of a write turns the same segments green, an operation with
-  no percentage (Detect, Erase, Registers) runs a light, the end is all green and a failure red
-  on the segment where it stopped. Under them the programmer, the chip and its size, the speed
-  and the time left of a read or a write, the last dump and the last message. The tab icon is a
+- **Board**: a row with its own lamp for each part — ADAPTER (the programmer), CHIP (its size
+  and voltage), STATE (Reading, Writing, Verifying, Erasing, Saved, Written, Erased, Failed with
+  the percent, also in the title of the browser tab; No link when the page cannot reach the
+  service), DUMP (a link to the dump shown) and CAMEX (the tunnel of the Android app).
+- **Bar**: 20 segments fill amber, the verify of a write turns the same segments green, an
+  operation with no percentage (Detect, Erase, Registers) runs a light, the end is all green and
+  a failure red on the segment where it stopped. Under it the speed and the time left of a read
+  or a write, the chip's warning and the last message. The tab icon is a
   lamp in the colour of the state: amber at work, green when done, red on a failure or with no
   link. With less motion asked for in the system, the bar does not run and nothing blinks.
 - **Detect**: finds the programmer and the chip, and reads the status registers.
@@ -387,10 +388,14 @@ The page:
   which the browser downloads too; the link stays on the page. With `-a`/`-l` given at the
   start, Read takes that range.
 - **Erase**: the whole chip, after a confirmation.
-- **Write**: a file chosen in the browser (a loader or a full image) is written from address 0
-  into an erased chip, then read back and compared. Erase first. The file is not kept in memory:
-  it waits, without a name, in the `-o` directory, so an image of up to 512 MB needs that much
-  free disk space there.
+- **Write**: the dump shown (the last Read or Import; with none, a file chosen in the browser) is
+  written from address 0 into an erased chip, after Detect and a question naming the file and the
+  chip, then read back and compared. Erase first. A file is not kept in memory: it waits in the
+  `-o` directory, so an image of up to 512 MB needs that much free disk space there.
+- **Export…**: the dump shown, to this computer.
+- **Import…**: a file from this computer (a loader or a full image) to the `-o` directory as
+  `import-NAME.bin`, not written to the chip: it becomes the dump shown, in hex too, and Write
+  writes it. The three newest imports are kept, older ones go.
 - **Registers**: a lamp for every bit of status registers 1–3 (bit names as on Winbond-type
   chips; amber: a protection bit, green: another bit) and **Clear protection**, which does
   what `-u` does, after Detect and a question naming the chip found: it clears BP, SRP and CMP and keeps QE. SPI NOR through the CH341A or the
@@ -469,17 +474,23 @@ Android TV box (Android 5.0 and later, no root; on a TV box it is on the home sc
 with the remote).
 
 <p align="center">
-  <img src="screenshots/android-main.png" alt="MicroSNANDer for Android: display, brass buttons" height="360">
+  <img src="screenshots/android-main.png" alt="MicroSNANDer for Android: the board with WEB and CAMEX, nine brass buttons" height="360">
   <img src="screenshots/android-tv.png" alt="MicroSNANDer on an Android TV box: CH341A and BY25Q64AS found; a tap on a status register lamp asks before it flips the bit" height="360">
   <img src="screenshots/android-hexview.png" alt="MicroSNANDer on an Android TV box: the hex view of the last dump at 0x8400" height="360">
 </p>
 
 - Plug the programmer in (through an OTG adapter on a phone; on a TV box one of its ports may
   be a device port only — try the other) and allow the app to use it.
-- **Read** saves `flash-YYYYMMDDHHMM-CHIP.bin` to Downloads; **Save as…** puts it anywhere,
-  **Share** sends it to another app.
-- **Write** takes a file from the file picker and writes it from address 0 into an erased chip,
-  then verifies it; the file is read in parts, not held in memory. **Erase** erases the whole chip.
+- The board shows a row with a lamp for each part: ADAPTER, CHIP, STATE, WEB (remote access:
+  its address, a lock when the page has a password) and CAMEX (the tunnel, when it is on).
+- **Read** saves `flash-YYYYMMDDHHMM-CHIP.bin` to Downloads; **Export…** saves the dump shown
+  anywhere (Save to a file) or sends it to another app (Share to an app).
+- **Import…** takes a file into the app without writing it: it becomes the dump shown, in hex
+  too. **Write** writes the dump shown (the last Read or Import) from address 0 into an erased
+  chip, then verifies it; with no dump it takes a file from the file picker. The file is read in
+  parts, not held in memory. **Erase** erases the whole chip.
+- **Start on boot** starts remote access after a reboot; **Show log** shows the log of events
+  under the panel (both off at first, kept).
 - **Registers** and **Clear protection** as in the web mode (SPI NOR through the CH341A or the
   CH347), and **Self-test** (`-t` on the first block, after Detect and a question).
 - A tap on a register lamp flips that bit: Detect, a question with the old and the new value,
@@ -496,13 +507,16 @@ with the remote).
 
 The app can serve the page of the [web mode](#web-mode) itself, so an operator anywhere the
 device is reachable from (its network, a tunnel) drives the programmer from a browser, and the
-person at the bench only plugs it in. **Settings…** under **Remote access**: **Allow remote
+person at the bench only plugs it in. **Settings**, the section of the app: **Allow remote
 access**, the port (8085) and an optional password (any user name in the browser).
 
-- The page listens on every network of the device: `http://ADDRESS:PORT`, the addresses are on
-  the screen. Without a password it is open to anyone who reaches the port, and the screen says
-  so: for a trusted network.
-- It runs as a foreground service: with the screen off, and by itself after a reboot.
+- The page listens on every network of the device: `http://ADDRESS:PORT`, the addresses are in
+  the WEB row. Without a password it is open to anyone who reaches the port, and the open lock
+  says so: for a trusted network.
+- When another app holds the port (one of ours, on 8085 too), the page takes the next free one
+  (8086, 8087...): the WEB row shows it and the log says why.
+- It runs as a foreground service: with the screen off, and after a reboot with **Start on
+  boot**.
 - Plug the programmer in once and choose the app with **Always**: from then on Android gives
   it to the app on every plug-in and after a reboot, with nobody at the device. After an update
   of the app Android takes it back until a replug or a reboot (`adb reboot` will do).
@@ -511,14 +525,15 @@ access**, the port (8085) and an optional password (any user name in the browser
   page shows what is run on the device. Dumps of either side are in the app's dump folder, the
   page links the last one and shows it in hex.
 
-**Through a camex server.** With remote access on, **Tunnel…** makes the device join a
-[camex](https://github.com/OpenIPC/camex) server (built into the app, no other app needed): the
-server, the client name, UDP or TCP, the server's public key and the psk, or a camex link with
-them (`https://openipc.github.io/camex/connect/#…`, the one camex's `install.sh` prints) pasted
-there or opened with the app. The operator, another client of the same server, opens the page by
-the device's address in the tunnel, shown under Remote access. The tunnel reconnects by itself
-and comes back after a reboot. The app gives camex the page's port (`--web-port`), so the
-server's nginx opens the page by the client's name; that needs a camex server 3.19.0 or later.
+**Through a camex server.** With remote access on, **Join a camex server** in the CAMEX section
+of **Settings** makes the device join a [camex](https://github.com/OpenIPC/camex) server (built
+into the app, no other app needed): the server, the client name, UDP or TCP, the server's public
+key and the psk, or a camex link with them (`https://openipc.github.io/camex/connect/#…`, the one
+camex's `install.sh` prints) opened with the app, which fills them. The operator, another client
+of the same server, opens the page by the device's address in the tunnel, shown in the CAMEX row.
+The tunnel reconnects by itself and comes back after a reboot. The app gives camex the port the
+page listens on (`--web-port`), so the server's nginx opens the page by the client's name (a
+camex server 3.19.0 or later), and the tunnel lets new connections through to that page only.
 
 - Android allows a VPN only after a consent, once: **Allow VPN…** on the screen, or, on a device
   with nobody at it, while it is prepared:
@@ -589,7 +604,7 @@ a 1.8 V adapter: at 3.3 V the reads are not reliable and the chip can be damaged
 GigaDevice GD25W, XMC XM25QW, Fudan FM25W, Macronix MX25R and Adesto AT25DF021A take 1.65-3.6 V
 and work as they are.
 
-After a 1.8 V chip is found, the console prints a warning, the web page lights the Chip lamp
+After a 1.8 V chip is found, the console prints a warning, the web page lights the CHIP lamp
 red and shows the warning, and so does the Android app; `/api/state` has the `voltage` (`3.3`,
 `1.8`, `1.65-3.6`) and the `warning`. A chip that is not on these lists is taken for 3.3 V.
 

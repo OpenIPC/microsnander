@@ -49,6 +49,37 @@ final class Settings {
         prefs(c).edit().putBoolean("enabled", enabled).putInt("port", port).putString("password", password).apply();
     }
 
+    /** how many ports from the settings' one the page tries: 8085 taken (another of our
+     *  apps), 8086, and so on (ANDROID.md, section 12) */
+    static final int PORTS = 16;
+
+    /** the port the page listens on now: the settings' one or the next free; 0 not listening */
+    static volatile int webPort;
+
+    /**
+     * Start on boot: remote access starts after a reboot. Off by default; an install from
+     * before the check keeps what it did, which was to start when remote access was on.
+     */
+    static boolean startOnBoot(Context c) {
+        SharedPreferences p = prefs(c);
+        if (!p.contains("boot"))
+            p.edit().putBoolean("boot", enabled(c)).apply();
+        return p.getBoolean("boot", enabled(c));
+    }
+
+    static void setStartOnBoot(Context c, boolean on) {
+        prefs(c).edit().putBoolean("boot", on).apply();
+    }
+
+    /** the log of events under the panel; off by default */
+    static boolean showLog(Context c) {
+        return prefs(c).getBoolean("show_log", false);
+    }
+
+    static void setShowLog(Context c, boolean on) {
+        prefs(c).edit().putBoolean("show_log", on).apply();
+    }
+
     // ---- the camex tunnel ----
 
     /** the keys of CamexTunnel kept here: every field of the library, so a new one needs no
@@ -74,8 +105,10 @@ final class Settings {
         Map<String, String> v = new HashMap<>();
         for (String k : tunnelKeys())
             v.put(k, prefs(c).getString("camex." + k, CamexTunnel.TRANSPORT.equals(k) ? "UDP" : ""));
-        // the server's nginx opens the page by the client's name on this port (camex 3.19.0+)
-        v.put(CamexTunnel.WEB_PORT, String.valueOf(port(c)));
+        // the server's nginx opens the page by the client's name on this port (camex 3.19.0+),
+        // and the tunnel lets new connections through to it only (camex 4.1.0+): the port the
+        // page listens on, which is the next free one when the settings' one is taken
+        v.put(CamexTunnel.WEB_PORT, String.valueOf(webPort > 0 ? webPort : port(c)));
         return v;
     }
 

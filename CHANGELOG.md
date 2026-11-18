@@ -4,6 +4,33 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.48.0 — 2026-11-19
+
+The interface review of brass 1.3.0, in the app and on the web page.
+
+- Web page: the name with the version number to its right, "SPI NOR and NAND programmer" under
+  it; a board of rows with a lamp each (ADAPTER, CHIP, STATE, DUMP, CAMEX) in place of the lamps
+  and the display; eight buttons, four a row: Detect, Read, Erase, Write, Registers, Self-test,
+  Export… (the dump shown, to the computer) and Import… (a file to the dump folder as
+  `import-NAME.bin`, not written to the chip: it becomes the dump shown). Write writes the dump
+  shown (with none, a file from the computer), after Detect and a question naming the file.
+  The three newest imports are kept, in the app too.
+- Web mode: `POST /api/upload` keeps the body in the dump folder (`X-MicroSNANDer-Name` gives
+  its name); `POST /api/write` with no body and `X-MicroSNANDer-File: <dump>` writes that dump,
+  with no upload.
+- Android app: the name with the version number, the subtitle in plain type; the board (ADAPTER,
+  CHIP, STATE, WEB with its address and a lock, CAMEX when the tunnel is on) in place of the
+  display; nine buttons, three a row: Detect, Read, Erase, Write, Registers, Self-test, Export…
+  (Save to a file, Share to an app), Import… and Settings; the Remote access panel is gone.
+  Import… takes a file into the app without writing it, Write writes the dump shown.
+- Android app: one brass SETTINGS window in place of Settings… and Tunnel…: the app's section
+  (Allow remote access, Port, Web page password) and CAMEX (Join a camex server and the fields
+  of the tunnel library). A camex link opened with the app fills it; there is no link field.
+- Android app: Start on boot (remote access after a reboot; on for an install that had remote
+  access on) and Show log (the log of events under the panel), both kept.
+- Android app: when another app holds the port of the page (8085), the page takes the next free
+  one (up to 15 further), shows it in the WEB row, logs why, and gives the tunnel that port.
+
 ## 1.47.6 — 2026-11-18
 
 - Android app: `bundles/camex` on camex 4.1.2: the tunnel takes a new TCP connection only to the

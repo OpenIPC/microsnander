@@ -11,27 +11,52 @@
         android:orientation="vertical"
         android:padding="16dp">
 
-        <TextView
-            android:layout_width="wrap_content"
+        <!-- the name in the middle, the version number small to its right (brass 1.3.0):
+             two equal side columns keep the name centred whatever the version's width -->
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:fontFamily="serif"
-            android:letterSpacing="0.2"
-            android:text="@string/app_name"
-            android:textAllCaps="true"
-            android:textColor="@color/brass"
-            android:textSize="28sp" />
+            android:baselineAligned="true"
+            android:orientation="horizontal">
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="serif"
+                android:letterSpacing="0.16"
+                android:shadowColor="#59c9a24d"
+                android:shadowRadius="16"
+                android:text="@string/app_name"
+                android:textAllCaps="true"
+                android:textColor="@color/brass"
+                android:textSize="24sp" />
+
+            <TextView
+                android:id="@+id/version"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:fontFamily="monospace"
+                android:maxLines="1"
+                android:paddingStart="4dp"
+                android:paddingEnd="0dp"
+                android:textColor="@color/dim"
+                android:textSize="11sp" />
+        </LinearLayout>
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginBottom="16dp"
-            android:fontFamily="monospace"
             android:gravity="center"
-            android:letterSpacing="0.2"
             android:text="@string/subtitle"
-            android:textAllCaps="true"
             android:textColor="@color/dim"
-            android:textSize="11sp" />
+            android:textSize="14sp" />
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -40,40 +65,24 @@
             android:orientation="vertical"
             android:padding="18dp">
 
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal">
-
-                <TextView
-                    style="@style/Plate"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/console" />
-
-                <View
-                    android:layout_width="0dp"
-                    android:layout_height="1dp"
-                    android:layout_weight="1" />
-
-                <TextView
-                    android:id="@+id/version"
-                    style="@style/Plate"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content" />
-            </LinearLayout>
-
             <TextView
-                android:id="@+id/state"
+                style="@style/Plate"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/console" />
+
+            <!-- the board: ADAPTER, CHIP, STATE, WEB, CAMEX, a row each (Brass.Row, filled in code) -->
+            <LinearLayout
+                android:id="@+id/board"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
                 android:background="@drawable/display"
-                android:fontFamily="monospace"
-                android:letterSpacing="0.15"
-                android:padding="14dp"
-                android:textColor="@color/amber"
-                android:textSize="22sp" />
+                android:orientation="vertical"
+                android:paddingLeft="12dp"
+                android:paddingTop="9dp"
+                android:paddingRight="12dp"
+                android:paddingBottom="9dp" />
 
             <ProgressBar
                 android:id="@+id/bar"
@@ -85,6 +94,7 @@
                 android:progressTint="@color/amber"
                 android:visibility="invisible" />
 
+            <!-- the line of the event: the message of the last operation, the chip's warning -->
             <TextView
                 android:id="@+id/meta"
                 android:layout_width="match_parent"
@@ -95,6 +105,18 @@
                 android:textColor="@color/dim"
                 android:textSize="13sp" />
 
+            <Button
+                android:id="@+id/b_consent"
+                style="@style/Brass"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="end"
+                android:paddingLeft="24dp"
+                android:paddingRight="24dp"
+                android:text="@string/tunnel_consent"
+                android:visibility="gone" />
+
+            <!-- the buttons, three by three -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -106,52 +128,47 @@
                 android:orientation="horizontal">
                 <Button
                     android:id="@+id/b_detect"
-                    style="@style/Brass"
+                    style="@style/Brass.Small"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text="@string/detect" />
                 <Button
                     android:id="@+id/b_read"
-                    style="@style/Brass"
+                    style="@style/Brass.Small"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text="@string/read" />
-            </LinearLayout>
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal">
                 <Button
                     android:id="@+id/b_erase"
-                    style="@style/Brass"
+                    style="@style/Brass.Small"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text="@string/erase" />
-                <Button
-                    android:id="@+id/b_write"
-                    style="@style/Brass"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/write" />
             </LinearLayout>
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal">
                 <Button
+                    android:id="@+id/b_write"
+                    style="@style/Brass.Small"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/write" />
+                <Button
                     android:id="@+id/b_registers"
-                    style="@style/Brass"
+                    style="@style/Brass.Small"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text="@string/registers" />
                 <Button
                     android:id="@+id/b_selftest"
-                    style="@style/Brass"
+                    style="@style/Brass.Small"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
@@ -162,24 +179,74 @@
                 android:layout_height="wrap_content"
                 android:orientation="horizontal">
                 <Button
-                    android:id="@+id/b_save_as"
-                    style="@style/Brass"
+                    android:id="@+id/b_export"
+                    style="@style/Brass.Small"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:enabled="false"
-                    android:text="@string/save_as" />
+                    android:text="@string/export" />
                 <Button
-                    android:id="@+id/b_share"
-                    style="@style/Brass"
+                    android:id="@+id/b_import"
+                    style="@style/Brass.Small"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:enabled="false"
-                    android:text="@string/share" />
+                    android:text="@string/import_" />
+                <Button
+                    android:id="@+id/b_settings"
+                    style="@style/Brass.Small"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/settings" />
             </LinearLayout>
+            </LinearLayout>
+
+            <!-- the checks under the buttons, in one row, as wide as their text -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal">
+
+                <CheckBox
+                    android:id="@+id/c_boot"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/start_on_boot" />
+
+                <View
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:layout_weight="1" />
+
+                <CheckBox
+                    android:id="@+id/c_log"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/show_log" />
+
+                <View
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:layout_weight="1" />
             </LinearLayout>
         </LinearLayout>
+
+        <!-- the log of events, under the panel, when Show log is on -->
+        <TextView
+            android:id="@+id/log"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/display"
+            android:fontFamily="monospace"
+            android:padding="12dp"
+            android:textColor="@color/dim"
+            android:textIsSelectable="true"
+            android:textSize="11sp"
+            android:visibility="gone" />
 
         <LinearLayout
             android:id="@+id/regs_panel"
@@ -353,92 +420,5 @@
                 android:textSize="11sp" />
         </LinearLayout>
 
-        <!-- remote access: the web page of the app for an operator elsewhere -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:background="@drawable/panel"
-            android:orientation="vertical"
-            android:padding="18dp">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal">
-
-                <TextView
-                    style="@style/Plate"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/remote_access" />
-
-                <View
-                    android:layout_width="0dp"
-                    android:layout_height="1dp"
-                    android:layout_weight="1" />
-
-                <TextView
-                    android:id="@+id/remote_plate"
-                    style="@style/Plate"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content" />
-            </LinearLayout>
-
-            <TextView
-                android:id="@+id/remote_status"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:fontFamily="monospace"
-                android:textColor="@color/dim"
-                android:textIsSelectable="false"
-                android:textSize="12sp" />
-
-            <TextView
-                android:id="@+id/remote_tunnel"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:fontFamily="monospace"
-                android:textColor="@color/dim"
-                android:textSize="12sp"
-                android:visibility="gone" />
-
-            <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="end"
-                android:orientation="horizontal">
-
-                <Button
-                    android:id="@+id/b_consent"
-                    style="@style/Brass"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:paddingLeft="24dp"
-                    android:paddingRight="24dp"
-                    android:text="@string/tunnel_consent"
-                    android:visibility="gone" />
-
-                <Button
-                    android:id="@+id/b_tunnel"
-                    style="@style/Brass"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:paddingLeft="24dp"
-                    android:paddingRight="24dp"
-                    android:text="@string/tunnel_settings" />
-
-                <Button
-                    android:id="@+id/b_remote"
-                    style="@style/Brass"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:paddingLeft="24dp"
-                    android:paddingRight="24dp"
-                    android:text="@string/remote_settings" />
-            </LinearLayout>
-        </LinearLayout>
     </LinearLayout>
 </ScrollView>

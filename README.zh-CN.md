@@ -312,9 +312,9 @@ microsnander -O security.bin
 现场人员连接编程器和芯片，异地的专家打开页面，查看进度并执行操作。
 
 <p align="center">
-  <img src="screenshots/web-reading.png" alt="MicroSNANDer Web 读取中：指示灯、显示屏、进度条、黄铜按钮" width="45%">
-  <img src="screenshots/web-selftest.png" alt="MicroSNANDer Web 自检之后：SELF-TEST OK、保护状态和结果" width="45%">
-  <img src="screenshots/web-registers.png" alt="MicroSNANDer Web 读取完成：转储链接、状态寄存器各位的指示灯和转储的十六进制视图" width="45%">
+  <img src="screenshots/web-reading.png" alt="MicroSNANDer 网页读取中：带指示灯的状态板、进度条、八个黄铜按钮" width="45%">
+  <img src="screenshots/web-selftest.png" alt="MicroSNANDer 网页自检之后：SELF-TEST OK、保护状态和结果" width="45%">
+  <img src="screenshots/web-registers.png" alt="MicroSNANDer 网页读取完成：转储链接、状态寄存器各位的指示灯和转储的十六进制视图" width="45%">
 </p>
 
 ```sh
@@ -325,19 +325,22 @@ microsnander -P ch347 -W 8080 -o /srv/dumps
 
 页面：
 
-- **指示灯**：Link（页面能连到服务）、Programmer、Chip、Busy。
-- **显示屏和进度条**：操作状态（Reading、Writing、Verifying、Erasing、Saved、Written、Erased、Failed）及其百分比，
-  同时显示在浏览器标签页的标题中。20 段进度条以琥珀色填充，写入后的校验把同样的段变为绿色；没有百分比的操作
-  （Detect、Erase、Registers）显示流动的灯光，完成时全部为绿色，失败时停止处的段为红色。下方是编程器、芯片及其容量、
-  读取或写入的速度和剩余时间、最近的转储和最近的消息。标签页图标是一盏随状态变色的灯：工作中为琥珀色，完成时为绿色，
+- **状态板**：每个部分一行，各有指示灯——ADAPTER（编程器）、CHIP（容量和电压）、STATE（Reading、Writing、
+  Verifying、Erasing、Saved、Written、Erased、Failed 及其百分比，同时显示在浏览器标签页的标题中；页面连不到服务时为
+  No link）、DUMP（当前显示的转储的链接）和 CAMEX（Android 应用的隧道）。
+- **进度条**：20 段以琥珀色填充，写入后的校验把同样的段变为绿色；没有百分比的操作（Detect、Erase、Registers）
+  显示流动的灯光，完成时全部为绿色，失败时停止处的段为红色。下方是读取或写入的速度和剩余时间、芯片的警告和最近的消息。标签页图标是一盏随状态变色的灯：工作中为琥珀色，完成时为绿色，
   失败或没有连接时为红色。系统中开启了减少动态效果时，进度条不再流动，也没有闪烁。
 - **Detect**：查找编程器和芯片，并读取状态寄存器。
 - **Read**：将整片芯片读入 `-o` 目录（默认为当前目录）中的文件，浏览器同时下载，链接保留在页面上。
   启动时指定了 `-a`/`-l` 时，读取该区域。
 - **Erase**：确认后擦除整片芯片。
-- **Write**：在浏览器中选择的文件（引导程序或完整镜像）从地址 0 写入已擦除的芯片，然后读回比较。
-  请先擦除。文件不会保存在内存中：写入前它以无名文件的形式存放在 `-o` 目录中，因此最大 512 MB 的
-  镜像需要该目录有同样大小的可用空间。
+- **Write**：当前显示的转储（最近一次 Read 或 Import；没有时为在浏览器中选择的文件）在 Detect 和
+  说明文件与芯片的确认之后从地址 0 写入已擦除的芯片，然后读回比较。请先擦除。文件不会保存在内存中：
+  它存放在 `-o` 目录中，因此最大 512 MB 的镜像需要该目录有同样大小的可用空间。
+- **Export…**：把当前显示的转储保存到本机。
+- **Import…**：把本机的文件（引导程序或完整镜像）以 `import-名称.bin` 存入 `-o` 目录，不写入芯片：
+  它成为当前显示的转储（也有十六进制视图），Write 会写入它。只保留最近的三个导入文件，更早的会被删除。
 - **Registers**：状态寄存器 1–3 的每一位一个指示灯（位名称与 Winbond 类芯片相同；琥珀色为保护位，
   绿色为其他位），以及 **Clear protection**，与 `-u` 相同，先执行 Detect 并询问所找到的芯片：清除 BP、SRP 和 CMP，保留 QE。仅限通过
   CH341A 或 CH347 操作 SPI NOR；EZP 编程器无法读取寄存器。
@@ -402,16 +405,21 @@ WantedBy=multi-user.target
 root；在电视盒子上会出现在主屏幕，可用遥控器操作）。
 
 <p align="center">
-  <img src="screenshots/android-main.png" alt="MicroSNANDer Android 版：显示屏、黄铜按钮" height="360">
+  <img src="screenshots/android-main.png" alt="MicroSNANDer Android 版：带 WEB 和 CAMEX 的状态板、九个黄铜按钮" height="360">
   <img src="screenshots/android-tv.png" alt="MicroSNANDer 在 Android 电视盒子上：已识别 CH341A 和 BY25Q64AS；点按状态寄存器指示灯，确认后翻转该位" height="360">
   <img src="screenshots/android-hexview.png" alt="MicroSNANDer 在 Android 电视盒子上：从 0x8400 起的最近转储十六进制视图" height="360">
 </p>
 
 - 插上编程器（手机需通过 OTG 转接头；电视盒子的某个端口可能只能作为设备端口，请换另一个），并允许
   应用使用它。
-- **Read** 将 `flash-YYYYMMDDHHMM-芯片.bin` 保存到“下载”；**Save as…** 可保存到任意位置，**Share**
-  可发送给其他应用。
-- **Write** 通过文件选择器选取文件，从地址 0 写入已擦除的芯片，然后校验；文件分段读取，不会整个载入内存。**Erase** 擦除整片芯片。
+- 状态板每个部分一行，各有指示灯：ADAPTER、CHIP、STATE、WEB（远程访问：地址；页面有密码时显示锁）和
+  CAMEX（隧道开启时）。
+- **Read** 将 `flash-YYYYMMDDHHMM-芯片.bin` 保存到“下载”；**Export…** 把当前显示的转储保存到任意位置
+  （Save to a file）或发送给其他应用（Share to an app）。
+- **Import…** 把文件取入应用但不写入：它成为当前显示的转储（也有十六进制视图）。**Write** 把当前显示的转储
+  （最近一次 Read 或 Import）从地址 0 写入已擦除的芯片，然后校验；没有转储时通过文件选择器选取文件。文件分段读取，
+  不会整个载入内存。**Erase** 擦除整片芯片。
+- **Start on boot** 在重启后启动远程访问；**Show log** 在面板下方显示事件日志（两者初始均关闭，选择会被记住）。
 - **Registers** 和 **Clear protection** 与 Web 模式相同（通过 CH341A 或 CH347 操作 SPI NOR），以及
   **Self-test**（在 Detect 和确认之后对第一个块执行 `-t`）。
 - 点击寄存器指示灯即可翻转该位：先 Detect，再询问并显示旧值和新值，在每个晶粒上写入，然后重新读取寄存器。
@@ -424,19 +432,20 @@ root；在电视盒子上会出现在主屏幕，可用遥控器操作）。
 ### 远程访问
 
 应用本身可以提供 [Web 模式](#web-模式) 的页面：操作员在任何能访问到该设备的地方（同一网络、隧道）用浏览器操作编程器，
-现场的人只需插上编程器。在 **Remote access** 面板中点 **Settings…**：**Allow remote access**、端口（8085）和可选的密码
+现场的人只需插上编程器。**Settings** 中应用的部分：**Allow remote access**、端口（8085）和可选的密码
 （浏览器中的用户名任意）。
 
-- 页面监听设备的所有网络：`http://地址:端口`，地址显示在屏幕上。没有密码时，任何能访问该端口的人都能打开页面，屏幕上会提示这一点：仅用于可信网络。
-- 以前台服务运行：熄屏时也工作，重启后自动启动。
+- 页面监听设备的所有网络：`http://地址:端口`，地址显示在 WEB 行中。没有密码时，任何能访问该端口的人都能打开页面，打开的锁会提示这一点：仅用于可信网络。
+- 端口被其他应用（我们的另一个应用，同样使用 8085）占用时，页面使用下一个空闲端口（8086、8087…）：WEB 行显示该端口，日志说明原因。
+- 以前台服务运行：熄屏时也工作，勾选 **Start on boot** 后重启时自动启动。
 - 首次插上编程器时选择本应用并勾选 **Always**（始终）：此后每次插入和重启后 Android 都会把它交给应用，设备旁无需有人。应用更新后，Android 会收回访问权限，直到重新插入或重启（`adb reboot` 即可）。
 - 页面和应用共用一个编程器，一次只运行一个操作：操作员运行的操作显示在设备屏幕上（REMOTE: READ 42%），
   设备上的按钮会等它结束；页面也会显示在设备上运行的操作。双方的转储都在应用的转储目录中，页面链接最近的一个并以十六进制显示。
 
-**通过 camex 服务器。** 开启远程访问后，**Tunnel…** 让设备加入 [camex](https://github.com/OpenIPC/camex) 服务器（camex 已内置于应用，无需其他应用）：
-填写服务器、客户端名称、UDP 或 TCP、服务器公钥和 psk，或粘贴/用应用打开包含这些设置的 camex 链接
+**通过 camex 服务器。** 开启远程访问后，勾选 **Settings** 中 CAMEX 部分的 **Join a camex server**，设备即加入 [camex](https://github.com/OpenIPC/camex) 服务器（camex 已内置于应用，无需其他应用）：
+填写服务器、客户端名称、UDP 或 TCP、服务器公钥和 psk，或用应用打开包含这些设置的 camex 链接，自动填入
 （`https://openipc.github.io/camex/connect/#…`，即 camex 的 `install.sh` 输出的链接）。操作员作为同一服务器的另一个客户端，
-通过设备在隧道中的地址打开页面，该地址显示在 Remote access 下方。隧道会自动重连，重启后自动恢复。应用会把页面端口（`--web-port`）告诉 camex，服务器的 nginx 即可按客户端名称打开页面；这需要 camex 服务器 3.19.0 或更新版本。
+通过设备在隧道中的地址打开页面，该地址显示在 CAMEX 行中。隧道会自动重连，重启后自动恢复。应用会把页面实际监听的端口（`--web-port`）告诉 camex：服务器的 nginx 按客户端名称打开页面（camex 服务器 3.19.0 或更新版本），隧道只允许新连接到达这个页面。
 
 - Android 只有在同意后才允许 VPN，只需一次：在屏幕上点 **Allow VPN…**；无人值守的设备可在准备时执行
   `adb shell appops set org.openipc.microsnander ACTIVATE_VPN allow`，然后执行 `adb shell appops write-settings`
@@ -491,7 +500,7 @@ MT29F..ABB 和 MT29F..ADB、ESMT F50D、Dosilicon DS35M、Kioxia TC58CY 和 TH58
 不可靠，芯片也可能损坏。GigaDevice GD25W、XMC XM25QW、Fudan FM25W、Macronix MX25R 和 Adesto AT25DF021A 支持 1.65-3.6 V，
 可以直接连接。
 
-找到 1.8 V 芯片后，控制台会输出警告，网页会把 Chip 指示灯点成红色并显示警告，Android 应用
+找到 1.8 V 芯片后，控制台会输出警告，网页会把 CHIP 指示灯点成红色并显示警告，Android 应用
 也一样；`/api/state` 中有 `voltage`（`3.3`、`1.8`、`1.65-3.6`）和 `warning` 字段。不在这些
 列表中的芯片按 3.3 V 处理。
 

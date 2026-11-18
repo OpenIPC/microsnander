@@ -25,16 +25,19 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.provider.MediaStore;
+import android.provider.OpenableColumns;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.style.ForegroundColorSpan;
 import android.view.Gravity;
 import android.view.View;
 import android.view.inputmethod.EditorInfo;
+import android.app.Dialog;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.GridLayout;
+import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
@@ -69,7 +72,8 @@ public class MainActivity extends Activity {
     private static final String ACTION_USB_PERMISSION = "org.openipc.microsnander.USB_PERMISSION";
     /** only senders with our signature: our own PendingIntent */
     private static final String RESULT_PERMISSION = "org.openipc.microsnander.permission.USB_RESULT";
-    private static final int PICK_WRITE = 1, SAVE_AS = 2, ASK_STORAGE = 3, ASK_READ = 4, ASK_NOTIFY = 5, ASK_VPN = 6;
+    private static final int PICK_WRITE = 1, SAVE_AS = 2, ASK_STORAGE = 3, ASK_READ = 4, ASK_NOTIFY = 5, ASK_VPN = 6,
+            PICK_IMPORT = 7, ASK_READ_IMPORT = 8;
 
     /** vendor, product of the programmers microsnander drives */
     static final int[][] PROGRAMMERS = {
@@ -101,13 +105,18 @@ public class MainActivity extends Activity {
     private static int lastSr = -1;
 
     private UsbManager usb;
-    private TextView state, meta, regsTitle;
+    private TextView meta, regsTitle, logView;
+    /** the board: a row a part, its own lamp */
+    private Brass.Row rAdapter, rChip, rState, rWeb, rCamex;
+    private static boolean logStarted;
+    /** this screen's listener of the log: one object, so unlisten finds it */
+    private final Runnable logListener = this::showLog;
     private TextView regsNote;
     private ProgressBar bar;
     private GridLayout regs;
     private View regsPanel;
     private Button[] buttons;
-    private Button saveAs, share;
+    private Button export, importButton;
     // the hex view of the last dump: its file and the address of the page shown
     private static final int HEX_PAGE = 512;
     private static String hexName;	// the dump shown: name, time and length, a rewritten one counts as new
@@ -116,7 +125,6 @@ public class MainActivity extends Activity {
     private TextView hexFile, hexText;
     private EditText hexAddr;
     private Button hexPrev, hexNext, hexGoButton;
-    private TextView remotePlate, remoteStatus, remoteTunnel;
     private Button consent;
     private Runnable afterPermission;
 
@@ -125,15 +133,26 @@ public class MainActivity extends Activity {
         super.onCreate(saved);
         setContentView(R.layout.activity_main);
         usb = (UsbManager) getSystemService(Context.USB_SERVICE);
-        state = findViewById(R.id.state);
         meta = findViewById(R.id.meta);
+        LinearLayout board = findViewById(R.id.board);
+        rAdapter = new Brass.Row(this, R.string.row_adapter);
+        rChip = new Brass.Row(this, R.string.row_chip);
+        rState = new Brass.Row(this, R.string.row_state);
+        rWeb = new Brass.Row(this, R.string.row_web);
+        rCamex = new Brass.Row(this, R.string.row_camex);
+        for (Brass.Row r : new Brass.Row[] {rAdapter, rChip, rState, rWeb, rCamex})
+            board.addView(r.view);
+        if (!logStarted) {
+            logStarted = true;
+            AppLog.add("app", "microsnander " + BuildConfig.VERSION_NAME);
+        }
         bar = findViewById(R.id.bar);
         regs = findViewById(R.id.regs);
         regsPanel = findViewById(R.id.regs_panel);
         regsTitle = findViewById(R.id.regs_title);
         regsNote = findViewById(R.id.regs_note);
-        saveAs = findViewById(R.id.b_save_as);
-        share = findViewById(R.id.b_share);
+        export = findViewById(R.id.b_export);
+        importButton = findViewById(R.id.b_import);
         hexPanel = findViewById(R.id.hex_panel);
         hexFile = findViewById(R.id.hex_file);
         hexText = findViewById(R.id.hex);
@@ -150,14 +169,21 @@ public class MainActivity extends Activity {
             if (!busy) hexGo();
             return true;
         });
-        ((TextView) findViewById(R.id.version)).setText(getString(R.string.version, BuildConfig.VERSION_NAME));
-        remotePlate = findViewById(R.id.remote_plate);
-        remoteStatus = findViewById(R.id.remote_status);
-        findViewById(R.id.b_remote).setOnClickListener(v -> remoteSettings());
-        remoteTunnel = findViewById(R.id.remote_tunnel);
+        ((TextView) findViewById(R.id.version)).setText(BuildConfig.VERSION_NAME);
         consent = findViewById(R.id.b_consent);
         consent.setOnClickListener(v -> askConsent());
-        findViewById(R.id.b_tunnel).setOnClickListener(v -> tunnelSettings(null));
+        findViewById(R.id.b_settings).setOnClickListener(v -> settings(null));
+        // Start on boot and Show log: remembered; the log under the panel
+        logView = findViewById(R.id.log);
+        CheckBox boot = findViewById(R.id.c_boot), showLog = findViewById(R.id.c_log);
+        boot.setChecked(Settings.startOnBoot(this));
+        boot.setOnCheckedChangeListener((b, on) -> Settings.setStartOnBoot(this, on));
+        showLog.setChecked(Settings.showLog(this));
+        showLog.setOnCheckedChangeListener((b, on) -> {
+            Settings.setShowLog(this, on);
+            showLog();
+        });
+        showLog();
         if (saved == null)
             openLink(getIntent());
         if (Settings.active(this) && RemoteService.instance == null)
@@ -176,7 +202,8 @@ public class MainActivity extends Activity {
                 .setMessage(a.getString(R.string.erase_confirm, r.chip, sizeOf(r.size)))
                 .setPositiveButton(R.string.erase, (d, w) -> a.erase(r))
                 .setNegativeButton(android.R.string.cancel, null).show()));
-        buttons[3].setOnClickListener(v -> detectThen((a, r) -> a.pickWrite()));
+        // Write: the dump shown (the last Read or Import) without a file to pick; none: the picker
+        buttons[3].setOnClickListener(v -> detectThen((a, r) -> a.writeShown(r)));
         buttons[4].setOnClickListener(v -> run(R.string.reading_registers, true, (fd, vid, pid, p) -> Native.registers(fd, vid, pid)));
         buttons[5].setOnClickListener(v -> detectThen((a, r) -> new AlertDialog.Builder(a)
                 .setMessage(a.getString(R.string.unprotect_confirm, r.chip, sizeOf(r.size)))
@@ -187,25 +214,8 @@ public class MainActivity extends Activity {
                 .setMessage(a.getString(R.string.selftest_confirm, r.chip, sizeOf(r.size)))
                 .setPositiveButton(R.string.selftest, (d, w) -> a.selftest(r))
                 .setNegativeButton(android.R.string.cancel, null).show()));
-        saveAs.setOnClickListener(v -> {
-            File dump = lastDump();
-            if (dump == null) return;
-            Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
-                    .setType("application/octet-stream").putExtra(Intent.EXTRA_TITLE, dump.getName());
-            try {
-                startActivityForResult(i, SAVE_AS);
-            } catch (ActivityNotFoundException e) {
-                meta.append("\n" + getString(R.string.no_picker_save));
-            }
-        });
-        share.setOnClickListener(v -> {
-            File dump = lastDump();
-            if (dump == null) return;
-            Intent i = new Intent(Intent.ACTION_SEND).setType("application/octet-stream")
-                    .putExtra(Intent.EXTRA_STREAM, DumpProvider.uri(dump))
-                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            startActivity(Intent.createChooser(i, getString(R.string.share)));
-        });
+        export.setOnClickListener(v -> exportMenu());
+        importButton.setOnClickListener(v -> importFile());
         listenForPermission();
         current = new WeakReference<>(this);
         if (busy)
@@ -246,6 +256,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        AppLog.unlisten(logListener);
         unregisterReceiver(permission);
         if (current.get() == this)
             current = new WeakReference<>(null);
@@ -256,9 +267,10 @@ public class MainActivity extends Activity {
         super.onDestroy();
     }
 
-    /** a file of files/dumps: a Read (flash-*.bin) or a block a self-test saved (selftest-*.bin) */
+    /** a file of files/dumps: a Read (flash-*.bin), a block a self-test saved (selftest-*.bin), an Import (import-*.bin) */
     static boolean isDump(String n) {
-        return (n.startsWith("flash-") || n.startsWith("selftest-")) && n.endsWith(".bin");
+        return (n.startsWith("flash-") || n.startsWith("selftest-") || n.startsWith("import-")) && n.endsWith(".bin")
+                && !n.contains("..") && !n.contains("/");	// as dump_ok of web.c
     }
 
     /** the newest dump the app keeps (files/dumps), or null */
@@ -325,7 +337,8 @@ public class MainActivity extends Activity {
         busyText = getString(phase);
         busyPct = -1;
         showBusy();
-        meta.setText(chipLines(lastResult));	// the last outcome is not about this operation
+        meta.setText(warning(lastResult));	// the last outcome is not about this operation
+        AppLog.add("op", busyText.toLowerCase(Locale.ROOT));
         if (usb.hasPermission(d)) {
             r.run();
             return;
@@ -397,13 +410,13 @@ public class MainActivity extends Activity {
         detectThen((a, r) -> {
             boolean macronix = ((r.sr >> 24) & 1) != 0;
             if (r.sr < 0 || (macronix && reg > 0)) {
-                a.state.setText(R.string.bit_cannot);
+                a.meta.setText(R.string.bit_cannot);
                 return;
             }
             // the bit of the chip there is now: another chip may have another layout
             String now = macronix ? BITS_MACRONIX[k] : BITS[reg][k];
             if (!now.equals(name) || FIXED.contains(" " + now + " ")) {
-                a.state.setText(R.string.bit_changed);
+                a.meta.setText(R.string.bit_changed);
                 return;
             }
             int v = (r.sr >> (16 - 8 * reg)) & 0xff;
@@ -456,6 +469,8 @@ public class MainActivity extends Activity {
                     busy = false;
                     lastResult = r;
                     lastSaved = saved;
+                    AppLog.add("op", r == null ? "no programmer" : (r.ok ? "done: " : "failed: ")
+                            + (r.message.isEmpty() ? r.chip : r.message.split("\n")[0]));
                     if (r != null && (registersOp || r.sr >= 0))
                         lastSr = r.sr;		// Read, Erase and Write leave the last registers shown
                     MainActivity a = current.get();
@@ -524,6 +539,10 @@ public class MainActivity extends Activity {
         else if (code == ASK_READ && granted)
             pickWrite();
         else if (code == ASK_READ)
+            showFailed(getString(R.string.no_files));
+        else if (code == ASK_READ_IMPORT && granted)
+            importFile();
+        else if (code == ASK_READ_IMPORT)
             showFailed(getString(R.string.no_files));
     }
 
@@ -613,12 +632,19 @@ public class MainActivity extends Activity {
             saveAs(u);
         else if (code == PICK_WRITE)
             confirmWrite(u);
+        else if (code == PICK_IMPORT)
+            importUri(u);
     }
 
     /** the copy runs in the worker, so a large dump does not stop the screen */
     private void saveAs(Uri u) {
-        File dump = lastDump();
-        if (dump == null || busy) return;
+        File dump = saveName == null ? null : new File(new File(getFilesDir(), "dumps"), saveName);
+        saveName = null;
+        if (dump == null || !dump.isFile()) {
+            meta.append("\n" + getString(R.string.cannot_save));
+            return;
+        }
+        if (busy) return;
         busy = true;
         busyText = getString(R.string.saving);
         busyPct = -1;
@@ -639,24 +665,44 @@ public class MainActivity extends Activity {
                 MainActivity a = current.get();
                 if (a == null) return;
                 a.showBusyOff();
+                AppLog.add("export", saved ? "saved " + dump.getName() : "cannot save " + dump.getName());
                 a.meta.append("\n" + a.getString(saved ? R.string.saved_as : R.string.cannot_save));
             });
         });
     }
 
+    /** Write: the dump shown, asked about by its name; no dump: a file to pick */
+    private void writeShown(Native.Result r) {
+        File f = lastDump();
+        if (f == null) {
+            pickWrite();
+            return;
+        }
+        new AlertDialog.Builder(this)
+                .setMessage(getString(R.string.write_dump_confirm, r.chip, sizeOf(r.size), f.getName(), sizeOf(f.length())))
+                .setPositiveButton(R.string.write, (d, w) -> write(Uri.fromFile(f), r))
+                .setNegativeButton(android.R.string.cancel, null).show();
+    }
+
+    interface Picked { void picked(Uri u); }
+
     /** the file picker; a TV box without one gets a list of Downloads and the app's dumps */
     private void pickWrite() {
         if (busy) return;
+        pick(PICK_WRITE, ASK_READ, R.string.pick_file, this::confirmWrite);
+    }
+
+    private void pick(int code, int askRead, int title, Picked then) {
         Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*");
         try {
-            startActivityForResult(i, PICK_WRITE);
+            startActivityForResult(i, code);
             return;
         } catch (ActivityNotFoundException e) {
             // no picker on this device
         }
         if (Build.VERSION.SDK_INT >= 23 && Build.VERSION.SDK_INT <= 32
                 && checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(new String[] {Manifest.permission.READ_EXTERNAL_STORAGE}, ASK_READ);
+            requestPermissions(new String[] {Manifest.permission.READ_EXTERNAL_STORAGE}, askRead);
             return;
         }
         List<String> names = new ArrayList<>();
@@ -672,9 +718,148 @@ public class MainActivity extends Activity {
             showFailed(getString(R.string.no_files));
             return;
         }
-        new AlertDialog.Builder(this).setTitle(R.string.pick_file)
-                .setItems(names.toArray(new String[0]), (d, w) -> confirmWrite(uris.get(w)))
+        new AlertDialog.Builder(this).setTitle(title)
+                .setItems(names.toArray(new String[0]), (d, w) -> then.picked(uris.get(w)))
                 .setNegativeButton(android.R.string.cancel, null).show();
+    }
+
+    // ---- export, import ----
+
+    /** EXPORT…: the dump shown, to a file (the system's picker) or to an app (Share); a brass menu */
+    private void exportMenu() {
+        File dump = lastDump();
+        if (dump == null || busy) return;
+        LinearLayout frame = Brass.panel(this);
+        frame.addView(Brass.title(this, R.string.export_title));
+        TextView f = new TextView(this);
+        f.setText(getString(R.string.export_file, dump.getName(), sizeOf(dump.length())));
+        f.setTypeface(android.graphics.Typeface.MONOSPACE);
+        f.setTextColor(col(R.color.dim));
+        f.setGravity(Gravity.CENTER_HORIZONTAL);
+        f.setPadding(0, Brass.dp(this, 6), 0, Brass.dp(this, 10));
+        frame.addView(f);
+        Dialog d = Brass.dialog(this, frame, 420, 0);
+        int[] texts = {R.string.export_save, R.string.export_share, android.R.string.cancel};
+        for (int t : texts) {
+            Button b = Brass.button(this, t);
+            b.setOnClickListener(x -> {
+                d.dismiss();
+                if (t == R.string.export_save)
+                    saveTo(dump);
+                else if (t == R.string.export_share)
+                    shareDump(dump);
+            });
+            frame.addView(b, Brass.margins(this, LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT, 0));
+        }
+        d.show();
+    }
+
+    /** the dump Save to a file was asked for: the picker may return to a newer one being the last */
+    private static String saveName;
+
+    private void saveTo(File dump) {
+        saveName = dump.getName();
+        Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
+                .setType("application/octet-stream").putExtra(Intent.EXTRA_TITLE, dump.getName());
+        try {
+            startActivityForResult(i, SAVE_AS);
+        } catch (ActivityNotFoundException e) {
+            meta.append("\n" + getString(R.string.no_picker_save));
+        }
+    }
+
+    private void shareDump(File dump) {
+        Intent i = new Intent(Intent.ACTION_SEND).setType("application/octet-stream")
+                .putExtra(Intent.EXTRA_STREAM, DumpProvider.uri(dump))
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        AppLog.add("export", "shared " + dump.getName());
+        startActivity(Intent.createChooser(i, getString(R.string.export_share)));
+    }
+
+    /** IMPORT…: a file into the app's dumps, not written to the chip: the dump shown, Write takes it */
+    private void importFile() {
+        if (busy) return;
+        pick(PICK_IMPORT, ASK_READ_IMPORT, R.string.pick_import, this::importUri);
+    }
+
+    /** import-NAME.bin from a file's name: letters, digits, '.', '-', '_' kept, as web.c names an upload */
+    static String importName(String given) {
+        String b = given == null ? "" : given.replaceAll("[^A-Za-z0-9._-]", "_").replaceFirst("^\\.+", "");
+        if (b.length() > 63) b = b.substring(0, 63);
+        if (b.length() > 4 && b.toLowerCase(Locale.ROOT).endsWith(".bin")) b = b.substring(0, b.length() - 4);
+        b = b.replaceFirst("\\.+$", "");
+        while (b.contains(".."))		// "a...b" too: web.c refuses any ".." in a dump name
+            b = b.replaceFirst("\\.\\.", "_.");
+        return "import-" + (b.isEmpty() ? "file" : b) + ".bin";
+    }
+
+    /** the imports but the 3 newest (out among them) go, as web.c keeps them */
+    private static void pruneImports(File dumps, File out) {
+        File[] l = dumps.listFiles((d, n) -> n.startsWith("import-") && n.endsWith(".bin") && !n.equals(out.getName()));
+        if (l == null) return;
+        java.util.Arrays.sort(l, (x, y) -> Long.compare(y.lastModified(), x.lastModified()));
+        for (int i = 2; i < l.length; i++)
+            //noinspection ResultOfMethodCallIgnored
+            l[i].delete();
+    }
+
+    /** the name the picker shows for u, or its last part */
+    private String displayName(Uri u) {
+        if ("content".equals(u.getScheme()))
+            try (Cursor c = getContentResolver().query(u, new String[] {OpenableColumns.DISPLAY_NAME}, null, null, null)) {
+                if (c != null && c.moveToFirst() && c.getString(0) != null)
+                    return c.getString(0);
+            } catch (IllegalArgumentException | SecurityException e) {
+                // the last part of the address then
+            }
+        return u.getLastPathSegment();
+    }
+
+    /** the copy runs in the worker: an image of a SPI NAND is large */
+    private void importUri(Uri u) {
+        if (busy) return;
+        busy = true;
+        busyText = getString(R.string.importing);
+        busyPct = -1;
+        showBusy();
+        Context app = getApplicationContext();
+        File dumps = new File(getFilesDir(), "dumps");
+        String name = importName(displayName(u));
+        WORKER.execute(() -> {
+            //noinspection ResultOfMethodCallIgnored
+            dumps.mkdirs();
+            // copied under a name no page takes (a leading '.'), then given its own: a remote
+            // Write never finds a half-copied file
+            File tmp = new File(dumps, ".import-copy");
+            boolean ok;
+            try (InputStream in = app.getContentResolver().openInputStream(u); OutputStream o = new FileOutputStream(tmp)) {
+                if (in == null) throw new IOException();
+                copy(in, o);
+                ok = true;
+            } catch (IOException | SecurityException e) {
+                ok = false;
+            }
+            File out = ok ? unique(dumps, name) : null;
+            ok = out != null && tmp.renameTo(out);
+            if (!ok)
+                //noinspection ResultOfMethodCallIgnored
+                tmp.delete();
+            else
+                pruneImports(dumps, out);
+            boolean done = ok;
+            MAIN.post(() -> {
+                busy = false;
+                if (done)
+                    Native.dumpKept(out.getName());	// the remote page shows and links it too
+                AppLog.add("import", done ? out.getName() + ", " + sizeOf(out.length()) : "cannot import " + name);
+                MainActivity a = current.get();
+                if (a == null) return;
+                a.showBusyOff();
+                a.meta.setText(done ? a.getString(R.string.imported, out.getName(), sizeOf(out.length()))
+                        : a.getString(R.string.cannot_import));
+            });
+        });
     }
 
     /**
@@ -747,15 +932,48 @@ public class MainActivity extends Activity {
             a.showRemote();
     }
 
+    /** the WEB and CAMEX rows: green works, dim off, red failed; the lock: a password or none */
     private void showRemote() {
         boolean on = RemoteService.instance != null && Settings.active(this);
-        remotePlate.setText(on ? R.string.remote_on_plate : R.string.remote_off);
-        remoteStatus.setText(on ? RemoteService.status : getString(R.string.remote_off_text));
-        String t = on ? RemoteService.tunnelStatus : "";
-        remoteTunnel.setText(t);
-        remoteTunnel.setVisibility(t.isEmpty() ? View.GONE : View.VISIBLE);
+        RemoteService.Web w = on ? RemoteService.web : RemoteService.Web.OFF;
+        if (w == RemoteService.Web.LISTENING)
+            rWeb.set(R.color.green, RemoteService.hosts(Settings.webPort),
+                    Settings.password(this).isEmpty() ? R.drawable.lock_open : R.drawable.lock_closed);
+        else if (w == RemoteService.Web.FAILED)
+            rWeb.set(R.color.red, getString(R.string.web_failed, RemoteService.webFailure));
+        else if (w == RemoteService.Web.STARTING)
+            rWeb.set(R.color.dim, getString(R.string.web_starting));
+        else
+            rWeb.set(R.color.dim, getString(R.string.web_off));
+        rCamex.view.setVisibility(Settings.tunnelEnabled(this) ? View.VISIBLE : View.GONE);
+        CamexTunnel.State t = CamexTunnel.state();
+        String err = CamexTunnel.lastError() == null ? "" : CamexTunnel.lastError();
+        if (!on)
+            rCamex.set(R.color.dim, getString(R.string.camex_no_remote));
+        else if (t == CamexTunnel.State.CONNECTED)
+            rCamex.set(R.color.green, getString(R.string.camex_connected, CamexTunnel.address() + ":" + Settings.webPort));
+        else if (t == CamexTunnel.State.CONNECTING)
+            rCamex.set(R.color.amber, getString(R.string.camex_connecting, err.isEmpty() ? "" : " · " + err));
+        else if (t == CamexTunnel.State.NEEDS_CONSENT)
+            rCamex.set(R.color.red, getString(R.string.camex_consent));
+        else if (t == CamexTunnel.State.FAILED)
+            rCamex.set(R.color.red, getString(R.string.camex_failed, err));
+        else
+            rCamex.set(R.color.dim, getString(R.string.camex_stopped));
         consent.setVisibility(on && Settings.tunnelEnabled(this)
-                && CamexTunnel.state() == CamexTunnel.State.NEEDS_CONSENT ? View.VISIBLE : View.GONE);
+                && t == CamexTunnel.State.NEEDS_CONSENT ? View.VISIBLE : View.GONE);
+    }
+
+    /** the log under the panel, when Show log is on: the newest line in view */
+    private void showLog() {
+        boolean on = Settings.showLog(this);
+        logView.setVisibility(on ? View.VISIBLE : View.GONE);
+        if (on)
+            AppLog.listen(logListener);
+        else
+            AppLog.unlisten(logListener);
+        if (on)
+            logView.setText(AppLog.text());
     }
 
     // ---- the camex tunnel ----
@@ -766,22 +984,31 @@ public class MainActivity extends Activity {
         openLink(i);
     }
 
-    /** a camex link the app was opened with: the tunnel settings, filled from it */
+    /** a camex link the app was opened with: the settings, CAMEX filled from it */
     private void openLink(Intent i) {
         if (i != null && Intent.ACTION_VIEW.equals(i.getAction()) && i.getData() != null)
-            tunnelSettings(i.getData().toString());
+            settings(i.getData().toString());
     }
 
-    private void tunnelSettings(String link) {
-        TunnelDialog.show(this, link, on -> {
-            if (on && !Settings.active(this))
-                meta.setText(R.string.tunnel_needs_remote);
-            if (on && Settings.active(this) && CamexTunnel.consentIntent(this) != null) {
-                askConsent();		// the service starts it after the answer
+    /** the SETTINGS window; Save starts, restarts or stops remote access and asks for the VPN once */
+    private void settings(String link) {
+        SettingsDialog.show(this, link, (was, changed) -> {
+            boolean tunnel = Settings.tunnelEnabled(this);
+            AppLog.add("app", "settings saved: remote access " + (Settings.active(this) ? "on" : "off")
+                    + ", port " + Settings.port(this) + (tunnel ? ", camex on" : ""));
+            if (!Settings.active(this)) {
+                RemoteService.send(this, RemoteService.ACTION_STOP);
+                if (tunnel)
+                    meta.setText(R.string.tunnel_needs_remote);
+                showRemote();
                 return;
             }
-            if (Settings.active(this))
-                RemoteService.send(this, RemoteService.ACTION_START);
+            RemoteService.send(this, was && changed ? RemoteService.ACTION_RESTART : RemoteService.ACTION_START);
+            if (tunnel && CamexTunnel.consentIntent(this) != null)
+                askConsent();		// the service starts the tunnel after the answer
+            else if (Build.VERSION.SDK_INT >= 33
+                    && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
+                requestPermissions(new String[] {Manifest.permission.POST_NOTIFICATIONS}, ASK_NOTIFY);
             showRemote();
         });
     }
@@ -798,45 +1025,6 @@ public class MainActivity extends Activity {
         } catch (ActivityNotFoundException e) {
             meta.setText(R.string.tunnel_consent_refused);
         }
-    }
-
-    private void remoteSettings() {
-        View v = getLayoutInflater().inflate(R.layout.remote_settings, null);
-        CheckBox on = v.findViewById(R.id.r_enabled);
-        EditText port = v.findViewById(R.id.r_port);
-        EditText password = v.findViewById(R.id.r_password);
-        on.setChecked(Settings.enabled(this));
-        port.setText(String.valueOf(Settings.port(this)));
-        password.setText(Settings.password(this));
-        AlertDialog d = new AlertDialog.Builder(this).setTitle(R.string.remote_access).setView(v)
-                .setPositiveButton(android.R.string.ok, null)
-                .setNegativeButton(android.R.string.cancel, null).show();
-        // OK checks the fields first: the dialog stays with what is wrong
-        d.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(b -> {
-            int p;
-            try {
-                p = Integer.parseInt(port.getText().toString().trim());
-            } catch (NumberFormatException e) {
-                p = 0;
-            }
-            String pw = password.getText().toString();
-            if (p < 1024 || p > 65535) {
-                port.setError(getString(R.string.remote_bad_port));
-                return;
-            }
-            boolean was = Settings.active(this);
-            boolean changed = p != Settings.port(this) || !pw.equals(Settings.password(this));
-            Settings.save(this, on.isChecked(), p, pw);
-            if (!Settings.active(this))
-                RemoteService.send(this, RemoteService.ACTION_STOP);
-            else
-                RemoteService.send(this, was && changed ? RemoteService.ACTION_RESTART : RemoteService.ACTION_START);
-            if (Settings.active(this) && Build.VERSION.SDK_INT >= 33
-                    && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
-                requestPermissions(new String[] {Manifest.permission.POST_NOTIFICATIONS}, ASK_NOTIFY);
-            d.dismiss();
-            showRemote();
-        });
     }
 
     /** the operations of the page, while the screen is in front: what runs and how it ended */
@@ -873,9 +1061,8 @@ public class MainActivity extends Activity {
             bar.setVisibility(View.VISIBLE);
             bar.setIndeterminate(total <= 0);
             if (total > 0) bar.setProgress((int) (100 * done / total));
-            state.setTextColor(col(R.color.amber));
             String what = getString(R.string.remote_busy, op.toUpperCase(Locale.ROOT));
-            state.setText(total > 0 ? String.format(Locale.ROOT, "%s %d%%", what, (int) (100 * done / total)) : what);
+            rState.set(R.color.amber, total > 0 ? String.format(Locale.ROOT, "%s %d%%", what, (int) (100 * done / total)) : what);
             meta.setText(R.string.remote_working);
             return;
         }
@@ -885,6 +1072,7 @@ public class MainActivity extends Activity {
             return;
         remoteRunning = false;	// its outcome, as the app's own
         Native.Result r = fromState(s);
+        AppLog.add("web", s.optString("op") + (r.ok ? ": done" : ": failed: " + r.message.split("\n")[0]));
         lastResult = r;
         lastSaved = null;
         if (r.sr >= 0 || "registers".equals(s.optString("op")) || "unprotect".equals(s.optString("op")))
@@ -914,9 +1102,8 @@ public class MainActivity extends Activity {
 
     private void enable(boolean on) {
         for (Button x : buttons) x.setEnabled(on);
-        boolean dump = on && lastDump() != null;
-        saveAs.setEnabled(dump);
-        share.setEnabled(dump);
+        export.setEnabled(on && lastDump() != null);
+        importButton.setEnabled(on);
         hexAddr.setEnabled(on);
         hexGoButton.setEnabled(on);
         if (on)
@@ -1017,8 +1204,7 @@ public class MainActivity extends Activity {
         bar.setVisibility(View.VISIBLE);
         bar.setIndeterminate(busyPct < 0);
         if (busyPct >= 0) bar.setProgress(busyPct);
-        state.setTextColor(col(R.color.amber));
-        state.setText(busyPct >= 0 ? String.format(Locale.ROOT, "%s %d%%", busyText, busyPct) : busyText);
+        rState.set(R.color.amber, busyPct >= 0 ? String.format(Locale.ROOT, "%s %d%%", busyText, busyPct) : busyText);
     }
 
     private void showBusyOff() {
@@ -1028,40 +1214,50 @@ public class MainActivity extends Activity {
 
     private void showIdle(String m) {
         showBusyOff();
-        state.setTextColor(col(R.color.dim));
-        state.setText(R.string.stand_by);
+        showChip(lastResult, false);
+        rState.set(R.color.dim, getString(R.string.stand_by));
         meta.setText(m);
     }
 
     private void showFailed(String m) {
         showBusyOff();
-        state.setTextColor(col(R.color.red));
-        state.setText(R.string.failed);
+        rState.set(R.color.red, getString(R.string.failed));
         meta.setText(m);
     }
 
     private void showResult(Native.Result r, String saved) {
         showBusyOff();
         if (r == null) {
+            showChip(null, true);
             showFailed(getString(R.string.no_programmer));
             return;
         }
-        SpannableStringBuilder m = chipLines(r);
+        showChip(r, !r.ok);
+        SpannableStringBuilder m = warning(r);
         if (saved != null) m.append(saved).append('\n');
         m.append(r.message);
         meta.setText(m);
-        state.setTextColor(col(r.ok ? R.color.amber : R.color.red));
-        state.setText(r.ok ? R.string.done : R.string.failed);
+        rState.set(r.ok ? R.color.green : R.color.red, getString(r.ok ? R.string.done : R.string.failed));
     }
 
-    /** the programmer, the chip and its warning: what stays on the screen during the next operation */
-    private SpannableStringBuilder chipLines(Native.Result r) {
+    /** the ADAPTER and CHIP rows from the last result; failed: what is missing is red */
+    private void showChip(Native.Result r, boolean failed) {
+        String prg = r == null ? "" : r.programmer;
+        if (!prg.isEmpty())
+            rAdapter.set(R.color.green, getString(R.string.adapter_is, prg.toUpperCase(Locale.ROOT)));
+        else
+            rAdapter.set(failed ? R.color.red : R.color.dim, getString(R.string.adapter_none));
+        if (r != null && !r.chip.isEmpty())
+            rChip.set("1.8".equals(r.voltage) ? R.color.red : R.color.green, getString(R.string.chip_value, r.chip,
+                    sizeOf(r.size)) + (r.voltage.isEmpty() ? "" : " · " + r.voltage + " V"));
+        else
+            rChip.set(failed && !prg.isEmpty() ? R.color.red : 0, getString(R.string.none));
+    }
+
+    /** the chip's warning: what stays on the line of the event during the next operation */
+    private SpannableStringBuilder warning(Native.Result r) {
         SpannableStringBuilder m = new SpannableStringBuilder();
         if (r == null) return m;
-        if (!r.programmer.isEmpty()) m.append(getString(R.string.programmer_is, r.programmer)).append('\n');
-        if (!r.chip.isEmpty())
-            m.append(getString(R.string.chip_is, r.chip, r.size >= 1 << 20 ? (r.size >> 20) + " MB" : (r.size >> 10) + " KB"))
-             .append(r.voltage.isEmpty() ? "" : " · " + r.voltage + " V").append('\n');
         if (!r.warning.isEmpty()) {
             int from = m.length();
             m.append(r.warning);
