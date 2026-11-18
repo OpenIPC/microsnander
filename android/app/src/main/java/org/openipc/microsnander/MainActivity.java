@@ -269,7 +269,8 @@ public class MainActivity extends Activity {
 
     /** a file of files/dumps: a Read (flash-*.bin), a block a self-test saved (selftest-*.bin), an Import (import-*.bin) */
     static boolean isDump(String n) {
-        return (n.startsWith("flash-") || n.startsWith("selftest-") || n.startsWith("import-")) && n.endsWith(".bin");
+        return (n.startsWith("flash-") || n.startsWith("selftest-") || n.startsWith("import-")) && n.endsWith(".bin")
+                && !n.contains("..") && !n.contains("/");	// as dump_ok of web.c
     }
 
     /** the newest dump the app keeps (files/dumps), or null */
@@ -637,8 +638,13 @@ public class MainActivity extends Activity {
 
     /** the copy runs in the worker, so a large dump does not stop the screen */
     private void saveAs(Uri u) {
-        File dump = lastDump();
-        if (dump == null || busy) return;
+        File dump = saveName == null ? null : new File(new File(getFilesDir(), "dumps"), saveName);
+        saveName = null;
+        if (dump == null || !dump.isFile()) {
+            meta.append("\n" + getString(R.string.cannot_save));
+            return;
+        }
+        if (busy) return;
         busy = true;
         busyText = getString(R.string.saving);
         busyPct = -1;
@@ -749,7 +755,11 @@ public class MainActivity extends Activity {
         d.show();
     }
 
+    /** the dump Save to a file was asked for: the picker may return to a newer one being the last */
+    private static String saveName;
+
     private void saveTo(File dump) {
+        saveName = dump.getName();
         Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
                 .setType("application/octet-stream").putExtra(Intent.EXTRA_TITLE, dump.getName());
         try {
@@ -778,8 +788,20 @@ public class MainActivity extends Activity {
         String b = given == null ? "" : given.replaceAll("[^A-Za-z0-9._-]", "_").replaceFirst("^\\.+", "");
         if (b.length() > 63) b = b.substring(0, 63);
         if (b.length() > 4 && b.toLowerCase(Locale.ROOT).endsWith(".bin")) b = b.substring(0, b.length() - 4);
-        b = b.replaceFirst("\\.+$", "").replace("..", "_.");
+        b = b.replaceFirst("\\.+$", "");
+        while (b.contains(".."))		// "a...b" too: web.c refuses any ".." in a dump name
+            b = b.replaceFirst("\\.\\.", "_.");
         return "import-" + (b.isEmpty() ? "file" : b) + ".bin";
+    }
+
+    /** the imports but the 3 newest (out among them) go, as web.c keeps them */
+    private static void pruneImports(File dumps, File out) {
+        File[] l = dumps.listFiles((d, n) -> n.startsWith("import-") && n.endsWith(".bin") && !n.equals(out.getName()));
+        if (l == null) return;
+        java.util.Arrays.sort(l, (x, y) -> Long.compare(y.lastModified(), x.lastModified()));
+        for (int i = 2; i < l.length; i++)
+            //noinspection ResultOfMethodCallIgnored
+            l[i].delete();
     }
 
     /** the name the picker shows for u, or its last part */
@@ -807,18 +829,24 @@ public class MainActivity extends Activity {
         WORKER.execute(() -> {
             //noinspection ResultOfMethodCallIgnored
             dumps.mkdirs();
-            File out = unique(dumps, name);
-            boolean ok = out != null;
-            if (ok)
-                try (InputStream in = app.getContentResolver().openInputStream(u); OutputStream o = new FileOutputStream(out)) {
-                    if (in == null) throw new IOException();
-                    copy(in, o);
-                } catch (IOException | SecurityException e) {
-                    ok = false;
-                }
-            if (!ok && out != null)
+            // copied under a name no page takes (a leading '.'), then given its own: a remote
+            // Write never finds a half-copied file
+            File tmp = new File(dumps, ".import-copy");
+            boolean ok;
+            try (InputStream in = app.getContentResolver().openInputStream(u); OutputStream o = new FileOutputStream(tmp)) {
+                if (in == null) throw new IOException();
+                copy(in, o);
+                ok = true;
+            } catch (IOException | SecurityException e) {
+                ok = false;
+            }
+            File out = ok ? unique(dumps, name) : null;
+            ok = out != null && tmp.renameTo(out);
+            if (!ok)
                 //noinspection ResultOfMethodCallIgnored
-                out.delete();
+                tmp.delete();
+            else
+                pruneImports(dumps, out);
             boolean done = ok;
             MAIN.post(() -> {
                 busy = false;

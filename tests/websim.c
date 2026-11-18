@@ -328,6 +328,18 @@ int main(void)
 	pthread_mutex_lock(&st.lock); st.busy = 1; pthread_mutex_unlock(&st.lock);
 	check(request("POST", "/api/upload", NULL, img, 16) == 409, "  while an operation runs: 409");
 	pthread_mutex_lock(&st.lock); st.busy = 0; pthread_mutex_unlock(&st.lock);
+	{
+		int n = 0, mine = 0;
+		DIR *d = opendir(web_dir);
+		for (struct dirent *e; d && (e = readdir(d)); ) {
+			n += !strncmp(e->d_name, "import-", 7);
+			mine += !strcmp(e->d_name, "import-file.bin");
+		}
+		if (d) closedir(d);
+		check(n == 3 && mine, "  four imports: the three newest kept, the oldest gone (an open page cannot fill the disk)");
+	}
+	extra = "Host: 127.0.0.1:8080\r\nX-MicroSNANDer-Name: my image.BIN\r\n";
+	check(request("POST", "/api/upload", NULL, img, sizeof(img)) == 200, "  imported again, for the write");
 	extra = CHIP80 "X-MicroSNANDer-File: import-my_image.bin\r\n";
 	check(request("POST", "/api/write", NULL, NULL, 0) == 202, "Write of the imported file: no upload");
 	wait_idle();

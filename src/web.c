@@ -25,7 +25,8 @@
  *   POST /api/unprotect    clear the protection (as -u), then read them
  *   POST /api/selftest     -t on the first block
  *   POST /api/upload       the request body into the dump directory, not written to the chip
- *                          (X-MicroSNANDer-Name: its file name): the dump shown, Write takes it
+ *                          (X-MicroSNANDer-Name: its file name): the dump shown, Write takes it;
+ *                          the three newest imports are kept
  *   GET  /dumps/<file>     a dump made by Read or Upload (Range: bytes=A-B gives a part, for the hex view)
  *
  * The Android app runs the same server in a service (web_serve in a thread of
@@ -49,6 +50,7 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <fcntl.h>
+#include <dirent.h>
 #include "web.h"
 #include "flashcmd_api.h"
 #include "programmer.h"
@@ -59,6 +61,7 @@
 #define WEB_HEADERS	8192
 #define WEB_MAX_CONN	16
 #define WEB_MAX_BODY	(512UL << 20)		/* largest file to write */
+#define WEB_IMPORTS	3			/* imports kept in the dump directory, the newest */
 
 static const char *const op_names[] = { "", "detect", "read", "erase", "write", "registers", "unprotect", "selftest",
 				       "register" };
@@ -746,6 +749,44 @@ static FILE *import_create(const char *given, char *name, size_t n, char *path, 
 	return f;
 }
 
+/* the imports of the dump directory but the WEB_IMPORTS newest (keep among them) go: an
+   open page cannot fill the disk with uploads, however many come */
+static void imports_prune(const char *keep)
+{
+	struct { char name[256]; time_t t; } f[64];
+	int n = 0;
+	DIR *d = opendir(web_dir);
+	struct dirent *e;
+
+	if (!d)
+		return;
+	while ((e = readdir(d)) && n < (int)(sizeof(f) / sizeof(f[0]))) {
+		char path[1024];
+		struct stat sb;
+
+		if (strncmp(e->d_name, "import-", 7) || !dump_ok(e->d_name) || !strcmp(e->d_name, keep))
+			continue;
+		snprintf(path, sizeof(path), "%s/%s", web_dir, e->d_name);
+		if (lstat(path, &sb) || !S_ISREG(sb.st_mode))
+			continue;
+		snprintf(f[n].name, sizeof(f[n].name), "%s", e->d_name);
+		f[n++].t = sb.st_mtime;
+	}
+	closedir(d);
+	/* the newest WEB_IMPORTS - 1 others stay, with keep: drop the oldest until so many are left */
+	while (n > WEB_IMPORTS - 1) {
+		int old = 0;
+		char path[1024];
+
+		for (int i = 1; i < n; i++)
+			if (f[i].t < f[old].t)
+				old = i;
+		snprintf(path, sizeof(path), "%s/%s", web_dir, f[old].name);
+		unlink(path);
+		f[old] = f[--n];
+	}
+}
+
 /* a dump of the dump directory to write: a regular file, not a link to elsewhere; NULL none */
 static FILE *dump_open(const char *name)
 {
@@ -972,6 +1013,7 @@ static void upload_import(int fd, const char *head, const char *end, size_t got,
 			reply_text(fd, "408 Request Timeout", "The file stopped coming: nothing was kept.\n");
 		return;
 	}
+	imports_prune(name);
 	snprintf(msg, sizeof(msg), "Imported %llu bytes as %s: Write writes it into the chip.", (unsigned long long)clen, name);
 	pthread_mutex_lock(&st.lock);
 	st.uploading = 0;
