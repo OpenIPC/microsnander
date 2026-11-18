@@ -4,6 +4,11 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.47.5 — 2026-11-18
+
+- Android app: `bundles/camex` on camex 4.0.1: a tunnel over TCP no longer stalls from the server
+  to the client (a frame body read in pieces was lost); UDP is unchanged.
+
 ## 1.47.4 — 2026-11-17
 
 - Android app: a programmer that stays plugged in is the app's again after a reboot. Android finds
