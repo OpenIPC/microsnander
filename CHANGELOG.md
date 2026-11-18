@@ -4,6 +4,13 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.47.6 — 2026-11-18
+
+- Android app: `bundles/camex` on camex 4.1.2: the tunnel takes a new TCP connection only to the
+  app's own web page (its port, a socket of the app); any other gets a reset. Before, with another
+  app on the device that embeds camex, its tunnel could serve this app's page, or this tunnel
+  another app's page on the same port.
+
 ## 1.47.5 — 2026-11-18
 
 - Android app: `bundles/camex` on camex 4.0.1: a tunnel over TCP no longer stalls from the server
