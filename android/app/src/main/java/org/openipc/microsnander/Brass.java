@@ -164,16 +164,24 @@ final class Brass {
     }
 
     /**
-     * The log window of Show log: oldest line first, as logcat and the web
-     * page; a fixed height of `rows` lines with its own scrolling, so the
-     * page does not grow; it follows the newest line unless scrolled up;
-     * focusable for the TV remote (D-pad up / down scroll it).
+     * The log window of Show log (brand brass 1.3.1): oldest line first, as
+     * logcat and the web page; a fixed height of `rows` lines with its own
+     * scrolling, so the page does not grow; it follows the newest line until
+     * the user scrolls up, and again once the user is back at the end; opens
+     * at the end; a reader scrolled up keeps the same lines when old ones
+     * leave the top; focusable for the TV remote (D-pad up / down scroll it).
      */
     static final class LogWindow {
         final android.widget.FrameLayout view;    // the frame: display, focus ring
         private final ScrollView scroll;
         private final TextView text;
         private String shown = "";
+
+        // Follow the end: only the user's scroll changes it (a scroll posted
+        // earlier must not undo a later drag up)
+        private boolean follow = true;
+        // The offset the window scrolled itself to: a scroll event there is not the user's
+        private int autoTarget = -1;
 
         LogWindow(Context c, int rows) {
             text = new TextView(c);
@@ -192,10 +200,21 @@ final class Brass {
                 }
             };
             scroll.setFocusable(true);
-            // the ring shows the focus: no system highlight over the text (Android 8+)
-            if (android.os.Build.VERSION.SDK_INT >= 26) scroll.setDefaultFocusHighlightEnabled(false);
+            // the ring shows the focus: no grey system highlight under it (Android 8+)
+            if (Build.VERSION.SDK_INT >= 26)
+                scroll.setDefaultFocusHighlightEnabled(false);
             scroll.setScrollBarStyle(View.SCROLLBARS_INSIDE_OVERLAY);
             scroll.addView(text);
+            scroll.getViewTreeObserver().addOnScrollChangedListener(() -> {
+                if (scroll.getHeight() == 0 || scroll.getScrollY() == autoTarget)
+                    return;
+                follow = atEnd();
+            });
+            // new lines laid out: to the end once the text has its new height
+            text.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+                if (follow && b - t != ob - ot)
+                    scrollToEnd();
+            });
             // The ring on a frame around the scroll view: the foreground of a
             // ScrollView moves with its content; the frame takes the focused
             // state of its child (FrameLayout foreground works from API 1)
@@ -211,74 +230,58 @@ final class Brass {
         /** The height for the layout parameters: `rows` lines and the padding. */
         final int height;
 
-        // Whether the window follows the end: true at the end, false once the user scrolls up;
-        // kept by the scroll listener, so a scroll posted earlier sees a later drag (#193 review)
-        private boolean follow = true;
-
         private boolean atEnd() {
             return scroll.getScrollY() + scroll.getHeight() >= text.getHeight() - dp(scroll.getContext(), 4);
         }
-
-        // The offset the window scrolled itself to: a scroll event at it is not the user's
-        private int autoTarget = -1;
 
         private void scrollToEnd() {
             autoTarget = Math.max(0, text.getHeight() - scroll.getHeight());
             scroll.scrollTo(0, autoTarget);
         }
 
-        private void toEnd() {
-            scroll.post(() -> {
-                if (follow) scrollToEnd();
-            });
-        }
-
-        /** Shown again (Show log on): at the end, as the rule wants. */
+        /** Show log turned on: open at the end. */
         void shown() {
             follow = true;
-            toEnd();
+            scroll.post(() -> {
+                if (follow)
+                    scrollToEnd();
+            });
         }
 
         void setText(String s) {
             if (s.equals(shown))
                 return;
-            if (!listening) {
-                listening = true;
-                // the user's scroll decides whether to follow; the window's own does not
-                scroll.getViewTreeObserver().addOnScrollChangedListener(() -> {
-                    if (scroll.getHeight() == 0 || scroll.getScrollY() == autoTarget) return;
-                    follow = atEnd();
-                });
-                // new lines laid out: to the end, once the text has its new height
-                text.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
-                    if (follow && b - t != ob - ot) scrollToEnd();
-                });
+            // Lines gone from the top (the buffer is full): a reader scrolled up stays on
+            // the same lines.  Measured on the layout: long lines wrap on a phone.
+            int dy = 0;
+            if (!follow && text.getLayout() != null) {
+                int chars = droppedChars(shown, s);
+                if (chars > 0) {
+                    android.text.Layout lay = text.getLayout();
+                    dy = lay.getLineTop(lay.getLineForOffset(Math.min(chars, shown.length())));
+                }
             }
-            // Lines gone from the top (the buffer is full): the view of a reader scrolled up
-            // stays on the same lines
-            int gone = follow ? 0 : dropped(shown, s);
             shown = s;
             text.setText(s);
-            if (follow) {
-                toEnd();
-            } else if (gone > 0) {
-                int dy = gone * text.getLineHeight();
-                scroll.post(() -> scroll.scrollTo(0, Math.max(0, scroll.getScrollY() - dy)));
+            if (dy > 0) {
+                int d = dy;
+                scroll.post(() -> scroll.scrollTo(0, Math.max(0, scroll.getScrollY() - d)));
             }
         }
 
-        private boolean listening;
-
-        /** How many lines left the top of {@code old} to make {@code now} (a FIFO log). */
-        static int dropped(String old, String now) {
-            if (old.isEmpty()) return 0;
-            String[] o = old.split("\n", -1), n = now.split("\n", -1);
-            for (int k = 0; k < o.length; k++) {
-                boolean prefix = o.length - k <= n.length;
-                for (int i = k; prefix && i < o.length; i++) prefix = o[i].equals(n[i - k]);
-                if (prefix) return k;
+        /**
+         * The length of the head of {@code old} that left the top to make {@code now}
+         * (a FIFO log: the rest of old starts now); old.length() when nothing is shared.
+         */
+        static int droppedChars(String old, String now) {
+            if (old.isEmpty() || now.startsWith(old))
+                return 0;
+            for (int i = old.indexOf('\n'); i >= 0; i = old.indexOf('\n', i + 1)) {
+                int rest = old.length() - i - 1;
+                if (rest <= now.length() && now.regionMatches(0, old, i + 1, rest))
+                    return i + 1;
             }
-            return o.length;
+            return old.length();
         }
     }
 }
