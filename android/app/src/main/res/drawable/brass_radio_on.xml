@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Copyright (c) OpenIPC  https://openipc.org  MIT License
+
+  brass_radio_on.xml — a chosen brass radio button: an amber ring, an amber dot (#290)
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="28dp" android:height="28dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#120D0A" android:strokeColor="#FFB347" android:strokeWidth="2"
+        android:pathData="M12,3a9,9 0,1 0,0.001 0z" />
+    <path android:fillColor="#FFB347" android:pathData="M12,7a5,5 0,1 0,0.001 0z" />
+</vector>

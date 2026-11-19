@@ -4,6 +4,13 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.48.3 — 2026-11-19
+
+- Android app: brass check boxes and radio buttons (brass 1.4.0) in place of the system ones:
+  their own marks, with no tint, so a checked and an unchecked box read the same under the focus
+  of a TV remote (the system box, tinted amber, filled whole under focus); 6dp between the mark
+  and the text and after the text, so the focus frame does not touch the last letter.
+
 ## 1.48.2 — 2026-11-19
 
 - Android app: the log of Show log is a window of its own, about 12 lines high, that scrolls
