@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Copyright (c) OpenIPC  https://openipc.org  MIT License
+
+  brass_radio.xml — the brass radio button (#290): its own drawable, no buttonTint, so on and
+  off read the same with the remote's focus (the system one, tinted amber, filled the mark under
+  focus); the focus frame is focus_ring.xml around the row. Wire it through the theme:
+    <item name="android:button">@drawable/brass_radio</item>
+    <item name="android:buttonTint">@null</item>
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_checked="true" android:drawable="@drawable/brass_radio_on" />
+    <item android:drawable="@drawable/brass_radio_off" />
+</selector>

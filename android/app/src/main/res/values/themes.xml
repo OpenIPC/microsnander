@@ -6,15 +6,26 @@
         <item name="android:colorPrimaryDark">@color/bg</item>
         <item name="android:colorAccent">@color/amber</item>
         <item name="android:textColor">@color/ink</item>
-        <!-- the D-pad focus of check boxes and radio buttons: the amber frame (brass focus_ring) -->
-        <item name="android:checkboxStyle">@style/Check</item>
-        <item name="android:radioButtonStyle">@style/Radio</item>
+        <!-- brass check boxes and radio buttons (brass 1.4.0): their own marks, no tint, so on
+             and off read the same under the D-pad focus; the focus is the amber frame -->
+        <item name="android:checkboxStyle">@style/BrassCheck</item>
+        <item name="android:radioButtonStyle">@style/BrassRadio</item>
     </style>
-    <style name="Check" parent="android:Widget.Material.CompoundButton.CheckBox">
+    <style name="BrassCheck" parent="android:Widget.Material.CompoundButton.CheckBox">
         <item name="android:background">@drawable/focus_ring</item>
+        <item name="android:button">@drawable/brass_check</item>
+        <item name="android:buttonTint">@null</item>
+        <!-- 6dp between the mark and the text, and after the text for the focus frame -->
+        <item name="android:paddingStart">6dp</item>
+        <item name="android:paddingEnd">6dp</item>
     </style>
-    <style name="Radio" parent="android:Widget.Material.CompoundButton.RadioButton">
+    <style name="BrassRadio" parent="android:Widget.Material.CompoundButton.RadioButton">
         <item name="android:background">@drawable/focus_ring</item>
+        <item name="android:button">@drawable/brass_radio</item>
+        <item name="android:buttonTint">@null</item>
+        <!-- 6dp between the mark and the text, and after the text for the focus frame -->
+        <item name="android:paddingStart">6dp</item>
+        <item name="android:paddingEnd">6dp</item>
     </style>
     <style name="Brass" parent="android:Widget.Material.Button">
         <item name="android:background">@drawable/brass_button</item>
