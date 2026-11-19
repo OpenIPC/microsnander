@@ -16,6 +16,8 @@ import java.util.Locale;
 final class AppLog {
     static final int LINES = 200;
     private static final ArrayDeque<String> lines = new ArrayDeque<>();
+    /** how many lines left the top since the start: the window keeps its place by it */
+    private static long removed;   // guarded by lines
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
     /** the screen that shows the log, told on the main thread; null if none */
     private static volatile Runnable listener;
@@ -26,8 +28,10 @@ final class AppLog {
     static void add(String what, String text) {
         String l = new SimpleDateFormat("HH:mm:ss", Locale.ROOT).format(new Date()) + " " + what + ": " + text;
         synchronized (lines) {
-            if (lines.size() == LINES)
+            if (lines.size() == LINES) {
                 lines.removeFirst();
+                removed++;
+            }
             lines.addLast(l);
         }
         Runnable r = listener;
@@ -35,10 +39,20 @@ final class AppLog {
             MAIN.post(r);
     }
 
-    /** the log, oldest first */
-    static String text() {
+    /** the log, oldest first, and how many lines had left its top by then (one snapshot) */
+    static final class Snapshot {
+        final String text;
+        final long removed;
+
+        Snapshot(String text, long removed) {
+            this.text = text;
+            this.removed = removed;
+        }
+    }
+
+    static Snapshot snapshot() {
         synchronized (lines) {
-            return TextUtils.join("\n", lines);
+            return new Snapshot(TextUtils.join("\n", lines), removed);
         }
     }
 

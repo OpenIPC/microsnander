@@ -177,10 +177,12 @@ public class RemoteService extends Service {
                 return;
             }
             if (server != null) {		// serving: the tunnel may have been turned on or changed
+                Settings.setServing(this, true);	// again: a late boot broadcast may have cleared it
                 main.post(this::startTunnel);
                 return;
             }
             wanted = true;
+            Settings.setServing(this, true);	// an update of the app starts it again
             int gen = ++generation;
             int port = Settings.port(this);
             String password = Settings.password(this);
@@ -313,6 +315,7 @@ public class RemoteService extends Service {
         if (wakeLock.isHeld())
             wakeLock.release();
         if (finish) {
+            Settings.setServing(this, false);
             AppLog.add("web", "remote access is off");
             setStatus("");
             if (Build.VERSION.SDK_INT >= 24)

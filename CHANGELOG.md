@@ -4,6 +4,16 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.48.2 — 2026-11-19
+
+- Android app: the log of Show log is a window of its own, about 12 lines high, that scrolls
+  (brass 1.3.1): oldest first, the page does not grow with it; it follows the newest line while
+  it is at the end and stays where it was scrolled up to; it takes the focus of a TV remote.
+- Android app: after an update of the app (Android stops it to replace it) remote access starts
+  again by itself, with its tunnel, when it was serving before (an install from before this
+  version: when remote access and Start on boot are on): a box with no screen needs nobody to
+  open the app.
+
 ## 1.48.1 — 2026-11-19
 
 - Android app: `bundles/camex` on camex 4.2.0 (0c3e7cb). The CAMEX section of SETTINGS takes

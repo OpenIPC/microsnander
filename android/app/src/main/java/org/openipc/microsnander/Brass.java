@@ -1,9 +1,10 @@
 /*
  * Copyright (c) OpenIPC  https://openipc.org  MIT License
  *
- * Brass.java — the brass look built in code (brand brass 1.3.0): a row of the
+ * Brass.java — the brass look built in code (brand brass 1.3.1): a row of the
  * lamp board, the band of a settings section, a brass dialog with its panel,
- * title and buttons. Colours come from res/values/colors.xml.
+ * title and buttons, the log window of Show log (after pusher). Colours come
+ * from res/values/colors.xml.
  */
 package org.openipc.microsnander;
 
@@ -20,6 +21,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
 final class Brass {
@@ -159,5 +161,131 @@ final class Brass {
                     fill > 0 ? (int) (dm.heightPixels * fill) : LinearLayout.LayoutParams.WRAP_CONTENT);
         }
         return d;
+    }
+
+    /**
+     * The log window of Show log (brand brass 1.3.1): oldest line first, as
+     * logcat and the web page; a fixed height of `rows` lines with its own
+     * scrolling, so the page does not grow; it follows the newest line until
+     * the user scrolls up, and again once the user is back at the end; opens
+     * at the end; a reader scrolled up keeps the same lines when old ones
+     * leave the top; focusable for the TV remote (D-pad up / down scroll it).
+     */
+    static final class LogWindow {
+        final android.widget.FrameLayout view;    // the frame: display, focus ring
+        private final ScrollView scroll;
+        private final TextView text;
+        private String shown = "";
+
+        // Follow the end: only the user's scroll changes it (a scroll posted
+        // earlier must not undo a later drag up)
+        private boolean follow = true;
+        // The offset the window scrolled itself to: a scroll event there is not the user's
+        private int autoTarget = -1;
+
+        LogWindow(Context c, int rows) {
+            text = new TextView(c);
+            text.setTypeface(Typeface.MONOSPACE);
+            text.setTextSize(11);
+            text.setTextColor(color(c, R.color.dim));
+            int pad = dp(c, 12);
+            text.setPadding(pad, pad, pad, pad);
+            scroll = new ScrollView(c) {
+                @Override
+                public boolean onInterceptTouchEvent(android.view.MotionEvent e) {
+                    // the page scrolls too: keep the drag inside the window
+                    if (e.getActionMasked() == android.view.MotionEvent.ACTION_DOWN)
+                        getParent().requestDisallowInterceptTouchEvent(true);
+                    return super.onInterceptTouchEvent(e);
+                }
+            };
+            scroll.setFocusable(true);
+            // the ring shows the focus: no grey system highlight under it (Android 8+)
+            if (Build.VERSION.SDK_INT >= 26)
+                scroll.setDefaultFocusHighlightEnabled(false);
+            scroll.setScrollBarStyle(View.SCROLLBARS_INSIDE_OVERLAY);
+            scroll.addView(text);
+            scroll.getViewTreeObserver().addOnScrollChangedListener(() -> {
+                if (scroll.getHeight() == 0 || scroll.getScrollY() == autoTarget)
+                    return;
+                follow = atEnd();
+            });
+            // new lines laid out: to the end once the text has its new height
+            text.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+                if (follow && b - t != ob - ot)
+                    scrollToEnd();
+            });
+            // The ring on a frame around the scroll view: the foreground of a
+            // ScrollView moves with its content; the frame takes the focused
+            // state of its child (FrameLayout foreground works from API 1)
+            view = new android.widget.FrameLayout(c);
+            view.setBackgroundResource(R.drawable.display);
+            view.setAddStatesFromChildren(true);
+            view.setForeground(c.getResources().getDrawable(R.drawable.focus_ring, null));
+            view.addView(scroll, new android.widget.FrameLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.MATCH_PARENT));
+            height = rows * text.getLineHeight() + 2 * pad;
+        }
+
+        /** The height for the layout parameters: `rows` lines and the padding. */
+        final int height;
+
+        private boolean atEnd() {
+            return scroll.getScrollY() + scroll.getHeight() >= text.getHeight() - dp(scroll.getContext(), 4);
+        }
+
+        private void scrollToEnd() {
+            autoTarget = Math.max(0, text.getHeight() - scroll.getHeight());
+            scroll.scrollTo(0, autoTarget);
+        }
+
+        /** Show log turned on: open at the end. */
+        void shown() {
+            follow = true;
+            scroll.post(() -> {
+                if (follow)
+                    scrollToEnd();
+            });
+        }
+
+        /** the count of lines gone from the top of the buffer when {@link #shown} was taken */
+        private long shownRemoved = -1;
+
+        /**
+         * The log s, and how many lines had left the top of the buffer by then (a counter
+         * that only grows): a reader scrolled up stays on the same lines. The lines gone
+         * come from the counter, not from comparing texts (two equal lines in a row would
+         * fool that); their height from the layout, as long lines wrap on a phone.
+         */
+        void setText(String s, long removed) {
+            if (s.equals(shown) && removed == shownRemoved)
+                return;
+            int dy = 0;
+            long gone = shownRemoved < 0 ? 0 : removed - shownRemoved;
+            if (!follow && gone > 0 && text.getLayout() != null) {
+                int chars = headChars(shown, gone);
+                android.text.Layout lay = text.getLayout();
+                dy = lay.getLineTop(lay.getLineForOffset(Math.min(chars, shown.length())));
+            }
+            shownRemoved = removed;
+            shown = s;
+            text.setText(s);
+            if (dy > 0) {
+                int d = dy;
+                scroll.post(() -> scroll.scrollTo(0, Math.max(0, scroll.getScrollY() - d)));
+            }
+        }
+
+        /** the length of the first n lines of t with their line ends (all of t when it has fewer) */
+        static int headChars(String t, long n) {
+            int at = 0;
+            for (long k = 0; k < n; k++) {
+                int nl = t.indexOf('\n', at);
+                if (nl < 0)
+                    return t.length();
+                at = nl + 1;
+            }
+            return at;
+        }
     }
 }
