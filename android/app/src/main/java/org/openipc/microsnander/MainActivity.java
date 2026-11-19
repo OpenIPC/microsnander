@@ -975,6 +975,10 @@ public class MainActivity extends Activity {
                 && t == CamexTunnel.State.NEEDS_CONSENT ? View.VISIBLE : View.GONE);
     }
 
+    private void show(AppLog.Snapshot l) {
+        logWindow.setText(l.text, l.removed);
+    }
+
     /**
      * The log under the panel, when Show log is on: oldest first, in its own window; it follows
      * the newest line while it is at the end, and stays where it was scrolled up to otherwise.
@@ -987,7 +991,7 @@ public class MainActivity extends Activity {
         else
             AppLog.unlisten(logListener);
         if (on)
-            logWindow.setText(AppLog.text());	// at the end it follows the new lines
+            show(AppLog.snapshot());	// at the end it follows the new lines
     }
 
     // ---- the camex tunnel ----

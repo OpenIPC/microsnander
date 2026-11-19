@@ -248,19 +248,26 @@ final class Brass {
             });
         }
 
-        void setText(String s) {
-            if (s.equals(shown))
+        /** the count of lines gone from the top of the buffer when {@link #shown} was taken */
+        private long shownRemoved = -1;
+
+        /**
+         * The log s, and how many lines had left the top of the buffer by then (a counter
+         * that only grows): a reader scrolled up stays on the same lines. The lines gone
+         * come from the counter, not from comparing texts (two equal lines in a row would
+         * fool that); their height from the layout, as long lines wrap on a phone.
+         */
+        void setText(String s, long removed) {
+            if (s.equals(shown) && removed == shownRemoved)
                 return;
-            // Lines gone from the top (the buffer is full): a reader scrolled up stays on
-            // the same lines.  Measured on the layout: long lines wrap on a phone.
             int dy = 0;
-            if (!follow && text.getLayout() != null) {
-                int chars = droppedChars(shown, s);
-                if (chars > 0) {
-                    android.text.Layout lay = text.getLayout();
-                    dy = lay.getLineTop(lay.getLineForOffset(Math.min(chars, shown.length())));
-                }
+            long gone = shownRemoved < 0 ? 0 : removed - shownRemoved;
+            if (!follow && gone > 0 && text.getLayout() != null) {
+                int chars = headChars(shown, gone);
+                android.text.Layout lay = text.getLayout();
+                dy = lay.getLineTop(lay.getLineForOffset(Math.min(chars, shown.length())));
             }
+            shownRemoved = removed;
             shown = s;
             text.setText(s);
             if (dy > 0) {
@@ -269,19 +276,16 @@ final class Brass {
             }
         }
 
-        /**
-         * The length of the head of {@code old} that left the top to make {@code now}
-         * (a FIFO log: the rest of old starts now); old.length() when nothing is shared.
-         */
-        static int droppedChars(String old, String now) {
-            if (old.isEmpty() || now.startsWith(old))
-                return 0;
-            for (int i = old.indexOf('\n'); i >= 0; i = old.indexOf('\n', i + 1)) {
-                int rest = old.length() - i - 1;
-                if (rest <= now.length() && now.regionMatches(0, old, i + 1, rest))
-                    return i + 1;
+        /** the length of the first n lines of t with their line ends (all of t when it has fewer) */
+        static int headChars(String t, long n) {
+            int at = 0;
+            for (long k = 0; k < n; k++) {
+                int nl = t.indexOf('\n', at);
+                if (nl < 0)
+                    return t.length();
+                at = nl + 1;
             }
-            return old.length();
+            return at;
         }
     }
 }
