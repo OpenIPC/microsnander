@@ -192,6 +192,8 @@ final class Brass {
                 }
             };
             scroll.setFocusable(true);
+            // the ring shows the focus: no system highlight over the text (Android 8+)
+            if (android.os.Build.VERSION.SDK_INT >= 26) scroll.setDefaultFocusHighlightEnabled(false);
             scroll.setScrollBarStyle(View.SCROLLBARS_INSIDE_OVERLAY);
             scroll.addView(text);
             // The ring on a frame around the scroll view: the foreground of a
@@ -209,14 +211,74 @@ final class Brass {
         /** The height for the layout parameters: `rows` lines and the padding. */
         final int height;
 
+        // Whether the window follows the end: true at the end, false once the user scrolls up;
+        // kept by the scroll listener, so a scroll posted earlier sees a later drag (#193 review)
+        private boolean follow = true;
+
+        private boolean atEnd() {
+            return scroll.getScrollY() + scroll.getHeight() >= text.getHeight() - dp(scroll.getContext(), 4);
+        }
+
+        // The offset the window scrolled itself to: a scroll event at it is not the user's
+        private int autoTarget = -1;
+
+        private void scrollToEnd() {
+            autoTarget = Math.max(0, text.getHeight() - scroll.getHeight());
+            scroll.scrollTo(0, autoTarget);
+        }
+
+        private void toEnd() {
+            scroll.post(() -> {
+                if (follow) scrollToEnd();
+            });
+        }
+
+        /** Shown again (Show log on): at the end, as the rule wants. */
+        void shown() {
+            follow = true;
+            toEnd();
+        }
+
         void setText(String s) {
             if (s.equals(shown))
                 return;
-            boolean atEnd = scroll.getScrollY() + scroll.getHeight() >= text.getHeight() - dp(scroll.getContext(), 4);
+            if (!listening) {
+                listening = true;
+                // the user's scroll decides whether to follow; the window's own does not
+                scroll.getViewTreeObserver().addOnScrollChangedListener(() -> {
+                    if (scroll.getHeight() == 0 || scroll.getScrollY() == autoTarget) return;
+                    follow = atEnd();
+                });
+                // new lines laid out: to the end, once the text has its new height
+                text.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+                    if (follow && b - t != ob - ot) scrollToEnd();
+                });
+            }
+            // Lines gone from the top (the buffer is full): the view of a reader scrolled up
+            // stays on the same lines
+            int gone = follow ? 0 : dropped(shown, s);
             shown = s;
             text.setText(s);
-            if (atEnd)
-                scroll.post(() -> scroll.scrollTo(0, Math.max(0, text.getHeight() - scroll.getHeight())));
+            if (follow) {
+                toEnd();
+            } else if (gone > 0) {
+                int dy = gone * text.getLineHeight();
+                scroll.post(() -> scroll.scrollTo(0, Math.max(0, scroll.getScrollY() - dy)));
+            }
+        }
+
+        private boolean listening;
+
+        /** How many lines left the top of {@code old} to make {@code now} (a FIFO log). */
+        static int dropped(String old, String now) {
+            if (old.isEmpty()) return 0;
+            String[] o = old.split("\n", -1), n = now.split("\n", -1);
+            for (int k = 0; k < o.length; k++) {
+                boolean prefix = o.length - k <= n.length;
+                for (int i = k; prefix && i < o.length; i++) prefix = o[i].equals(n[i - k]);
+                if (prefix) return k;
+            }
+            return o.length;
         }
     }
 }

@@ -74,11 +74,12 @@ final class Settings {
         prefs(c).edit().putBoolean("boot", on).apply();
     }
 
-    /** the page was serving when the app last ran: an update of the app starts it again; a
-     *  version before this flag served whenever remote access was on */
+    /** the page was serving when the app last ran: an update of the app starts it again. A
+     *  version before this flag: only with Start on boot too (it then served since the boot;
+     *  without it the page may have been stopped, and an update does not open it) */
     static boolean serving(Context c) {
         SharedPreferences p = prefs(c);
-        return p.contains("serving") ? p.getBoolean("serving", false) : enabled(c);
+        return p.contains("serving") ? p.getBoolean("serving", false) : enabled(c) && startOnBoot(c);
     }
 
     static void setServing(Context c, boolean on) {

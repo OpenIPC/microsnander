@@ -188,8 +188,12 @@ public class MainActivity extends Activity {
         showLog.setOnCheckedChangeListener((b, on) -> {
             Settings.setShowLog(this, on);
             showLog();
+            if (on)
+                logWindow.shown();	// a long log opens at its end
         });
         showLog();
+        if (Settings.showLog(this))
+            logWindow.shown();
         if (saved == null)
             openLink(getIntent());
         if (Settings.active(this) && RemoteService.instance == null)

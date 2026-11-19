@@ -16,8 +16,8 @@ public class BootReceiver extends BroadcastReceiver {
         if (Intent.ACTION_BOOT_COMPLETED.equals(a)) {
             if (Settings.active(c) && Settings.startOnBoot(c))
                 RemoteService.send(c, RemoteService.ACTION_START);
-            else
-                Settings.setServing(c, false);	// not serving since this boot
+            else if (RemoteService.instance == null)
+                Settings.setServing(c, false);	// not serving since this boot (unless the screen started it)
         } else if (Intent.ACTION_MY_PACKAGE_REPLACED.equals(a) && Settings.active(c) && Settings.serving(c)) {
             AppLog.add("app", "updated to " + BuildConfig.VERSION_NAME + ": remote access starts again");
             RemoteService.send(c, RemoteService.ACTION_START);

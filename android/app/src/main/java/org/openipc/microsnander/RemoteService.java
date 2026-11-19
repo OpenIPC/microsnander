@@ -177,6 +177,7 @@ public class RemoteService extends Service {
                 return;
             }
             if (server != null) {		// serving: the tunnel may have been turned on or changed
+                Settings.setServing(this, true);	// again: a late boot broadcast may have cleared it
                 main.post(this::startTunnel);
                 return;
             }

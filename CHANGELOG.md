@@ -10,8 +10,9 @@ from every push to `main`; this file is the change history.
   (brass 1.3.1): oldest first, the page does not grow with it; it follows the newest line while
   it is at the end and stays where it was scrolled up to; it takes the focus of a TV remote.
 - Android app: after an update of the app (Android stops it to replace it) remote access starts
-  again by itself, with its tunnel, when it was serving before: a box with no screen needs nobody
-  to open the app.
+  again by itself, with its tunnel, when it was serving before (an install from before this
+  version: when remote access and Start on boot are on): a box with no screen needs nobody to
+  open the app.
 
 ## 1.48.1 — 2026-11-19
 
