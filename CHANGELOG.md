@@ -4,6 +4,14 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.48.1 — 2026-11-19
+
+- Android app: `bundles/camex` on camex 4.2.0 (0c3e7cb). The CAMEX section of SETTINGS takes
+  its labels and the hints of empty fields from the tunnel library (Client name, Proto, MTU,
+  Keepalive, Server timeout); the pre-shared key is hidden, with Show the key under it; a new
+  setting's client name is `microsnander-` and the last 4 characters of the device's ANDROID_ID,
+  and an emptied name goes back to it.
+
 ## 1.48.0 — 2026-11-19
 
 The interface review of brass 1.3.0, in the app and on the web page.

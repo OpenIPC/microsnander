@@ -445,7 +445,7 @@ root；在电视盒子上会出现在主屏幕，可用遥控器操作）。
 **通过 camex 服务器。** 开启远程访问后，勾选 **Settings** 中 CAMEX 部分的 **Join a camex server**，设备即加入 [camex](https://github.com/OpenIPC/camex) 服务器（camex 已内置于应用，无需其他应用）：
 填写服务器、客户端名称、UDP 或 TCP、服务器公钥和 psk，或用应用打开包含这些设置的 camex 链接，自动填入
 （`https://openipc.github.io/camex/connect/#…`，即 camex 的 `install.sh` 输出的链接）。操作员作为同一服务器的另一个客户端，
-通过设备在隧道中的地址打开页面，该地址显示在 CAMEX 行中。隧道会自动重连，重启后自动恢复。应用会把页面实际监听的端口（`--web-port`）告诉 camex：服务器的 nginx 按客户端名称打开页面（camex 服务器 3.19.0 或更新版本），隧道只允许新连接到达这个页面。
+通过设备在隧道中的地址打开页面，该地址显示在 CAMEX 行中。客户端名称初始为 `microsnander-` 加设备 ANDROID_ID 的最后 4 个字符（`microsnander-3f2a`）；预共享密钥默认隐藏，勾选 **Show the key** 后显示。隧道会自动重连，重启后自动恢复。应用会把页面实际监听的端口（`--web-port`）告诉 camex：服务器的 nginx 按客户端名称打开页面（camex 服务器 3.19.0 或更新版本），隧道只允许新连接到达这个页面。
 
 - Android 只有在同意后才允许 VPN，只需一次：在屏幕上点 **Allow VPN…**；无人值守的设备可在准备时执行
   `adb shell appops set org.openipc.microsnander ACTIVATE_VPN allow`，然后执行 `adb shell appops write-settings`

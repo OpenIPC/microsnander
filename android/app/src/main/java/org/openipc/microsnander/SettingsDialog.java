@@ -65,10 +65,12 @@ final class SettingsDialog {
         Map<String, String> v = Settings.tunnel(a);
         Map<String, EditText> texts = new LinkedHashMap<>();
         Map<String, RadioGroup> choices = new HashMap<>();
-        for (Field f : CamexTunnel.fields()) {
+        // the fields as the library gives them: order, labels, hints, the client name of a new
+        // setting (microsnander-<the last 4 of ANDROID_ID>), the key hidden with Show the key
+        for (Field f : CamexTunnel.fields(a, Settings.APP)) {
             if (CamexTunnel.WEB_PORT.equals(f.key) || f.kind == Field.Kind.FLAG)
                 continue;		// the web port is the page's, from the section above
-            label(a, box, f.required ? f.label : a.getString(R.string.tunnel_optional, f.label));
+            label(a, box, f.label);
             String value = v.containsKey(f.key) && !v.get(f.key).isEmpty() ? v.get(f.key) : f.initial;
             if (f.kind == Field.Kind.CHOICE) {
                 RadioGroup g = new RadioGroup(a);
@@ -83,7 +85,20 @@ final class SettingsDialog {
                 choices.put(f.key, g);
                 box.addView(g);
             } else {
-                texts.put(f.key, field(a, box, value, null));
+                EditText e = field(a, box, value, f.hint.isEmpty() ? null : f.hint);
+                texts.put(f.key, e);
+                if (f.kind == Field.Kind.SECRET) {
+                    int hidden = InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD;
+                    e.setInputType(hidden);
+                    CheckBox show = new CheckBox(a);
+                    show.setText(Field.SHOW_SECRET);
+                    show.setOnCheckedChangeListener((b, on) -> {
+                        e.setInputType(on ? InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+                                : hidden);
+                        e.setSelection(e.getText().length());
+                    });
+                    box.addView(show);
+                }
             }
         }
         if (link != null) {
