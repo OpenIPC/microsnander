@@ -531,6 +531,8 @@ into the app, no other app needed): the server, the client name, UDP or TCP, the
 key and the psk, or a camex link with them (`https://openipc.github.io/camex/connect/#…`, the one
 camex's `install.sh` prints) opened with the app, which fills them. The operator, another client
 of the same server, opens the page by the device's address in the tunnel, shown in the CAMEX row.
+The client name starts as `microsnander-` and the last 4 characters of the device's ANDROID_ID
+(`microsnander-3f2a`); the pre-shared key is hidden until **Show the key**.
 The tunnel reconnects by itself and comes back after a reboot. The app gives camex the port the
 page listens on (`--web-port`), so the server's nginx opens the page by the client's name (a
 camex server 3.19.0 or later), and the tunnel lets new connections through to that page only.

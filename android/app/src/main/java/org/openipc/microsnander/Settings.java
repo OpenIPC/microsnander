@@ -18,6 +18,9 @@ import org.openipc.camex.tunnel.Field;
  * page through it) runs only with remote access, when it is on too.
  */
 final class Settings {
+    /** the app's name for camex: the client name of a new setting is microsnander-XXXX */
+    static final String APP = "microsnander";
+
     /** the same as vectis and decoder: camex's nginx finds the page by it */
     static final int DEFAULT_PORT = 8085;
 
@@ -105,6 +108,9 @@ final class Settings {
         Map<String, String> v = new HashMap<>();
         for (String k : tunnelKeys())
             v.put(k, prefs(c).getString("camex." + k, CamexTunnel.TRANSPORT.equals(k) ? "UDP" : ""));
+        // no name saved (a new setting, or emptied): the default one, never an empty name
+        if (v.get(CamexTunnel.NAME) == null || v.get(CamexTunnel.NAME).trim().isEmpty())
+            v.put(CamexTunnel.NAME, CamexTunnel.defaultName(c, APP));
         // the server's nginx opens the page by the client's name on this port (camex 3.19.0+),
         // and the tunnel lets new connections through to it only (camex 4.1.0+): the port the
         // page listens on, which is the next free one when the settings' one is taken

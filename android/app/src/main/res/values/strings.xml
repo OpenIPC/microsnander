@@ -121,7 +121,6 @@
     <string name="tunnel_allow">Join a camex server</string>
     <string name="tunnel_link_bad">Not a camex link.</string>
     <string name="tunnel_link_field">The link\'s %1$s: %2$s</string>
-    <string name="tunnel_optional">%1$s (optional)</string>
     <string name="tunnel_save">Save</string>
     <string name="tunnel_consent">Allow VPN…</string>
     <string name="tunnel_consent_refused">The VPN was not allowed: the tunnel waits for it.</string>
