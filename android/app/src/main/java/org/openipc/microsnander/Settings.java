@@ -74,6 +74,17 @@ final class Settings {
         prefs(c).edit().putBoolean("boot", on).apply();
     }
 
+    /** the page was serving when the app last ran: an update of the app starts it again; a
+     *  version before this flag served whenever remote access was on */
+    static boolean serving(Context c) {
+        SharedPreferences p = prefs(c);
+        return p.contains("serving") ? p.getBoolean("serving", false) : enabled(c);
+    }
+
+    static void setServing(Context c, boolean on) {
+        prefs(c).edit().putBoolean("serving", on).apply();
+    }
+
     /** the log of events under the panel; off by default */
     static boolean showLog(Context c) {
         return prefs(c).getBoolean("show_log", false);

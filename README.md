@@ -490,7 +490,7 @@ with the remote).
   chip, then verifies it; with no dump it takes a file from the file picker. The file is read in
   parts, not held in memory. **Erase** erases the whole chip.
 - **Start on boot** starts remote access after a reboot; **Show log** shows the log of events
-  under the panel (both off at first, kept).
+  under the panel, oldest first, in a window that scrolls (both off at first, kept).
 - **Registers** and **Clear protection** as in the web mode (SPI NOR through the CH341A or the
   CH347), and **Self-test** (`-t` on the first block, after Detect and a question).
 - A tap on a register lamp flips that bit: Detect, a question with the old and the new value,
@@ -515,8 +515,8 @@ access**, the port (8085) and an optional password (any user name in the browser
   says so: for a trusted network.
 - When another app holds the port (one of ours, on 8085 too), the page takes the next free one
   (8086, 8087...): the WEB row shows it and the log says why.
-- It runs as a foreground service: with the screen off, and after a reboot with **Start on
-  boot**.
+- It runs as a foreground service: with the screen off, after a reboot with **Start on
+  boot**, and after an update of the app when it was running before.
 - Plug the programmer in once and choose the app with **Always**: from then on Android gives
   it to the app on every plug-in and after a reboot, with nobody at the device. After an update
   of the app Android takes it back until a replug or a reboot (`adb reboot` will do).

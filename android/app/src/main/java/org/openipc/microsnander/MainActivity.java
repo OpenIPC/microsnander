@@ -105,7 +105,10 @@ public class MainActivity extends Activity {
     private static int lastSr = -1;
 
     private UsbManager usb;
-    private TextView meta, regsTitle, logView;
+    private TextView meta, regsTitle;
+    private View logBox;
+    /** the log of events (brass 1.3.1): a window of about 12 lines that scrolls */
+    private Brass.LogWindow logWindow;
     /** the board: a row a part, its own lamp */
     private Brass.Row rAdapter, rChip, rState, rWeb, rCamex;
     private static boolean logStarted;
@@ -174,7 +177,10 @@ public class MainActivity extends Activity {
         consent.setOnClickListener(v -> askConsent());
         findViewById(R.id.b_settings).setOnClickListener(v -> settings(null));
         // Start on boot and Show log: remembered; the log under the panel
-        logView = findViewById(R.id.log);
+        logBox = findViewById(R.id.log_box);
+        logWindow = new Brass.LogWindow(this, 12);
+        ((android.view.ViewGroup) logBox).addView(logWindow.view,
+                new android.widget.FrameLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, logWindow.height));
         CheckBox boot = findViewById(R.id.c_boot), showLog = findViewById(R.id.c_log);
         boot.setChecked(Settings.startOnBoot(this));
         boot.setOnCheckedChangeListener((b, on) -> Settings.setStartOnBoot(this, on));
@@ -330,6 +336,7 @@ public class MainActivity extends Activity {
         if (busy) return;
         UsbDevice d = findProgrammer();
         if (d == null) {
+            AppLog.add("op", getString(phase).toLowerCase(Locale.ROOT) + ": no programmer");
             showFailed(getString(R.string.no_programmer));
             return;
         }
@@ -964,16 +971,19 @@ public class MainActivity extends Activity {
                 && t == CamexTunnel.State.NEEDS_CONSENT ? View.VISIBLE : View.GONE);
     }
 
-    /** the log under the panel, when Show log is on: the newest line in view */
+    /**
+     * The log under the panel, when Show log is on: oldest first, in its own window; it follows
+     * the newest line while it is at the end, and stays where it was scrolled up to otherwise.
+     */
     private void showLog() {
         boolean on = Settings.showLog(this);
-        logView.setVisibility(on ? View.VISIBLE : View.GONE);
+        logBox.setVisibility(on ? View.VISIBLE : View.GONE);
         if (on)
             AppLog.listen(logListener);
         else
             AppLog.unlisten(logListener);
         if (on)
-            logView.setText(AppLog.text());
+            logWindow.setText(AppLog.text());	// at the end it follows the new lines
     }
 
     // ---- the camex tunnel ----

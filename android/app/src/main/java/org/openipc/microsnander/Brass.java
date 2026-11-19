@@ -1,9 +1,10 @@
 /*
  * Copyright (c) OpenIPC  https://openipc.org  MIT License
  *
- * Brass.java — the brass look built in code (brand brass 1.3.0): a row of the
+ * Brass.java — the brass look built in code (brand brass 1.3.1): a row of the
  * lamp board, the band of a settings section, a brass dialog with its panel,
- * title and buttons. Colours come from res/values/colors.xml.
+ * title and buttons, the log window of Show log (after pusher). Colours come
+ * from res/values/colors.xml.
  */
 package org.openipc.microsnander;
 
@@ -20,6 +21,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
 final class Brass {
@@ -159,5 +161,62 @@ final class Brass {
                     fill > 0 ? (int) (dm.heightPixels * fill) : LinearLayout.LayoutParams.WRAP_CONTENT);
         }
         return d;
+    }
+
+    /**
+     * The log window of Show log: oldest line first, as logcat and the web
+     * page; a fixed height of `rows` lines with its own scrolling, so the
+     * page does not grow; it follows the newest line unless scrolled up;
+     * focusable for the TV remote (D-pad up / down scroll it).
+     */
+    static final class LogWindow {
+        final android.widget.FrameLayout view;    // the frame: display, focus ring
+        private final ScrollView scroll;
+        private final TextView text;
+        private String shown = "";
+
+        LogWindow(Context c, int rows) {
+            text = new TextView(c);
+            text.setTypeface(Typeface.MONOSPACE);
+            text.setTextSize(11);
+            text.setTextColor(color(c, R.color.dim));
+            int pad = dp(c, 12);
+            text.setPadding(pad, pad, pad, pad);
+            scroll = new ScrollView(c) {
+                @Override
+                public boolean onInterceptTouchEvent(android.view.MotionEvent e) {
+                    // the page scrolls too: keep the drag inside the window
+                    if (e.getActionMasked() == android.view.MotionEvent.ACTION_DOWN)
+                        getParent().requestDisallowInterceptTouchEvent(true);
+                    return super.onInterceptTouchEvent(e);
+                }
+            };
+            scroll.setFocusable(true);
+            scroll.setScrollBarStyle(View.SCROLLBARS_INSIDE_OVERLAY);
+            scroll.addView(text);
+            // The ring on a frame around the scroll view: the foreground of a
+            // ScrollView moves with its content; the frame takes the focused
+            // state of its child (FrameLayout foreground works from API 1)
+            view = new android.widget.FrameLayout(c);
+            view.setBackgroundResource(R.drawable.display);
+            view.setAddStatesFromChildren(true);
+            view.setForeground(c.getResources().getDrawable(R.drawable.focus_ring, null));
+            view.addView(scroll, new android.widget.FrameLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.MATCH_PARENT));
+            height = rows * text.getLineHeight() + 2 * pad;
+        }
+
+        /** The height for the layout parameters: `rows` lines and the padding. */
+        final int height;
+
+        void setText(String s) {
+            if (s.equals(shown))
+                return;
+            boolean atEnd = scroll.getScrollY() + scroll.getHeight() >= text.getHeight() - dp(scroll.getContext(), 4);
+            shown = s;
+            text.setText(s);
+            if (atEnd)
+                scroll.post(() -> scroll.scrollTo(0, Math.max(0, text.getHeight() - scroll.getHeight())));
+        }
     }
 }

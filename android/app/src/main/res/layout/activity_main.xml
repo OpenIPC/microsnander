@@ -234,18 +234,14 @@
             </LinearLayout>
         </LinearLayout>
 
-        <!-- the log of events, under the panel, when Show log is on -->
-        <TextView
-            android:id="@+id/log"
+        <!-- the log of events, under the panel, when Show log is on (brass 1.3.1): oldest first,
+             a window of about 12 lines with its own scrolling, so the page does not grow; it
+             takes the D-pad focus (focus_ring) to be scrolled on a TV: Brass.LogWindow -->
+        <FrameLayout
+            android:id="@+id/log_box"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:background="@drawable/display"
-            android:fontFamily="monospace"
-            android:padding="12dp"
-            android:textColor="@color/dim"
-            android:textIsSelectable="true"
-            android:textSize="11sp"
             android:visibility="gone" />
 
         <LinearLayout
