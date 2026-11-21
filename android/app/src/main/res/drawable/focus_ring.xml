@@ -5,15 +5,20 @@
   focus_ring.xml — the D-pad focus of a check box, switch or radio button on a brass screen
   (res/drawable/focus_ring.xml): the amber frame of a focused brass button, nothing otherwise
 
-  Version: 1.4.0
+  Version: 1.4.2
   Date:    2026-11-19
 
-  The master copy, after vtesse 2.1.0; rules are in brass/README.md. Wire it through the theme:
-    <item name="android:checkboxStyle">@style/Check</item>
-    <style name="Check" parent="android:Widget.Material.CompoundButton.CheckBox">
+  The master copy, after vtesse 2.1.0; rules are in brass/README.md. Wire it through the theme,
+  with the brass box and ring (brass_check.xml, brass_radio.xml, since 1.4.0):
+    <item name="android:checkboxStyle">@style/BrassCheck</item>
+    <item name="android:radioButtonStyle">@style/BrassRadio</item>
+    <style name="BrassCheck" parent="android:Widget.Material.CompoundButton.CheckBox">
         <item name="android:background">@drawable/focus_ring</item>
+        <item name="android:button">@drawable/brass_check</item>
+        <item name="android:buttonTint">@null</item>
     </style>
-  (the same for switchStyle and radioButtonStyle where the screen has them)
+  (BrassRadio: the same with RadioButton and brass_radio; a switch keeps its own look with
+  this background through switchStyle)
 -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_focused="true">

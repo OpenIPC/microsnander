@@ -177,7 +177,7 @@ function bulb(id,c){$(id).className='bulb'+(c?' '+c:'')}
 function camex(t){
  t=t.replace(/^Tunnel: /,'');
  if(/^http:\/\//.test(t))return ['ok','CONNECTED \u00b7 '+t.replace(/^http:\/\//,'')];
- if(/^connecting/.test(t))return ['on',t.toUpperCase()];
+ if(/^(connecting|waiting)/.test(t))return ['on',t.toUpperCase()];
  if(/consent|failed/.test(t))return ['bad',t.toUpperCase()];
  return ['dim',t.toUpperCase()];
 }

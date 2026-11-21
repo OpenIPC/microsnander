@@ -4,6 +4,17 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.49.0 — 2026-11-21
+
+- Android app: one VPN without a tug of war (camex 4.4.1). The service's own starts of the
+  tunnel (its retry every minute, a boot, the start after an update) no longer take the VPN
+  from another app that holds it (vectis, decoder): they wait while that VPN is up, the CAMEX
+  row says WAITING (amber, on the page too), and the tunnel comes up by itself when it is
+  gone. Only the user's start takes the VPN: SETTINGS saved with the tunnel on, or OK in the
+  VPN dialog. Before, two apps with a tunnel took the VPN from each other in turn.
+- Android app: the focus frame of check boxes and radio buttons updated to brass 1.4.2 (the
+  comment of the master copy only).
+
 ## 1.48.3 — 2026-11-19
 
 - Android app: brass check boxes and radio buttons (brass 1.4.0) in place of the system ones:

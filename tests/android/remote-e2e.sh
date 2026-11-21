@@ -10,8 +10,11 @@
 # read over adb); with it (appops, or the system dialog on Android 5.0) the app gets
 # an address from the server; the operator gets 401 without the password and the
 # state with it, through the tunnel; the page's operation runs (no programmer on the
-# emulator: it fails with its message); the tunnel and the page come back by
-# themselves after a reboot, with nobody at the device.
+# emulator: it fails with its message); another app's VPN (the camex app of
+# bundles/camex, its START is the user's) takes the VPN: the app waits (WAITING),
+# takes nothing back by itself past its retry of a minute, and comes back by itself
+# once that VPN ends; the tunnel and the page come back by themselves after a
+# reboot, with nobody at the device.
 #
 # Needs the images compot/android, compot/cross, compot/android-emulator and the
 # emulator in ~/.cache/compot/toolchains/android-emulator (see camex's
@@ -68,6 +71,11 @@ docker run --rm --pull never -u "$UID_GID" -e HOME=/tmp -v "$ROOT:/src" -v "$GRA
     -w /src/android "$ANDROID_IMAGE" gradle --no-daemon -q -PmicrosnanderAbis=x86_64 :app:assembleDebug \
     > "$OUT/gradle.log" 2>&1 || { tail -30 "$OUT/gradle.log"; exit 1; }
 cp "$ROOT/android/app/build/outputs/apk/debug/app-debug.apk" "$OUT/w/app.apk"
+# the other app with a VPN: the camex app of the same camex sources
+docker run --rm --pull never -u "$UID_GID" -e HOME=/tmp -v "$CAMEX:/src" -v "$GRADLE_CACHE:/cache/gradle" \
+    -w /src/android "$ANDROID_IMAGE" gradle --no-daemon -q -PcamexAbis=x86_64 :app:assembleDebug \
+    > "$OUT/gradle-camex.log" 2>&1 || { tail -30 "$OUT/gradle-camex.log"; exit 1; }
+cp "$(ls "$CAMEX"/android/app/build/outputs/apk/debug/*.apk | head -1)" "$OUT/w/other.apk"
 
 cat > "$OUT/w/avd.sh" <<EOS
 export ANDROID_SDK_ROOT=/emu ANDROID_HOME=/emu ANDROID_AVD_HOME=/w/.emu/avd HOME=/w/.emu/home
@@ -197,6 +205,66 @@ s=$(op -u op:$PASSWORD "http://$APP_IP:$PORT/api/state")
 grep -q 'Started' <<<"$r" && grep -q 'No programmer, or no access to it.' <<<"$s" &&
     ok "an operation from the operator runs (no programmer on the emulator)" || bad "detect: $r / $s"
 $ADB logcat -d | grep -q "$PSK" && bad "the psk is in logcat" || ok "no psk in logcat"
+
+echo "== another app's VPN: the app waits, takes nothing, comes back by itself"
+OTHER=org.openipc.camex
+tunnel_text() { page_state | sed -n 's/.*"tunnel":"\([^"]*\)".*/\1/p'; }
+# a button of the camex app's screen (START, STOP), from a fresh UI dump
+other_tap() {
+    local xy k
+    $ADB shell am start -n $OTHER/.MainActivity >/dev/null 2>&1
+    for k in 1 2 3 4 5 6 7 8 9 10; do
+        sleep 1
+        $ADB shell rm -f /data/local/tmp/ui.xml
+        $ADB shell uiautomator dump /data/local/tmp/ui.xml >/dev/null 2>&1
+        xy=$($ADB shell cat /data/local/tmp/ui.xml 2>/dev/null | tr '>' '\n' | grep "text=\"$1\"" | grep 'enabled="true"' | head -1 |
+            sed -n 's/.*bounds="\[\([0-9]*\),\([0-9]*\)\]\[\([0-9]*\),\([0-9]*\)\]".*/\1 \2 \3 \4/p')
+        [ -n "$xy" ] && { set -- $xy; $ADB shell input tap $(( ($1 + $3) / 2 )) $(( ($2 + $4) / 2 )); return 0; }
+    done
+    return 1
+}
+if [ "$APPOPS_OK" = 1 ]; then
+    $ADB install -r -t /w/other.apk >/dev/null
+    [ "$API" -lt 33 ] || $ADB shell pm grant $OTHER android.permission.POST_NOTIFICATIONS
+    $ADB shell appops set $OTHER ACTIVATE_VPN allow
+    # the camex app's settings, as its settings screen saves them; no start on boot
+    cat > "$OUT/w/other.xml" <<EOF
+<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+<map>
+    <string name="server_host">$SRV_IP</string>
+    <int name="server_port" value="5800" />
+    <string name="name">other-app</string>
+    <string name="transport">udp</string>
+    <string name="server_pubkey">$PUBKEY</string>
+    <string name="psk">$PSK</string>
+    <boolean name="start_on_boot" value="false" />
+</map>
+EOF
+    $ADB push /w/other.xml /data/local/tmp/other.xml >/dev/null
+    $ADB shell "chmod 644 /data/local/tmp/other.xml; run-as $OTHER sh -c 'mkdir -p shared_prefs && cat /data/local/tmp/other.xml > shared_prefs/camex.xml'"
+    $ADB logcat -c
+    other_tap START || bad "no START on the camex app's screen"
+    t=""
+    for k in $(seq 1 30); do t=$(tunnel_text); grep -q '^Tunnel: waiting' <<<"$t" && break; sleep 2; done
+    grep -q '^Tunnel: waiting for the VPN, another app holds it' <<<"$t" &&
+        ok "the other app's START took the VPN: the app waits" || bad "not waiting: '$t'"
+    # past the service's retry (a minute), with the app's screen opened: it takes nothing
+    $ADB shell am start -n $PKG/.MainActivity >/dev/null
+    sleep 75
+    t=$(tunnel_text)
+    sw=$($ADB logcat -d | grep -c "Switched from $OTHER" || true)
+    grep -q '^Tunnel: waiting' <<<"$t" && [ "$sw" = 0 ] &&
+        ok "after 75 s and the screen opened the app still waits, the VPN stays the other app's" ||
+        bad "the app took the VPN back or stopped waiting: '$t', switches from $OTHER: $sw"
+    other_tap STOP || bad "no STOP on the camex app's screen"
+    t=""
+    for k in $(seq 1 45); do t=$(tunnel_text); grep -q '^Tunnel: http://' <<<"$t" && break; sleep 2; done
+    grep -q '^Tunnel: http://' <<<"$t" && ok "the other VPN ended: the tunnel came back by itself ($t)" ||
+        bad "no tunnel after the other VPN ended: '$t'"
+    $ADB uninstall $OTHER >/dev/null
+else
+    echo "SKIP: another app's VPN (no appops for ACTIVATE_VPN on API $API)"
+fi
 
 echo "== after a reboot, with nobody at the device"
 $ADB reboot

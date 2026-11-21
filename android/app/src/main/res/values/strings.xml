@@ -34,6 +34,7 @@
     <string name="camex_connected">CONNECTED · %1$s</string>
     <string name="camex_connecting">CONNECTING%1$s</string>
     <string name="camex_consent">VPN CONSENT NEEDED</string>
+    <string name="camex_waiting">WAITING · another app holds the VPN</string>
     <string name="camex_failed">FAILED · %1$s</string>
     <string name="camex_stopped">STOPPED</string>
     <string name="camex_no_remote">OFF · remote access is off</string>
@@ -126,6 +127,7 @@
     <string name="tunnel_consent_refused">The VPN was not allowed: the tunnel waits for it.</string>
     <string name="tunnel_connected">Tunnel: %1$s</string>
     <string name="tunnel_connecting">Tunnel: connecting%1$s</string>
+    <string name="tunnel_waiting">Tunnel: waiting for the VPN, another app holds it</string>
     <string name="tunnel_needs_consent">Tunnel: the VPN consent is needed (Allow VPN…, or adb appops)</string>
     <string name="tunnel_failed">Tunnel: failed: %1$s</string>
     <string name="tunnel_stopped">Tunnel: stopped</string>
