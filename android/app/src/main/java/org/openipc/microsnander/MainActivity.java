@@ -632,7 +632,7 @@ public class MainActivity extends Activity {
     protected void onActivityResult(int code, int result, Intent data) {
         if (code == ASK_VPN) {
             if (result == RESULT_OK && Settings.active(this))
-                RemoteService.send(this, RemoteService.ACTION_START);
+                RemoteService.send(this, RemoteService.ACTION_START, true);
             else if (result != RESULT_OK)
                 meta.setText(R.string.tunnel_consent_refused);
             return;
@@ -967,6 +967,8 @@ public class MainActivity extends Activity {
             rCamex.set(R.color.amber, getString(R.string.camex_connecting, err.isEmpty() ? "" : " · " + err));
         else if (t == CamexTunnel.State.NEEDS_CONSENT)
             rCamex.set(R.color.red, getString(R.string.camex_consent));
+        else if (t == CamexTunnel.State.WAITING)
+            rCamex.set(R.color.amber, getString(R.string.camex_waiting));
         else if (t == CamexTunnel.State.FAILED)
             rCamex.set(R.color.red, getString(R.string.camex_failed, err));
         else
@@ -1021,7 +1023,9 @@ public class MainActivity extends Activity {
                 showRemote();
                 return;
             }
-            RemoteService.send(this, was && changed ? RemoteService.ACTION_RESTART : RemoteService.ACTION_START);
+            // Save with the tunnel on is the user's start: it takes the VPN from another app
+            // (consentIntent too, when the consent is there)
+            RemoteService.send(this, was && changed ? RemoteService.ACTION_RESTART : RemoteService.ACTION_START, tunnel);
             if (tunnel && CamexTunnel.consentIntent(this) != null)
                 askConsent();		// the service starts the tunnel after the answer
             else if (Build.VERSION.SDK_INT >= 33
@@ -1035,7 +1039,7 @@ public class MainActivity extends Activity {
     private void askConsent() {
         Intent i = CamexTunnel.consentIntent(this);
         if (i == null) {
-            RemoteService.send(this, RemoteService.ACTION_START);
+            RemoteService.send(this, RemoteService.ACTION_START, true);
             return;
         }
         try {

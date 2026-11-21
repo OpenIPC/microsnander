@@ -53,7 +53,10 @@ import org.openipc.camex.tunnel.CamexTunnel;
  * does, reconnects by itself, and shares this service's notification.
  * Without the VPN consent (a dialog once, or adb appops ACTIVATE_VPN allow)
  * it says so on the screen, in the notification and on the page, and tries
- * again every minute.
+ * again every minute. Android holds one VPN: only the user's start (Save with the
+ * tunnel on, the VPN dialog's OK) takes it from another app; the service's own
+ * starts wait while another app's VPN is up (WAITING) and the tunnel comes up
+ * by itself when it is gone (camex 4.4, "One VPN at a time").
  *
  * The page takes the port of the settings (8085), or the next free one when
  * another of our apps holds it (8086, 8087...): the screen shows the one it
@@ -64,6 +67,12 @@ public class RemoteService extends Service {
     static final String ACTION_STOP = "org.openipc.microsnander.REMOTE_STOP";
     /** the settings changed: serve again with the new ones */
     static final String ACTION_RESTART = "org.openipc.microsnander.REMOTE_RESTART";
+    /**
+     * the user asked for the tunnel (Save with it on, the VPN dialog's OK): it takes the VPN
+     * from another app that holds it; the starts the app makes by itself wait for that VPN
+     * to end instead, so two apps with a tunnel do not take it from each other in turn
+     */
+    static final String EXTRA_TAKE_VPN = "org.openipc.microsnander.TAKE_VPN";
     private static final String TAG = "microsnander";
     private static final String CHANNEL = "remote";
     private static final int NOTIFY_ID = 1;
@@ -110,7 +119,14 @@ public class RemoteService extends Service {
     };
 
     static void send(Context c, String action) {
+        send(c, action, false);
+    }
+
+    /** takeVpn: the user's start of the tunnel (EXTRA_TAKE_VPN) */
+    static void send(Context c, String action, boolean takeVpn) {
         Intent i = new Intent(c, RemoteService.class).setAction(action);
+        if (takeVpn)
+            i.putExtra(EXTRA_TAKE_VPN, true);
         if (!action.equals(ACTION_STOP) && Build.VERSION.SDK_INT >= 26)
             c.startForegroundService(i);
         else
@@ -146,6 +162,8 @@ public class RemoteService extends Service {
         synchronized (lock) {
             finishAfterStop = false;
         }
+        if (intent != null && intent.getBooleanExtra(EXTRA_TAKE_VPN, false))
+            takeVpn = true;			// the next start of the tunnel is the user's
         if (action.equals(ACTION_RESTART))
             stopServing();
         startServing();
@@ -381,6 +399,7 @@ public class RemoteService extends Service {
     private void startTunnel() {
         main.removeCallbacks(retryTunnel);
         if (!Settings.tunnelActive(this)) {
+            takeVpn = false;		// no tunnel to start: a later start of our own takes nothing
             if (CamexTunnel.state() != CamexTunnel.State.STOPPED)
                 CamexTunnel.stop();
             showTunnel(CamexTunnel.State.STOPPED, "", "");
@@ -395,15 +414,24 @@ public class RemoteService extends Service {
         String server = v.get(CamexTunnel.SERVER) == null ? "" : v.get(CamexTunnel.SERVER).trim();
         int colon = server.lastIndexOf(':');
         Native.webTunnelHost(colon > 0 ? server.substring(0, colon) : server);
+        boolean take = takeVpn;
+        takeVpn = false;
         if (CamexTunnel.running() && v.equals(tunnelValues))
             return;		// up with these values: a plug-in of the programmer does not cut it
+        if (!take && CamexTunnel.state() == CamexTunnel.State.WAITING && v.equals(tunnelValues))
+            return;		// waits for another app's VPN to end: the library starts it then
         tunnelValues = v;
-        if (!CamexTunnel.start(this, v))
+        // only the user's start takes the VPN from another app: our own starts (the service,
+        // the retry, a boot, an update) wait for it (WAITING) and start when it is gone
+        if (!(take ? CamexTunnel.start(this, v) : CamexTunnel.startWhenFree(this, v))
+                && CamexTunnel.state() != CamexTunnel.State.WAITING)
             main.postDelayed(retryTunnel, TUNNEL_RETRY_MS);	// no consent yet: adb may give it meanwhile
     }
 
     /** the values the tunnel was last started with (main thread) */
     private Map<String, String> tunnelValues;
+    /** the next start of the tunnel is the user's: it takes the VPN (main thread) */
+    private boolean takeVpn;
 
     private final Runnable retryTunnel = () -> {
         synchronized (lock) {
@@ -433,6 +461,8 @@ public class RemoteService extends Service {
             t = getString(R.string.tunnel_connecting, err.isEmpty() ? "" : " (" + err + ")");
         else if (st == CamexTunnel.State.NEEDS_CONSENT)
             t = getString(R.string.tunnel_needs_consent);
+        else if (st == CamexTunnel.State.WAITING)
+            t = getString(R.string.tunnel_waiting);
         else if (st == CamexTunnel.State.FAILED)
             t = getString(R.string.tunnel_failed, err);
         else
