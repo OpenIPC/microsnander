@@ -4,6 +4,15 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.51.1 — 2026-11-22
+
+- Android app: camex 6.0.0 in the tunnel. With a Network name and no server key, the tunnel no
+  longer falls back to trusting the server at the first contact: a server that does not answer
+  CPace is asked again, and the network's ID is not given to it. Creating a network on an open
+  server needs camex's `--create-network`, which the app does not use: it joins the networks a
+  server knows (camex's `install.sh` setup). A server under load now answers with a cookie first,
+  and the tunnel goes on by itself. With a server key, as before.
+
 ## 1.51.0 — 2026-11-22
 
 - CH341A: a slow SPI clock with `-S` for a chip read or written on its board (#108):
