@@ -23,7 +23,7 @@ static const struct programmer fake341 = { .key = "ch341a", .name = "CH341A", .s
 static int use_ch341a, no_chip;		/* the CH341A in place of the CH347; no chip in it */
 const struct programmer *programmer;
 
-int programmer_init(bool need_clock) { (void)need_clock; if (fail_open) return -1; programmer = use_ch341a ? &fake341 : &fake; opens++; return 0; }
+int programmer_init(const char *speed) { (void)speed; if (fail_open) return -1; programmer = use_ch341a ? &fake341 : &fake; opens++; return 0; }
 int programmer_shutdown(void) { programmer = NULL; return 0; }
 static int f_read(unsigned char *b, unsigned long from, unsigned long len) { memcpy(b, mem + from, len); return len; }
 static int write_no, fail_write;	/* fail_write: the write of that number (from 1) fails */

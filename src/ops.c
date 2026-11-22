@@ -77,7 +77,7 @@ static int chip_open(struct ms_chip *c, char *msg, size_t n, int confirmed)
 	if (!confirmed)
 		want[0] = 0;
 
-	int ret = programmer_init(false);
+	int ret = programmer_init(NULL);
 
 	memset(c, 0, sizeof(*c));
 	if (ret == -2) {

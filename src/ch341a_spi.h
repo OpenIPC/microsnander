@@ -31,6 +31,9 @@ int ch341a_spi_send_command(unsigned int writecnt, unsigned int readcnt, const u
 int enable_pins(bool enable);
 int ch341a_cs(bool low);	/* sent with the next stream */
 int config_stream(unsigned int speed);
+/* -S: a slow SPI clock by the pins (#108); -1: not one of ch341a_speed_list() */
+int ch341a_set_speed(const char *speed);
+const char *ch341a_speed_list(void);
 
 /* the I2C master of the CH341A (SDA, SCL), for the SigmaStar ISP; a USB
    packet of 32 bytes holds one transaction of up to CH341A_I2C_MAX bytes */

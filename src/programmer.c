@@ -18,10 +18,10 @@
 
 
 static const struct programmer programmers[] = {
-	{ "ch341a", "CH341A", 0x1a86, { 0x5512 }, ch341a_spi_init, ch341a_spi_shutdown, ch341a_spi_send_command, ch341a_cs, false,
-	  NULL, ch341a_i2c_speed, ch341a_i2c_write, ch341a_i2c_read, CH341A_I2C_MAX },
+	{ "ch341a", "CH341A", 0x1a86, { 0x5512 }, ch341a_spi_init, ch341a_spi_shutdown, ch341a_spi_send_command, ch341a_cs, true,
+	  NULL, ch341a_i2c_speed, ch341a_i2c_write, ch341a_i2c_read, CH341A_I2C_MAX, false, ch341a_set_speed, ch341a_speed_list },
 	{ "ch347",  "CH347",  0x1a86, { 0x55db, 0x55de }, ch347_spi_init, ch347_spi_shutdown, ch347_spi_send_command, ch347_cs, true,
-	  NULL, ch347_i2c_speed, ch347_i2c_write, ch347_i2c_read, CH347_I2C_MAX },
+	  NULL, ch347_i2c_speed, ch347_i2c_write, ch347_i2c_read, CH347_I2C_MAX, false, ch347_set_speed, ch347_speed_list },
 	{ "ezp",    "EZP",    0x1fc8, { 0x310b, 0x310c, 0x310d }, ezp_init, ezp_shutdown, NULL, NULL, false, ezp_flash_init },
 };
 #define NPROG (sizeof(programmers) / sizeof(programmers[0]))
@@ -79,7 +79,7 @@ static void programmers_present(unsigned int count[NPROG])
 	libusb_exit(NULL);
 }
 
-int programmer_init(bool need_clock)
+int programmer_init(const char *speed)
 {
 	unsigned int count[NPROG], kinds = 0;
 
@@ -110,8 +110,13 @@ int programmer_init(bool need_clock)
 		return -2;
 	}
 	/* before the device is opened: it may be in use by another run */
-	if (need_clock && !programmer->clock) {
-		printf("-S sets the SPI clock of the CH347 only; the %s has a fixed one.\n\n", programmer->name);
+	if (speed && (!programmer->clock || !programmer->set_speed)) {
+		printf("-S sets the SPI clock of the CH341A and the CH347; the %s has a fixed one.\n\n", programmer->name);
+		programmer = NULL;
+		return -2;
+	}
+	if (speed && programmer->set_speed(speed) < 0) {
+		printf("Unknown SPI speed %s for the %s; use one of: %s.\n\n", speed, programmer->name, programmer->speed_list());
 		programmer = NULL;
 		return -2;
 	}

@@ -99,6 +99,8 @@ void usage(int code)
 		" -P <name>      programmer: ch341a, ch347, ezp, auto (default: the one connected)\n"\
 		" -S <speed>     SPI clock of the CH347: 60M, 30M (default), 15M, 7.5M, 3.75M, 1.875M,\n"\
 		"                937.5K, 468.75K;\n"\
+		"                of the CH341A, slow, for a chip on its board (SPI by the pins, at most\n"\
+		"                this clock): 100K, 50K, 20K, 10K, 5K, 2K, 1K (default: its fixed clock);\n"\
 		"                with -m sigmastar the I2C clock: 20K, 100K (default), 400K, 750K\n"\
 		" -m sigmastar   the flash of a SigmaStar board through the ISP of its SoC: the SoC's UART\n"\
 		"                (TX to SDA, RX to SCL, GND) on the I2C of the CH341A or the CH347\n"\
@@ -426,11 +428,9 @@ int main(int argc, char* argv[])
 
 	if (speed) {
 		speed_set = 1;
-		if (sigmastar_on() ? sigmastar_set_speed(speed) < 0 : ch347_set_speed(speed) < 0) {
-			if (sigmastar_on())
-				printf("Unknown I2C speed %s; use one of: %s.\n\n", speed, sigmastar_speed_list());
-			else
-				printf("Unknown SPI speed %s; use one of: %s.\n\n", speed, ch347_speed_list());
+		/* the SPI clocks: the programmer's own list, known once it is chosen */
+		if (sigmastar_on() && sigmastar_set_speed(speed) < 0) {
+			printf("Unknown I2C speed %s; use one of: %s.\n\n", speed, sigmastar_speed_list());
 			exit(1);
 		}
 	}
@@ -467,8 +467,8 @@ int main(int argc, char* argv[])
 	}
 
 	/* in the SigmaStar mode -S is the I2C clock, not the SPI one */
-	ret = programmer_init(speed_set && !sigmastar_on());
-	clock_hint = ret >= 0 && programmer && programmer->clock && !sigmastar_on() &&
+	ret = programmer_init(speed_set && !sigmastar_on() ? speed : NULL);
+	clock_hint = ret >= 0 && programmer && !strcmp(programmer->key, "ch347") && !sigmastar_on() &&
 		     (!speed || !strcasecmp(speed, "60M") || !strcasecmp(speed, "30M"));
 	if (ret < 0) {
 		if (ret == -1)

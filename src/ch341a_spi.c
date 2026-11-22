@@ -22,6 +22,7 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
  */
 #include <string.h>
+#include <strings.h>
 #include <stdio.h>
 #include "ch341a_spi.h"
 #include "usb.h"
@@ -154,12 +155,14 @@ static unsigned int usb_timeout(unsigned int bytes)
 	return USB_TIMEOUT + bytes / 8;
 }
 
-static int32_t usb_transfer(const char *func, unsigned int writecnt, unsigned int readcnt, const uint8_t *writearr, uint8_t *readarr)
+/* in_chunk: the bytes one OUT packet answers (an IN transfer each, so a short
+   answer never ends a transfer early) */
+static int32_t usb_xfer(const char *func, unsigned int writecnt, unsigned int readcnt, const uint8_t *writearr, uint8_t *readarr,
+			unsigned int in_chunk, unsigned int timeout)
 {
 	if (handle == NULL)
 		return -1;
 
-	const unsigned int timeout = usb_timeout(writecnt + readcnt);
 	int state_out = TRANS_IDLE;
 	transfer_out->buffer = (uint8_t*)writearr;
 	transfer_out->length = writecnt;
@@ -189,7 +192,7 @@ static int32_t usb_transfer(const char *func, unsigned int writecnt, unsigned in
 	do {
 		/* Schedule new reads as long as there are free transfers and unscheduled bytes to read. */
 		while ((in_done + in_active) < readcnt && state_in[free_idx] == TRANS_IDLE) {
-			unsigned int cur_todo = min(CH341_PACKET_LENGTH - 1, readcnt - in_done - in_active);
+			unsigned int cur_todo = min(in_chunk, readcnt - in_done - in_active);
 			transfer_ins[free_idx]->length = cur_todo;
 			transfer_ins[free_idx]->buffer = in_buf;
 			transfer_ins[free_idx]->user_data = &state_in[free_idx];
@@ -279,6 +282,11 @@ err:
 		libusb_handle_events_timeout(NULL, &(struct timeval){1, 0});
 	}
 	return -1;
+}
+
+static int32_t usb_transfer(const char *func, unsigned int writecnt, unsigned int readcnt, const uint8_t *writearr, uint8_t *readarr)
+{
+	return usb_xfer(func, writecnt, readcnt, writearr, readarr, CH341_PACKET_LENGTH - 1, usb_timeout(writecnt + readcnt));
 }
 
 /*   Set the I2C bus speed (speed(b1b0): 0 = 20kHz; 1 = 100kHz, 2 = 400kHz, 3 = 750kHz).
@@ -483,26 +491,144 @@ static int ch341a_spi_send_stream(unsigned int writecnt, unsigned int readcnt, c
 	return 0;
 }
 
+/* ---- SPI by the pins (-S): a slow clock for a chip on its board ----
+   The SPI stream above runs at the fixed clock of the CH341A (the speed bits
+   of CH341A_CMD_I2C_STM_SET set only the I2C one, #108). Here the UIO stream
+   moves the pins itself, SPI mode 0: per bit OUT with SCK low and the bit on
+   MOSI, a delay, OUT with SCK high, a delay, IN (MISO is D7, sampled after
+   the rising edge). The delay of each half period sets the clock: the clock
+   given is an upper bound, the USB packets slow the real one further. */
+
+#define	 PIN_CS_LOW	0x16	/* D1, D2, D4 high; CS (D0), SCK (D3), MOSI (D5) low */
+#define	 PIN_SCK	0x08
+#define	 PIN_MOSI	0x20
+#define	 PIN_MISO	0x80
+#define	 PIN_US_MAX	0x3F	/* the longest delay of one US command */
+#define	 PIN_CMDS	(CH341_PACKET_LENGTH - 2)	/* a packet: 0xAB, the commands, END */
+#define	 PIN_MAX_PACKETS	512	/* a USB transfer: 16 KB out */
+
+static const struct { const char *name; unsigned int half_us; } ch341a_speeds[] = {
+	{ "100K", 5 }, { "50K", 10 }, { "20K", 25 }, { "10K", 50 }, { "5K", 100 }, { "2K", 250 }, { "1K", 500 },
+};
+static unsigned int pin_half_us;	/* 0: the SPI stream at the fixed clock */
+
+int ch341a_set_speed(const char *speed)
+{
+	for (unsigned i = 0; i < sizeof(ch341a_speeds) / sizeof(ch341a_speeds[0]); i++)
+		if (!strcasecmp(speed, ch341a_speeds[i].name)) {
+			pin_half_us = ch341a_speeds[i].half_us;
+			return 0;
+		}
+	return -1;
+}
+
+const char *ch341a_speed_list(void) { return "100K, 50K, 20K, 10K, 5K, 2K, 1K"; }
+
+/* the US commands of one half period */
+static unsigned int pin_delays(void) { return (pin_half_us + PIN_US_MAX - 1) / PIN_US_MAX; }
+
+static uint8_t *pin_delay(uint8_t *q)
+{
+	unsigned int left = pin_half_us, n = pin_delays();
+
+	for (unsigned int i = 0; i < n; i++) {
+		unsigned int now = (left + (n - i) - 1) / (n - i);	/* spread evenly, each 1..63 us */
+		*q++ = CH341A_CMD_UIO_STM_US | now;
+		left -= now;
+	}
+	return q;
+}
+
+/* the bits one packet carries */
+static unsigned int pin_bits_per_packet(void) { return PIN_CMDS / (3 + 2 * pin_delays()); }
+
+/* the bytes of one USB transfer */
+static unsigned int pin_max_part(void) { return PIN_MAX_PACKETS * pin_bits_per_packet() / 8; }
+
+static int ch341a_pins_send(unsigned int writecnt, unsigned int readcnt, const unsigned char *writearr, unsigned char *readarr)
+{
+	static uint8_t wbuf[(PIN_MAX_PACKETS + 2) * CH341_PACKET_LENGTH];
+	static uint8_t in[PIN_MAX_PACKETS * PIN_CMDS];
+	const unsigned int bits = (writecnt + readcnt) * 8, bpp = pin_bits_per_packet();
+	const unsigned int packets = (bits + bpp - 1) / bpp;
+	unsigned int bit = 0;
+
+	if (handle == NULL)
+		return -1;
+	if (packets > PIN_MAX_PACKETS)
+		return -1;
+	memset(wbuf, 0, (packets + 2) * CH341_PACKET_LENGTH);
+	if (cs_start_pending) {		/* as in the stream: CS high, then low */
+		uint8_t *q = wbuf;
+		*q++ = CH341A_CMD_UIO_STREAM;
+		for (int i = 0; i < 5; i++)
+			*q++ = CH341A_CMD_UIO_STM_OUT | PIN_CS_LOW | 0x01 | PIN_MOSI;
+		*q++ = CH341A_CMD_UIO_STM_OUT | PIN_CS_LOW | PIN_MOSI;
+		*q++ = CH341A_CMD_UIO_STM_DIR | 0x3F;
+		*q++ = CH341A_CMD_UIO_STM_END;
+	}
+	for (unsigned int p = 0; p < packets; p++) {
+		uint8_t *q = wbuf + (p + 1) * CH341_PACKET_LENGTH;
+
+		*q++ = CH341A_CMD_UIO_STREAM;
+		for (unsigned int k = 0; k < bpp && bit < bits; k++, bit++) {
+			unsigned int byte = bit / 8;
+			uint8_t v = byte < writecnt ? writearr[byte] : 0xFF;
+			uint8_t o = PIN_CS_LOW | ((v >> (7 - bit % 8)) & 1 ? PIN_MOSI : 0);
+
+			*q++ = CH341A_CMD_UIO_STM_OUT | o;
+			q = pin_delay(q);
+			*q++ = CH341A_CMD_UIO_STM_OUT | o | PIN_SCK;
+			q = pin_delay(q);
+			*q++ = CH341A_CMD_UIO_STM_IN;
+		}
+		*q = CH341A_CMD_UIO_STM_END;
+	}
+	{				/* SCK back low, CS stays low */
+		uint8_t *q = wbuf + (packets + 1) * CH341_PACKET_LENGTH;
+		*q++ = CH341A_CMD_UIO_STREAM;
+		*q++ = CH341A_CMD_UIO_STM_OUT | PIN_CS_LOW | PIN_MOSI;
+		*q = CH341A_CMD_UIO_STM_END;
+	}
+	/* a packet a millisecond at worst, and its delays, twice over */
+	const unsigned int timeout = USB_TIMEOUT + 2 * (packets + 2) * (1 + bpp * 2 * pin_half_us / 1000 + 1);
+
+	if (usb_xfer(__func__, (packets + 2) * CH341_PACKET_LENGTH, bits, wbuf, in, bpp, timeout) < 0)
+		return -1;
+	cs_start_pending = false;
+	for (unsigned int i = 0; i < readcnt; i++) {
+		uint8_t v = 0;
+		for (unsigned int b = 0; b < 8; b++)
+			v = v << 1 | !!(in[(writecnt + i) * 8 + b] & PIN_MISO);
+		readarr[i] = v;
+	}
+	return 0;
+}
+
 /* Send writecnt bytes, then read readcnt bytes, in parts of at most
-   CH341_MAX_STREAM bytes: the write part first, then the reads. */
+   one transfer: the write part first, then the reads. */
 int ch341a_spi_send_command(unsigned int writecnt, unsigned int readcnt, const unsigned char *writearr, unsigned char *readarr)
 {
-	while (writecnt > CH341_MAX_STREAM) {
-		if (ch341a_spi_send_stream(CH341_MAX_STREAM, 0, writearr, NULL))
-			return -1;
-		writearr += CH341_MAX_STREAM;
-		writecnt -= CH341_MAX_STREAM;
-	}
-	while (writecnt + readcnt > CH341_MAX_STREAM) {
-		unsigned int now = CH341_MAX_STREAM - writecnt;
+	int (*send)(unsigned int, unsigned int, const unsigned char *, unsigned char *) =
+		pin_half_us ? ch341a_pins_send : ch341a_spi_send_stream;
+	const unsigned int max_part = pin_half_us ? pin_max_part() : CH341_MAX_STREAM;
 
-		if (ch341a_spi_send_stream(writecnt, now, writearr, readarr))
+	while (writecnt > max_part) {
+		if (send(max_part, 0, writearr, NULL))
+			return -1;
+		writearr += max_part;
+		writecnt -= max_part;
+	}
+	while (writecnt + readcnt > max_part) {
+		unsigned int now = max_part - writecnt;
+
+		if (send(writecnt, now, writearr, readarr))
 			return -1;
 		readarr += now;
 		readcnt -= now;
 		writecnt = 0;
 	}
-	return ch341a_spi_send_stream(writecnt, readcnt, writearr, readarr);
+	return send(writecnt, readcnt, writearr, readarr);
 }
 
 int ch341a_spi_shutdown(void)

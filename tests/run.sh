@@ -75,8 +75,13 @@ t 0 "-S 937.5K on the CH347"           $B -P ch347 -S 937.5K -i
 t 1 "-W with -c is an error"           $B -W 8080 -c x.bin
 t 1 "-S unknown speed"                $B -S 100M -i
 t 0 "-P ch347 -S 15M"                 $B -P ch347 -S 15M -i
-t 1 "-S with the CH341A is an error"  $B -P ch341a -S 15M -i
-t 1 "-S with auto (CH341A) is an error" $B -S 15M -i
+t 1 "-S 15M with the CH341A is an error" $B -P ch341a -S 15M -i
+t 1 "-S 15M with auto (CH341A) is an error" $B -S 15M -i
+t 0 "-P ch341a -S 100K (by the pins)" $B -P ch341a -S 100K -i
+t 0 "-S 1k with auto (CH341A)"        $B -S 1k -i
+t 1 "-P ch347 -S 100K is an error"    $B -P ch347 -S 100K -i
+$B -S 20K -i | grep -q '^speed: ch341a 20K' && echo "ok   -S goes to the CH341A" || { echo "FAIL -S to the CH341A"; fail=1; }
+$B -P ch341a -S 15M -i | grep -q 'use one of: 100K, 50K, 20K, 10K, 5K, 2K, 1K' && echo "ok   an unknown CH341A clock lists its clocks" || { echo "FAIL CH341A clock list"; fail=1; }
 t 1 "-m unknown mode"                 $B -m mstar -i
 t 0 "-m sigmastar -i (CH341A, auto)"  $B -m sigmastar -i
 t 0 "-P ch347 -m sigmastar -i"        $B -P ch347 -m sigmastar -i
