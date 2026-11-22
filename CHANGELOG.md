@@ -4,6 +4,18 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.51.0 — 2026-11-22
+
+- CH341A: a slow SPI clock with `-S` for a chip read or written on its board (#108):
+  `100K`, `50K`, `20K`, `10K`, `5K`, `2K`, `1K`. The CH341A has no setting for its SPI clock
+  (the speed bits of its stream set only the I2C one: a read takes the same time with them at
+  20 kHz and at 750 kHz), so these clocks move the pins one by one (SPI mode 0); the clock is
+  an upper bound of every half period, and the USB packets make the real one slower: a
+  BY25Q64AS (8 MB) reads in about 25 minutes at `100K` (5.4 KB/s), the same dump as at the fixed
+  clock. Without `-S` the CH341A runs at its fixed clock as before. The command line only: the
+  Android app and the web page keep the fixed clock.
+- An unknown `-S` clock is told with the clocks of the programmer in use.
+
 ## 1.50.0 — 2026-11-22
 
 - Android app: camex 5.2.1 in the tunnel. SETTINGS has a new field, Network name: with a

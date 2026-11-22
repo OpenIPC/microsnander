@@ -144,17 +144,17 @@ Measured with microsnander 1.14.1 on Linux, with the same chip in each programme
 W25Q128, 16 MB): the time of the whole command, from the start to `Status: OK`. Before a
 write, the EZP programmers read the range to check that it is erased.
 
-|                                    | CH341A      | CH347T / CH347F                        | EZP2019 / EZP2019+ / EZP2023            |
-|------------------------------------|-------------|----------------------------------------|-----------------------------------------|
-| USB ID                             | `1a86:5512` | `1a86:55db`, `1a86:55de`               | `1fc8:310b`, `310c`, `310d`             |
-| SPI clock                          | fixed       | 1.875–60 MHz (`-S`), 30 MHz by default | set by its firmware                     |
-| SPI NOR                            | yes         | yes                                    | up to 16 MB                             |
-| SPI NAND                           | yes         | yes                                    | no                                      |
-| Erase a part of the chip           | yes         | yes                                    | no, the whole chip only                 |
-| Unprotect (`-u`), status registers | yes         | yes                                    | no                                      |
-| Chip erase, 16 MB                  | 48 s        | 33 s                                   | 37 s                                    |
-| Read 16 MB                         | 136 s       | 7.2 s (5.2 s at 60 MHz)                | 136 s                                   |
-| Write 16 MB                        | 256 s       | 152 s                                  | 275 s (of them 136 s: the erased check) |
+|                                    | CH341A                              | CH347T / CH347F                        | EZP2019 / EZP2019+ / EZP2023            |
+|------------------------------------|-------------------------------------|----------------------------------------|-----------------------------------------|
+| USB ID                             | `1a86:5512`                         | `1a86:55db`, `1a86:55de`               | `1fc8:310b`, `310c`, `310d`             |
+| SPI clock                          | fixed; 1–100 kHz by the pins (`-S`) | 1.875–60 MHz (`-S`), 30 MHz by default | set by its firmware                     |
+| SPI NOR                            | yes                                 | yes                                    | up to 16 MB                             |
+| SPI NAND                           | yes                                 | yes                                    | no                                      |
+| Erase a part of the chip           | yes                                 | yes                                    | no, the whole chip only                 |
+| Unprotect (`-u`), status registers | yes                                 | yes                                    | no                                      |
+| Chip erase, 16 MB                  | 48 s                                | 33 s                                   | 37 s                                    |
+| Read 16 MB                         | 136 s                               | 7.2 s (5.2 s at 60 MHz)                | 136 s                                   |
+| Write 16 MB                        | 256 s                               | 152 s                                  | 275 s (of them 136 s: the erased check) |
 
 Since 1.36.0 a CH347T with firmware 0341 or newer, and a CH347F, take the chip select inside
 the data frames: a write enable or a page program is one USB round trip instead of two
@@ -211,6 +211,8 @@ microsnander [options]
  -P <name>      programmer: ch341a, ch347, ezp, auto (default: the one connected)
  -S <speed>     SPI clock of the CH347: 60M, 30M (default), 15M, 7.5M, 3.75M, 1.875M,
                 937.5K, 468.75K;
+                of the CH341A, slow, for a chip on its board (SPI by the pins, at most
+                this clock): 100K, 50K, 20K, 10K, 5K, 2K, 1K (default: its fixed clock);
                 with -m sigmastar the I2C clock: 20K, 100K (default), 400K, 750K
  -m sigmastar   the flash of a SigmaStar board through the ISP of its SoC: the SoC's UART
                 (TX to SDA, RX to SCL, GND) on the I2C of the CH341A or the CH347
@@ -256,6 +258,13 @@ The dump must be a regular file.
 if that is shorter). It ends with `Status: OK` or the address of the first difference, as `-v`.
 When `-v` or `-c` finds a difference on a CH347 at 30 MHz or more, the message suggests
 `-S 15M`: some CH347T boards lose bits at that clock.
+
+On a CH341A, `-S` takes slow clocks for a chip read or written on its board, where the SoC and
+other parts on the same lines do not keep up with the fixed clock: `100K`, `50K`, `20K`, `10K`,
+`5K`, `2K`, `1K`. The CH341A cannot slow its own SPI, so microsnander moves the pins itself
+(SPI mode 0); the clock given is the most any half period gets, and the USB packets make the
+real one slower. At `100K` an 8 MB chip reads in about 25 minutes (5.4 KB/s), so read and write
+a part with `-a` and `-l` where you can. Without `-S` the CH341A runs at its fixed clock.
 
 When the chip's ID reads `ff ff ff` or `00 00 00`, no chip answered: the message says what to
 check (the clip or socket and pin 1, the power, a SoC that holds the bus).
