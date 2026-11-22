@@ -16,6 +16,7 @@ static unsigned char miso[1 << 20];	/* bytes clocked in, waiting for IN transfer
 static unsigned int miso_head, miso_tail;
 static unsigned int clocked;		/* bytes clocked since CS low: the pattern index */
 static unsigned int max_out, out_fail;
+static int short_reply;			/* the next IN answer one byte short */
 
 static unsigned char pattern(unsigned int i) { return (unsigned char)(i * 13 + (i >> 8)); }
 
@@ -44,7 +45,12 @@ static void uio_packet(const unsigned char *b, int n)
 					unsigned int byte = pbits / 8, bit = 7 - pbits % 8;
 					if (byte < sizeof(mosi))
 						mosi[byte] = (mosi[byte] & ~(1 << bit)) | ((v >> 5 & 1) << bit);
-					miso_bit = pattern(byte) >> bit & 1;
+					/* JEDEC ID (0x9F): the ID of a W25Q64 after the command byte;
+					   anything else: the pattern */
+					if (byte >= 1 && byte <= 3 && mosi[0] == 0x9F)
+						miso_bit = (unsigned char[]){ 0xef, 0x40, 0x17 }[byte - 1] >> bit & 1;
+					else
+						miso_bit = pattern(byte) >> bit & 1;
 					pbits++;
 				}
 			}
@@ -107,8 +113,13 @@ int libusb_handle_events_timeout(libusb_context *ctx, struct timeval *tv)
 		struct libusb_transfer *t = pending[i];
 		if (t->endpoint != READ_EP)
 			continue;
-		unsigned int n = 0;
-		while (n < (unsigned int)t->length && miso_head != miso_tail)
+		unsigned int n = 0, len = t->length;
+		if (short_reply && len > 1) {		/* one answer cut short, its bytes lost */
+			len--;
+			short_reply = 0;
+			miso_head++;
+		}
+		while (n < len && miso_head != miso_tail)
 			t->buffer[n++] = miso[miso_head++ % sizeof(miso)];
 		t->status = LIBUSB_TRANSFER_COMPLETED;
 		t->actual_length = n;
@@ -201,7 +212,14 @@ int main(void)
 	/* -S: SPI by the pins */
 	check(ch341a_set_speed("15M") < 0 && ch341a_set_speed("100k") == 0 && pin_half_us == 5,
 	      "-S takes the CH341A clocks only (any case): 100K is 5 us a half period");
-	check(pins_ok(4, 256, 1), "by the pins at 100K: command, then a read, data in order");
+	{
+		unsigned char cmd = 0x9F, id[3] = { 0 };
+		miso_head = miso_tail = 0;
+		ch341a_cs(true);
+		check(ch341a_spi_send_command(1, 3, &cmd, id) == 0 && id[0] == 0xef && id[1] == 0x40 && id[2] == 0x17,
+		      "by the pins at 100K: JEDEC ID (9F) reads ef 40 17, as Detect does");
+	}
+	check(pins_ok(4, 256, 1), "  command, then a read, data in order");
 	check(min_half >= 5 && uio_bad == 0, "  every half period of SCK at least 5 us; well-formed UIO packets");
 	check(!(pins & 0x08) && !(pins & 0x01), "  SCK low at the end, CS still low");
 	check(pins_ok(5, 3000, 1), "  3000-byte read in several transfers");
@@ -212,6 +230,14 @@ int main(void)
 	      "by the pins at 1K: at least 500 us a half period, each delay command at most 63 us");
 	pin_half_us = 0;
 	check(read_ok(4, 256), "back on the stream: as before");
+
+	{
+		static unsigned char r[100];
+		clocked = 0; miso_head = miso_tail = 0; short_reply = 1;
+		check(ch341a_spi_send_command(0, 100, NULL, r) != 0, "a short USB answer is an error, not data at the wrong offset");
+	}
+	short_reply = 0;
+	check(read_ok(4, 256), "  and the next transfer works");
 
 	if (!fail) printf("all ch341sim checks passed\n");
 	return fail;

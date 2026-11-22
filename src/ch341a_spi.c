@@ -189,11 +189,13 @@ static int32_t usb_xfer(const char *func, unsigned int writecnt, unsigned int re
 	unsigned int out_done = 0;
 	uint8_t *in_buf = readarr;
 	int state_in[USB_IN_TRANSFERS] = {0};
+	unsigned int asked[USB_IN_TRANSFERS] = {0};	/* the bytes each IN transfer waits for */
 	do {
 		/* Schedule new reads as long as there are free transfers and unscheduled bytes to read. */
 		while ((in_done + in_active) < readcnt && state_in[free_idx] == TRANS_IDLE) {
 			unsigned int cur_todo = min(in_chunk, readcnt - in_done - in_active);
 			transfer_ins[free_idx]->length = cur_todo;
+			asked[free_idx] = cur_todo;
 			transfer_ins[free_idx]->buffer = in_buf;
 			transfer_ins[free_idx]->user_data = &state_in[free_idx];
 			transfer_ins[free_idx]->timeout = timeout;
@@ -225,6 +227,14 @@ static int32_t usb_xfer(const char *func, unsigned int writecnt, unsigned int re
 		/* Check for completed transfers. */
 		while (state_in[in_idx] != TRANS_IDLE && state_in[in_idx] != TRANS_ACTIVE) {
 			if (state_in[in_idx] == TRANS_ERR) {
+				goto err;
+			}
+			/* a short answer: its place in the buffer is taken already, so the bytes
+			   after it would land at the wrong offset */
+			if ((unsigned int)state_in[in_idx] != asked[in_idx]) {
+				printf("%s: short answer, %d of %u bytes\n", func, state_in[in_idx], asked[in_idx]);
+				state_in[in_idx] = TRANS_IDLE;
+				in_active -= asked[in_idx];
 				goto err;
 			}
 			/* If a transfer is done, record the number of bytes read and reuse it later. */
