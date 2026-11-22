@@ -294,6 +294,14 @@ int main(void)
 		feat[0xa0] = 0x7c;
 		/* the GigaDevice mask 0xC1 keeps bit 6: only the check after it clears that */
 		check(snand_init() > 0 && !(feat[0xa0] & 0x78), "  a maker mask that keeps a BP bit (GD5F1GQ4UB, 0xC1): the check clears it");
+		e = NULL;
+		for (int i = 0; i < n && !e; i++)
+			if (!strcmp(spi_nand_flash_tables[i].ptr_name, "ESMT F50L1G41LC"))
+				e = &spi_nand_flash_tables[i];
+		chip(e->mfr_id, e->dev_id, e->dev_id_2);
+		feat[0xa0] = 0x7c;
+		/* no unlock branch of its own (maker code 8C): the check after them unlocks it */
+		check(snand_init() > 0 && !(feat[0xa0] & 0x7c), "  ESMT F50L1G41LC, A0 0x7c at shipment: unlocked by the check");
 	}
 
 	chip(0xef, 0xaa, 0x21);
