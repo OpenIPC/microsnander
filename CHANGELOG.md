@@ -4,6 +4,15 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.50.0 — 2026-11-22
+
+- Android app: camex 5.2.1 in the tunnel. SETTINGS has a new field, Network name: with a
+  network the server's address and the name are enough, the server key and psk may stay empty
+  (they still work as before without one). The library is camex's client profile (no server
+  code in the app). The default MTU follows the transport: 1420 over UDP, 1500 over TCP (an
+  MTU set in SETTINGS or by the server still wins). The protocol talks to camex 4.x servers
+  and clients both ways.
+
 ## 1.49.0 — 2026-11-21
 
 - Android app: one VPN without a tug of war (camex 4.4.1). The service's own starts of the
