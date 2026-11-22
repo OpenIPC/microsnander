@@ -101,6 +101,7 @@
 #define _SPI_NAND_MANUFACTURER_ID_GIGADEVICE		0xC8
 #define _SPI_NAND_MANUFACTURER_ID_WINBOND		0xEF
 #define _SPI_NAND_MANUFACTURER_ID_ESMT			0xC8
+#define _SPI_NAND_MANUFACTURER_ID_ESMT_8C		0x8C	/* ESMT's own maker code, F50L1G41LC on */
 #define _SPI_NAND_MANUFACTURER_ID_MXIC			0xC2
 #define _SPI_NAND_MANUFACTURER_ID_ZENTEL		0xC8
 #define _SPI_NAND_MANUFACTURER_ID_ETRON			0xD5
@@ -136,6 +137,7 @@
 #define _SPI_NAND_DEVICE_ID_F50L512M41A		0x20
 #define _SPI_NAND_DEVICE_ID_F50L1G41A0		0x21
 #define _SPI_NAND_DEVICE_ID_F50L1G41LB		0x01
+#define _SPI_NAND_DEVICE_ID_F50L1G41LC		0x2C
 #define _SPI_NAND_DEVICE_ID_F50L2G41LB		0x0A
 #define _SPI_NAND_DEVICE_ID_1_W25N01GV		0xAA
 #define _SPI_NAND_DEVICE_ID_2_W25N01GV		0x21
@@ -812,6 +814,26 @@ static const struct SPI_NAND_FLASH_INFO_T spi_nand_flash_tables[] = {
 		mfr_id:					_SPI_NAND_MANUFACTURER_ID_ESMT,
 		dev_id:					_SPI_NAND_DEVICE_ID_F50L1G41LB,
 		ptr_name:				"ESMT F50L1G41LB",
+		device_size:				_SPI_NAND_CHIP_SIZE_1GBIT,
+		page_size:				_SPI_NAND_PAGE_SIZE_2KBYTE,
+		oob_size:				_SPI_NAND_OOB_SIZE_64BYTE,
+		erase_size:				_SPI_NAND_BLOCK_SIZE_128KBYTE,
+		dummy_mode:				SPI_NAND_FLASH_READ_DUMMY_BYTE_APPEND,
+		read_mode:				SPI_NAND_FLASH_READ_SPEED_MODE_DUAL,
+		write_mode:				SPI_NAND_FLASH_WRITE_SPEED_MODE_SINGLE,
+		oob_free_layout:			&ooblayout_esmt_41lb,
+		feature:				SPI_NAND_FLASH_FEATURE_NONE,
+	},
+
+	/* F50L1G41LC (2P) datasheet rev. 1.3: READ ID 9Fh, a dummy byte, 8Ch 2Ch; 1 Gbit,
+	   (2K + 64) byte pages, (128K + 4K) byte blocks, 1024 blocks; ECC on at power-up
+	   (B0h bit 4), ECC status C0h bits 5:4, 10b uncorrected; A0h 7Ch at shipment (all
+	   blocks locked), cleared by the common unlock. The LB with ESMT's maker code: the
+	   spare area as the LB's (user data I, ECC protected, at 4..7 of each 16 bytes) */
+	{
+		mfr_id:					_SPI_NAND_MANUFACTURER_ID_ESMT_8C,
+		dev_id:					_SPI_NAND_DEVICE_ID_F50L1G41LC,
+		ptr_name:				"ESMT F50L1G41LC",
 		device_size:				_SPI_NAND_CHIP_SIZE_1GBIT,
 		page_size:				_SPI_NAND_PAGE_SIZE_2KBYTE,
 		oob_size:				_SPI_NAND_OOB_SIZE_64BYTE,
@@ -4141,12 +4163,14 @@ static SPI_NAND_FLASH_RTN_T ecc_fail_check( u32 page_number, u8 status )
 			rtn_status = SPI_NAND_FLASH_RTN_DETECTED_BAD_BLOCK;
 		}
 	}
-	else if((ptr_dev_info_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_ESMT) &&
+	else if(((ptr_dev_info_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_ESMT) &&
 		((ptr_dev_info_t->dev_id == _SPI_NAND_DEVICE_ID_F50D1G41LB) ||
 		 (ptr_dev_info_t->dev_id == _SPI_NAND_DEVICE_ID_F50L512M41A) ||
 		 (ptr_dev_info_t->dev_id == _SPI_NAND_DEVICE_ID_F50L1G41A0) ||
 		 (ptr_dev_info_t->dev_id == _SPI_NAND_DEVICE_ID_F50L1G41LB) ||
-		 (ptr_dev_info_t->dev_id == _SPI_NAND_DEVICE_ID_F50L2G41LB)))
+		 (ptr_dev_info_t->dev_id == _SPI_NAND_DEVICE_ID_F50L2G41LB))) ||
+		((ptr_dev_info_t->mfr_id == _SPI_NAND_MANUFACTURER_ID_ESMT_8C) &&
+		 (ptr_dev_info_t->dev_id == _SPI_NAND_DEVICE_ID_F50L1G41LC)))
 	{
 		if(((status & 0x30) >> 4) == 0x2)
 		{
