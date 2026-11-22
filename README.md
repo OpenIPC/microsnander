@@ -52,6 +52,7 @@ sudo ./microsnander -w firmware.bin -v
 - [Examples](#examples)
 - [Web mode](#web-mode)
 - [Android app](#android-app)
+- [In-circuit programming](#in-circuit-programming)
 - [SigmaStar ISP](#sigmastar-isp)
 - [Supported chips](#supported-chips)
 - [Chip voltage](#chip-voltage)
@@ -264,7 +265,8 @@ other parts on the same lines do not keep up with the fixed clock: `100K`, `50K`
 `5K`, `2K`, `1K`. The CH341A cannot slow its own SPI, so microsnander moves the pins itself
 (SPI mode 0); the clock given is the most any half period gets, and the USB packets make the
 real one slower. At `100K` an 8 MB chip reads in about 25 minutes (5.4 KB/s), so read and write
-a part with `-a` and `-l` where you can. Without `-S` the CH341A runs at its fixed clock.
+a part with `-a` and `-l` where you can. Without `-S` the CH341A runs at its fixed clock. Checks on a board:
+[In-circuit programming](#in-circuit-programming).
 
 When the chip's ID reads `ff ff ff` or `00 00 00`, no chip answered: the message says what to
 check (the clip or socket and pin 1, the power, a SoC that holds the bus).
@@ -557,6 +559,38 @@ camex server 3.19.0 or later), and the tunnel lets new connections through to th
 - Only the tunnel network and the server's routes go through the VPN, never all the traffic.
 
 Build: `cd android && gradle assembleDebug` with the Android SDK and NDK r27c.
+
+## In-circuit programming
+
+A SPI NOR chip can be read and written on its board, with a test clip (SOIC-8) on the chip and
+nothing desoldered:
+
+- Keep the board unpowered: the programmer powers the chip through the clip, and the SoC stays
+  off the bus. A board that is powered drives the same lines and the chip answers wrongly or
+  not at all.
+- Use a 3.3 V programmer: the black CH341A board puts 5 V on the data lines unless it is
+  modified for 3.3 V.
+- `ID ff ff ff` (or `00 00 00`) means that no chip answers: almost always the clip. Seat it
+  again, check pin 1, and detect once more before anything else.
+- Other parts on the same lines slow the edges down. When the chip is found but a read is not
+  the same twice, slow the clock: on a CH341A with `-S` (`100K` down to `1K`, SPI by the pins,
+  see [Usage](#usage)), on a CH347 with `-S` down to `468.75K`.
+- Read with `-v` (two reads compared) before writing anything, and keep the dump.
+
+Checked on a board (2026-11-22): a GigaDevice GD25Q64CSIG (8 MB) under a clip, the board
+unpowered, a CH341A modified for 3.3 V:
+
+| Check                                         | Result                                                                        |
+|-----------------------------------------------|-------------------------------------------------------------------------------|
+| Chip ID, 10 times at each clock               | `c8 40 17` every time: fixed clock, 100K, 50K, 20K, 10K, 5K, 2K, 1K           |
+| Whole chip at the fixed clock, `-r -v`        | both reads the same, 136 s                                                    |
+| First 256 KB at `-S 100K`                     | the same as at the fixed clock, 43 s (about 6 KB/s)                           |
+| First 256 KB at `-S 10K`                      | the same as at the fixed clock, 233 s (about 1.1 KB/s)                        |
+| Self-test `-t` at `-S 100K`                   | a 64 KB block erased (170 ms), written (11.6 s), read back, its data put back |
+| Whole chip compared with the first dump, `-c` | `Status: OK`                                                                  |
+
+The first detections there read `ff ff ff`: the clip sat badly. Seated again, every clock
+answered.
 
 ## SigmaStar ISP
 
