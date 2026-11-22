@@ -23,7 +23,7 @@ static const struct programmer fake341 = { .key = "ch341a", .name = "CH341A", .s
 static int use_ch341a, no_chip;		/* the CH341A in place of the CH347; no chip in it */
 const struct programmer *programmer;
 
-int programmer_init(bool need_clock) { (void)need_clock; if (fail_open) return -1; programmer = use_ch341a ? &fake341 : &fake; opens++; return 0; }
+int programmer_init(const char *speed) { (void)speed; if (fail_open) return -1; programmer = use_ch341a ? &fake341 : &fake; opens++; return 0; }
 int programmer_shutdown(void) { programmer = NULL; return 0; }
 static int f_read(unsigned char *b, unsigned long from, unsigned long len) { memcpy(b, mem + from, len); return len; }
 static int write_no, fail_write;	/* fail_write: the write of that number (from 1) fails */
@@ -340,7 +340,20 @@ int main(void)
 	}
 	extra = "Host: 127.0.0.1:8080\r\nX-MicroSNANDer-Name: my image.BIN\r\n";
 	check(request("POST", "/api/upload", NULL, img, sizeof(img)) == 200, "  imported again, for the write");
-	extra = CHIP80 "X-MicroSNANDer-File: import-my_image.bin\r\n";
+	char got[128] = "";
+	{
+		/* the name it got: the imports of one second have the same time, so which of them
+		   the pruning dropped (and so whether this one is import-my_image.bin) varies */
+		static char hdr[256];
+		const char *at = strstr(resp, "Imported ");
+		if (at)
+			sscanf(at + 9, "%127[^ \r\n]", got);
+		size_t k = strlen(got);
+		if (k && got[k - 1] == '.')
+			got[k - 1] = 0;
+		snprintf(hdr, sizeof(hdr), CHIP80 "X-MicroSNANDer-File: %s\r\n", got);
+		extra = hdr;
+	}
 	check(request("POST", "/api/write", NULL, NULL, 0) == 202, "Write of the imported file: no upload");
 	wait_idle();
 	request("GET", "/api/state", NULL, NULL, 0);
@@ -349,8 +362,8 @@ int main(void)
 	{
 		struct stat sb;
 		char path[256];
-		snprintf(path, sizeof(path), "%s/import-my_image.bin", web_dir);
-		check(!stat(path, &sb) && sb.st_size == (off_t)sizeof(img), "  and the file stays for another chip");
+		snprintf(path, sizeof(path), "%s/%s", web_dir, got);
+		check(*got && !stat(path, &sb) && sb.st_size == (off_t)sizeof(img), "  and the file stays for another chip");
 	}
 	extra = CHIP80 "X-MicroSNANDer-File: import-none.bin\r\n";
 	check(request("POST", "/api/write", NULL, NULL, 0) == 404 && !st.uploading, "  a dump that is not there: 404, the slot free");

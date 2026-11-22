@@ -183,6 +183,7 @@ const struct programmer *sigmastar_attach(const struct programmer *p)
 	isp.send = isp_send;
 	isp.cs = isp_cs;
 	isp.clock = false;
+	isp.set_speed = NULL;
 	isp.flash_init = NULL;
 	isp.on_board = true;
 	return &isp;

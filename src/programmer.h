@@ -35,15 +35,19 @@ struct programmer {
 	int (*i2c_read)(unsigned char addr, unsigned char *buf, unsigned int len);
 	unsigned int i2c_max;
 	bool on_board;		/* the chip sits on its board: the board powers it, no lines of ours go to it */
+	/* -S: the SPI clocks it takes (clock true); -1: not one of speed_list() */
+	int (*set_speed)(const char *speed);
+	const char *(*speed_list)(void);
 };
 
 extern const struct programmer *programmer;	/* the one in use */
 
 int programmer_select(const char *name);	/* -P; -1: unknown name */
 const char *programmer_names(void);
-/* need_clock: -S was given. -1: none found or init failed; -2: refused
-   (several found and no -P, or no settable clock), the message printed */
-int programmer_init(bool need_clock);
+/* speed: -S, or NULL. -1: none found or init failed; -2: refused (several
+   found and no -P, no settable clock, or a clock it does not take), the
+   message printed */
+int programmer_init(const char *speed);
 int programmer_shutdown(void);
 
 #endif /* __PROGRAMMER_H__ */

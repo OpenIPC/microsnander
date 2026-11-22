@@ -28,9 +28,13 @@ static int q(void) { printf("clear QE\n"); return strcmp(env("MS_FAIL"),"qe") ? 
 static int i2c_sp(unsigned int sp) { (void)sp; return 0; }
 static int i2c_w(unsigned char a, const unsigned char *b, unsigned int n) { (void)b; (void)n; return strcmp(env("MS_I2C"), "none") && (a == 0x49 || a == 0x59) ? 0 : -1; }
 static int i2c_r(unsigned char a, unsigned char *b, unsigned int n) { if (n) memset(b, 0, n); return i2c_w(a, NULL, 0); }
+int ch347_set_speed(const char *s);
+const char *ch347_speed_list(void);
+static int ch341a_sp(const char *s) { return strcasecmp(s, "100K") && strcasecmp(s, "50K") && strcasecmp(s, "20K") && strcasecmp(s, "10K") && strcasecmp(s, "5K") && strcasecmp(s, "2K") && strcasecmp(s, "1K") ? -1 : 0; }
+static const char *ch341a_sl(void) { return "100K, 50K, 20K, 10K, 5K, 2K, 1K"; }
 static const struct programmer stubprogs[] = {
-	{ .key = "ch341a", .name = "CH341A", .send = (void *)1, .i2c_speed = i2c_sp, .i2c_write = i2c_w, .i2c_read = i2c_r, .i2c_max = 24 },
-	{ .key = "ch347", .name = "CH347", .send = (void *)1, .clock = true, .i2c_speed = i2c_sp, .i2c_write = i2c_w, .i2c_read = i2c_r, .i2c_max = 60 },
+	{ .key = "ch341a", .name = "CH341A", .send = (void *)1, .clock = true, .set_speed = ch341a_sp, .speed_list = ch341a_sl, .i2c_speed = i2c_sp, .i2c_write = i2c_w, .i2c_read = i2c_r, .i2c_max = 24 },
+	{ .key = "ch347", .name = "CH347", .send = (void *)1, .clock = true, .set_speed = ch347_set_speed, .speed_list = ch347_speed_list, .i2c_speed = i2c_sp, .i2c_write = i2c_w, .i2c_read = i2c_r, .i2c_max = 60 },
 	{ .key = "ezp", .name = "EZP" } };
 static const struct programmer *chosen = &stubprogs[0];	/* auto: the stub has a CH341A */
 const struct programmer *programmer;
@@ -41,7 +45,7 @@ int programmer_select(const char *n) {
 const char *programmer_names(void) { return "ch341a, ch347, ezp, auto"; }
 int ch347_set_speed(const char *s) { return strcasecmp(s, "60M") && strcasecmp(s, "30M") && strcasecmp(s, "15M") && strcasecmp(s, "7.5M") && strcasecmp(s, "3.75M") && strcasecmp(s, "1.875M") && strcasecmp(s, "937.5K") && strcasecmp(s, "468.75K") ? -1 : 0; }
 const char *ch347_speed_list(void) { return "60M, 30M, 15M, 7.5M, 3.75M, 1.875M, 937.5K, 468.75K"; }
-int programmer_init(bool need_clock) { if (need_clock && !chosen->clock) { printf("-S: fixed clock\n"); return -2; } programmer = chosen; if (*env("MS_PROGRAMMER")) printf("programmer: %s\n", programmer->key); size_t n = *env("MS_BIG") ? sizeof(chip) : 65536; FILE *f = fopen("chip.img", "rb"); if (f) { if (fread(chip, 1, n, f) != n) memset(chip, 0, sizeof(chip)); fclose(f); } return 0; }
+int programmer_init(const char *speed) { if (speed && !chosen->set_speed) { printf("-S: fixed clock\n"); return -2; } if (speed && chosen->set_speed(speed) < 0) { printf("Unknown SPI speed %s for the %s; use one of: %s.\n", speed, chosen->name, chosen->speed_list()); return -2; } if (speed) printf("speed: %s %s\n", chosen->key, speed); programmer = chosen; if (*env("MS_PROGRAMMER")) printf("programmer: %s\n", programmer->key); size_t n = *env("MS_BIG") ? sizeof(chip) : 65536; FILE *f = fopen("chip.img", "rb"); if (f) { if (fread(chip, 1, n, f) != n) memset(chip, 0, sizeof(chip)); fclose(f); } return 0; }
 int web_serve(const char *l, const char *k, const char *d, unsigned long long a, unsigned long long n)
 { printf("web: %s key=%s dir=%s addr=0x%llx len=0x%llx\n", l, k ? k : "-", d ? d : "-", a, n); return 0; }
 int programmer_shutdown(void) { if (*env("MS_LARGEST")) printf("largest 0x%lx\n", largest); size_t n = *env("MS_BIG") ? sizeof(chip) : 65536; FILE *f = fopen("chip.img", "wb"); if (!f || fwrite(chip, 1, n, f) != n) return -1; fclose(f); return 0; }
