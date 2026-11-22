@@ -14,7 +14,7 @@ MicroSNANDer is a programmer for SPI NOR and SPI NAND flash chips with the cheap
 CH347 and EZP USB programmers, six models in all: a command-line tool for Linux with
 a web page built in, and an app for Android phones and TV boxes. It reads, writes, erases,
 verifies and compares the flash of cameras, routers and other boards, removes the write protection of SPI NOR chips, keeps the
-factory bad blocks of SPI NAND chips, and knows 441 SPI NOR and 170 SPI NAND chips; a SPI NOR
+factory bad blocks of SPI NAND chips, and knows 441 SPI NOR and 171 SPI NAND chips; a SPI NOR
 chip that is not on the list is found by its own SFDP table. Each release file is about 240–290 KB.
 
 It is a stripped-down, extended, deeply modified and optimized version of
@@ -592,7 +592,7 @@ hundred KB is minutes; a whole 16 MB chip is much longer.
 
 `microsnander -L` prints the list: 441 SPI NOR chips (Winbond, Eon, Fudan
 Microelectronics FM25Q, GigaDevice, Macronix, Spansion, XMC, XTX, Zbit, Giantec
-GM25Q, ISSI, Micron, Boya, Puya and others) and 170 SPI NAND chips (Etron, GigaDevice, Heyang, Foresee, ESMT, Dosilicon, XTX,
+GM25Q, ISSI, Micron, Boya, Puya and others) and 171 SPI NAND chips (Etron, GigaDevice, Heyang, Foresee, ESMT, Dosilicon, XTX,
 Micron, Toshiba/Kioxia, Winbond, Macronix and others).
 A SPI NOR chip that is not on the list but has an SFDP table (JESD216; most chips
 made since about 2011) is found by it: its size, the sector erase and the 4-byte
