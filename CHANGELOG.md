@@ -4,6 +4,13 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.52.0 — 2026-11-22
+
+- SPI NAND: ESMT F50L1G41LC (ID `8C 2C`, 1 Gbit, 2 KB pages with 64 bytes of spare area, 128 KB
+  blocks, internal ECC on), the newer F50L1G41LB with ESMT's own maker code. Its data come from
+  ESMT's datasheet (rev. 1.3); its blocks are locked when shipped and are unlocked as other chips'.
+  171 SPI NAND chips in all.
+
 ## 1.51.1 — 2026-11-22
 
 - Android app: camex 6.0.0 in the tunnel. With a Network name and no server key, the tunnel no
