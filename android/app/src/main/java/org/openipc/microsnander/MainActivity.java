@@ -209,22 +209,22 @@ public class MainActivity extends Activity {
         buttons[1].setOnClickListener(v -> read());
         // Erase and Write detect first: no question and no file picker without a chip
         // the next step goes to the screen there is when Detect ends (a, not this)
-        buttons[2].setOnClickListener(v -> detectThen((a, r) -> new AlertDialog.Builder(a)
+        buttons[2].setOnClickListener(v -> detectThen((a, r) -> Brass.alert(new AlertDialog.Builder(a)
                 .setMessage(a.getString(R.string.erase_confirm, r.chip, sizeOf(r.size)))
                 .setPositiveButton(R.string.erase, (d, w) -> a.erase(r))
-                .setNegativeButton(android.R.string.cancel, null).show()));
+                .setNegativeButton(android.R.string.cancel, null).show())));
         // Write: the dump shown (the last Read or Import) without a file to pick; none: the picker
         buttons[3].setOnClickListener(v -> detectThen((a, r) -> a.writeShown(r)));
         buttons[4].setOnClickListener(v -> run(R.string.reading_registers, true, (fd, vid, pid, p) -> Native.registers(fd, vid, pid)));
-        buttons[5].setOnClickListener(v -> detectThen((a, r) -> new AlertDialog.Builder(a)
+        buttons[5].setOnClickListener(v -> detectThen((a, r) -> Brass.alert(new AlertDialog.Builder(a)
                 .setMessage(a.getString(R.string.unprotect_confirm, r.chip, sizeOf(r.size)))
                 .setPositiveButton(R.string.unprotect, (d, w) -> a.unprotect(r))
-                .setNegativeButton(android.R.string.cancel, null).show()));
+                .setNegativeButton(android.R.string.cancel, null).show())));
         // the self-test erases the first block and writes it back: Detect, then the question
-        buttons[6].setOnClickListener(v -> detectThen((a, r) -> new AlertDialog.Builder(a)
+        buttons[6].setOnClickListener(v -> detectThen((a, r) -> Brass.alert(new AlertDialog.Builder(a)
                 .setMessage(a.getString(R.string.selftest_confirm, r.chip, sizeOf(r.size)))
                 .setPositiveButton(R.string.selftest, (d, w) -> a.selftest(r))
-                .setNegativeButton(android.R.string.cancel, null).show()));
+                .setNegativeButton(android.R.string.cancel, null).show())));
         export.setOnClickListener(v -> exportMenu());
         importButton.setOnClickListener(v -> importFile());
         listenForPermission();
@@ -438,10 +438,10 @@ public class MainActivity extends Activity {
                     name, reg + 1, r.chip, sizeOf(r.size), v, nv, 7 - k);
             if (RISKY.contains(" " + name + " "))
                 q += "\n\n" + a.getString(R.string.bit_risky);
-            new AlertDialog.Builder(a)
+            Brass.alert(new AlertDialog.Builder(a)
                     .setMessage(q)
                     .setPositiveButton(set ? R.string.bit_set : R.string.bit_clear, (d, w) -> a.writeRegister(r, reg, 1 << (7 - k), nv))
-                    .setNegativeButton(android.R.string.cancel, null).show();
+                    .setNegativeButton(android.R.string.cancel, null).show());
         });
     }
 
@@ -690,10 +690,10 @@ public class MainActivity extends Activity {
             pickWrite();
             return;
         }
-        new AlertDialog.Builder(this)
+        Brass.alert(new AlertDialog.Builder(this)
                 .setMessage(getString(R.string.write_dump_confirm, r.chip, sizeOf(r.size), f.getName(), sizeOf(f.length())))
                 .setPositiveButton(R.string.write, (d, w) -> write(Uri.fromFile(f), r))
-                .setNegativeButton(android.R.string.cancel, null).show();
+                .setNegativeButton(android.R.string.cancel, null).show());
     }
 
     interface Picked { void picked(Uri u); }
@@ -730,9 +730,9 @@ public class MainActivity extends Activity {
             showFailed(getString(R.string.no_files));
             return;
         }
-        new AlertDialog.Builder(this).setTitle(title)
+        Brass.alert(new AlertDialog.Builder(this).setTitle(title)
                 .setItems(names.toArray(new String[0]), (d, w) -> then.picked(uris.get(w)))
-                .setNegativeButton(android.R.string.cancel, null).show();
+                .setNegativeButton(android.R.string.cancel, null).show());
     }
 
     // ---- export, import ----
@@ -908,10 +908,10 @@ public class MainActivity extends Activity {
             showFailed(getString(R.string.write_again));
             return;
         }
-        new AlertDialog.Builder(this)
+        Brass.alert(new AlertDialog.Builder(this)
                 .setMessage(getString(R.string.write_confirm, r.chip, sizeOf(r.size)))
                 .setPositiveButton(R.string.write, (d, w) -> write(u, r))
-                .setNegativeButton(android.R.string.cancel, null).show();
+                .setNegativeButton(android.R.string.cancel, null).show());
     }
 
     /** the file is staged and written in the worker, the screen busy all along */

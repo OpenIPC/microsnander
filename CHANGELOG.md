@@ -4,6 +4,12 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.55.1 — 2026-11-24
+
+- Android app: no system face left on its screens: the check boxes and radio buttons, the labels
+  of the SETTINGS fields and the subtitle are in Brass Mono too, and the system dialogs (the
+  confirmations, the file list) have a Brass Serif title and buttons and Brass Mono text.
+
 ## 1.55.0 — 2026-11-23
 
 - Android app: the fonts of brass 1.5.1 on its screens, as on the web page: Brass Serif for the

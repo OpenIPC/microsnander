@@ -76,21 +76,24 @@ final class Brass {
     }
 
     /**
-     * The brass faces over a tree of views from XML: a font family from an XML
-     * file cannot name an asset before Android 8 (res/font needs API 26), so the
-     * layout says serif or monospace and this puts Brass Serif or Brass Mono in
-     * their place; bold monospace becomes Brass Mono Bold. Other faces stay.
+     * The brass faces over a tree of views: a font family from an XML file
+     * cannot name an asset before Android 8 (res/font needs API 26), so the
+     * layout says serif for a heading or a button, and this puts Brass Serif
+     * there and Brass Mono on all other text (brass 1.5.1: no system face on
+     * the screen); bold becomes Brass Mono Bold. Faces set already stay.
      */
     static void fonts(View v) {
         if (v instanceof TextView) {
             TextView t = (TextView) v;
             Typeface f = t.getTypeface();
-            if (f != null) {
-                int style = f.getStyle();
-                if (f.equals(Typeface.create(Typeface.SERIF, style)))
-                    t.setTypeface(serif(v.getContext()));
-                else if (f.equals(Typeface.create(Typeface.MONOSPACE, style)))
-                    t.setTypeface((style & Typeface.BOLD) != 0 ? monoBold(v.getContext()) : mono(v.getContext()));
+            Context c = v.getContext();
+            loadFonts(c);
+            if (f != serif && f != mono && f != monoBold) {
+                int style = f == null ? Typeface.NORMAL : f.getStyle();
+                if (f != null && f.equals(Typeface.create(Typeface.SERIF, style)))
+                    t.setTypeface(serif);
+                else
+                    t.setTypeface((style & Typeface.BOLD) != 0 ? monoBold : mono);
             }
         }
         if (v instanceof android.view.ViewGroup) {
@@ -200,6 +203,37 @@ final class Brass {
         return p;
     }
 
+    /**
+     * A system dialog in the brass faces, once shown: the title and the buttons
+     * Brass Serif, the message and a list Brass Mono (its rows as they come).
+     */
+    @android.annotation.SuppressLint("DiscouragedApi")   // the title's id is the system's, with no R constant
+    static android.app.AlertDialog alert(android.app.AlertDialog d) {
+        if (d.getWindow() == null)
+            return d;
+        fonts(d.getWindow().getDecorView());
+        int id = d.getContext().getResources().getIdentifier("alertTitle", "id", "android");
+        View title = id == 0 ? null : d.findViewById(id);
+        if (title instanceof TextView)
+            ((TextView) title).setTypeface(serif(d.getContext()));
+        for (int b : new int[] {android.app.AlertDialog.BUTTON_POSITIVE, android.app.AlertDialog.BUTTON_NEGATIVE,
+                android.app.AlertDialog.BUTTON_NEUTRAL})
+            if (d.getButton(b) != null)
+                d.getButton(b).setTypeface(serif(d.getContext()));
+        if (d.getListView() != null)
+            d.getListView().setOnHierarchyChangeListener(new android.view.ViewGroup.OnHierarchyChangeListener() {
+                @Override
+                public void onChildViewAdded(View parent, View child) {
+                    fonts(child);
+                }
+
+                @Override
+                public void onChildViewRemoved(View parent, View child) {
+                }
+            });
+        return d;
+    }
+
     static Button button(Context c, int text) {
         Button b = new Button(c, null, 0, R.style.Brass);
         b.setText(text);
@@ -222,6 +256,8 @@ final class Brass {
     static Dialog dialog(Activity a, View frame, int maxWidthDp, float fill) {
         Dialog d = new Dialog(a, android.R.style.Theme_Material_Dialog_NoActionBar);
         d.setContentView(frame);
+        // the brass faces on what is made in code without one (labels, check boxes), once all is there
+        d.setOnShowListener(x -> fonts(frame));
         if (d.getWindow() != null) {
             d.getWindow().setBackgroundDrawable(new ColorDrawable(0));
             DisplayMetrics dm = a.getResources().getDisplayMetrics();
