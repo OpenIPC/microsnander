@@ -12,6 +12,8 @@
 # spi_controller.c against a recording programmer (tests/spisim.c): short
 # writes held while CS is low go out in one transfer; web.c with a fake
 # flash (tests/websim.c): the requests, the operations, the dump names.
+# The brass fonts of the web page and the Android app match brand's
+# (tests/fonts.sha256).
 #
 #   tests/run.sh            (CC=<compiler> to choose the compiler)
 #
@@ -287,5 +289,8 @@ grep -a '^ok\|^FAIL' usbfssim.log
 grep -a '^ok\|^FAIL' ispsim.log
 ./websim > websim.log 2>&1 || fail=1
 grep -a '^ok\|^FAIL' websim.log
+# the fonts, byte for byte as brand gives them
+grep -v '^#' "$T/fonts.sha256" | (cd "$T/.." && sha256sum -c) > fonts.log 2>&1 || fail=1
+sed 's/^\(.*\): OK$/ok   font \1/; s/^\(.*\): FAILED.*/FAIL font \1 differs from brand/' fonts.log
 [ "$fail" = 0 ] && echo "all tests passed"
 exit $fail

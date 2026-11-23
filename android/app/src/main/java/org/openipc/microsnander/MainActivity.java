@@ -135,6 +135,7 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle saved) {
         super.onCreate(saved);
         setContentView(R.layout.activity_main);
+        Brass.fonts(findViewById(android.R.id.content));
         usb = (UsbManager) getSystemService(Context.USB_SERVICE);
         meta = findViewById(R.id.meta);
         LinearLayout board = findViewById(R.id.board);
@@ -744,7 +745,7 @@ public class MainActivity extends Activity {
         frame.addView(Brass.title(this, R.string.export_title));
         TextView f = new TextView(this);
         f.setText(getString(R.string.export_file, dump.getName(), sizeOf(dump.length())));
-        f.setTypeface(android.graphics.Typeface.MONOSPACE);
+        f.setTypeface(Brass.mono(this));
         f.setTextColor(col(R.color.dim));
         f.setGravity(Gravity.CENTER_HORIZONTAL);
         f.setPadding(0, Brass.dp(this, 6), 0, Brass.dp(this, 10));

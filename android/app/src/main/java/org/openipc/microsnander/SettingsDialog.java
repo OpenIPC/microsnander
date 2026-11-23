@@ -48,6 +48,7 @@ final class SettingsDialog {
         label(a, box, a.getString(R.string.remote_port));
         EditText port = field(a, box, String.valueOf(Settings.port(a)), null);
         port.setInputType(InputType.TYPE_CLASS_NUMBER);
+        port.setTypeface(Brass.mono(a));      // a new input type puts the system's face back
         label(a, box, a.getString(R.string.remote_password));
         // shown, not dotted: typed with a TV remote, read back before Save
         EditText password = field(a, box, Settings.password(a), a.getString(R.string.remote_password_hint));
@@ -90,11 +91,13 @@ final class SettingsDialog {
                 if (f.kind == Field.Kind.SECRET) {
                     int hidden = InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD;
                     e.setInputType(hidden);
+                    e.setTypeface(Brass.mono(a));
                     CheckBox show = new CheckBox(a);
                     show.setText(Field.SHOW_SECRET);
                     show.setOnCheckedChangeListener((b, on) -> {
                         e.setInputType(on ? InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
                                 : hidden);
+                        e.setTypeface(Brass.mono(a));
                         e.setSelection(e.getText().length());
                     });
                     box.addView(show);
@@ -179,6 +182,7 @@ final class SettingsDialog {
         e.setSingleLine(true);
         e.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
         e.setImeOptions(EditorInfo.IME_ACTION_NEXT);
+        e.setTypeface(Brass.mono(a));         // after the input type: it sets a face of its own
         e.setText(value == null ? "" : value);
         if (hint != null) e.setHint(hint);
         box.addView(e);

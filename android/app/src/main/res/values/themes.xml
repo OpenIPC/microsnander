@@ -37,9 +37,9 @@
         <item name="android:layout_margin">6dp</item>
         <item name="android:focusable">true</item>
     </style>
-    <!-- three buttons a row: a smaller face, so DETECT and REGISTERS fit a phone -->
+    <!-- three buttons a row: a smaller face, so DETECT and REGISTERS in Brass Serif fit a phone -->
     <style name="Brass.Small">
-        <item name="android:textSize">13sp</item>
+        <item name="android:textSize">12sp</item>
         <item name="android:letterSpacing">0.08</item>
         <item name="android:paddingLeft">2dp</item>
         <item name="android:paddingRight">2dp</item>

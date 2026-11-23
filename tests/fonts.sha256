@@ -1,0 +1,10 @@
+# The brass fonts as brand gives them (local/brand/brass/fonts/SHA256SUMS, brass 1.5.1):
+# the web page's (src/fonts) and the Android app's (assets/fonts), byte for byte.
+7e6b2818edbd8f6a01ae80641cc8f16a51080d08fb4e532be3a0b6f74adb07da  src/fonts/OFL.txt
+a533e9dc41fa7cdf54850c4f5deaccad588586bce91a641fbe8448503b8171b6  src/fonts/BrassMono-Bold.woff2
+82556c93d385127871fc82e7338c176b1056c12d9e79f230b49dfe9491544340  src/fonts/BrassMono-Regular.woff2
+d971f32a0c6e2309fec542eaacf5e394f9995bab62a85f1dae8ab902ad3d1893  src/fonts/BrassSerif-Bold.woff2
+7e6b2818edbd8f6a01ae80641cc8f16a51080d08fb4e532be3a0b6f74adb07da  android/app/src/main/assets/fonts/OFL.txt
+190657fa835af45738bcad97b968dde8148ca0e854c1e8737d518919f2394544  android/app/src/main/assets/fonts/BrassMono-Bold.ttf
+e139010955613c1a95467f4fa403bd158b5a608855b4eeac7643e0f635256749  android/app/src/main/assets/fonts/BrassMono-Regular.ttf
+3d0968d62ec97a044c651bbd86b74974e02452be1522bfd4ddc7e4b50bf30bfc  android/app/src/main/assets/fonts/BrassSerif-Bold.ttf

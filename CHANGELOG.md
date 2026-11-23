@@ -4,6 +4,13 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.55.0 — 2026-11-23
+
+- Android app: the fonts of brass 1.5.1 on its screens, as on the web page: Brass Serif for the
+  headings and the buttons, Brass Mono for the board, the labels, the hex view and the log (both
+  IBM Plex, `android/app/src/main/assets/fonts/OFL.txt`). Android 5.0 and later alike; a font that
+  does not load leaves the system's serif or monospace in its place. The APK grows by about 60 KB.
+
 ## 1.54.0 — 2026-11-23
 
 - Web page: the fonts of brass 1.5.0, built in and served by microsnander, in the web mode and the
