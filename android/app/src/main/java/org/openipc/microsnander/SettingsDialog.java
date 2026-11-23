@@ -60,6 +60,7 @@ final class SettingsDialog {
         box.addView(join);
         TextView linkErrors = new TextView(a);
         linkErrors.setTextColor(Brass.color(a, R.color.red));
+        linkErrors.setTypeface(Brass.mono(a));
         linkErrors.setVisibility(View.GONE);
         box.addView(linkErrors);
 
@@ -172,6 +173,7 @@ final class SettingsDialog {
     private static void label(Activity a, LinearLayout box, String text) {
         TextView t = new TextView(a);
         t.setText(text);
+        t.setTypeface(Brass.mono(a));
         t.setTextColor(Brass.color(a, R.color.dim));
         t.setPadding(0, Brass.dp(a, 10), 0, 0);
         box.addView(t);

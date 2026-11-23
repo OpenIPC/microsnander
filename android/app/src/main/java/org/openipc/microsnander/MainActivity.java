@@ -1307,6 +1307,7 @@ public class MainActivity extends Activity {
             TextView name = new TextView(this);
             name.setText(getString(R.string.sr_n, r + 1));
             name.setTextColor(col(R.color.amber));
+            name.setTypeface(Brass.mono(this));
             regs.addView(name);
             for (int k = 0; k < 8; k++) {
                 TextView b = new TextView(this);
@@ -1314,6 +1315,7 @@ public class MainActivity extends Activity {
                 String n = macronix ? BITS_MACRONIX[k] : BITS[r][k];
                 b.setText(n);
                 b.setGravity(Gravity.CENTER);
+                b.setTypeface(Brass.mono(this));
                 b.setTextSize(11);
                 b.setPadding(6, 6, 6, 6);
                 b.setTextColor(col(on ? R.color.ink_dark : R.color.dim));
