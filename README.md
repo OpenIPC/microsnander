@@ -726,6 +726,8 @@ flashrom and ch341eeprom. The original copyrights are kept in the source files.
 ## License
 
 [GPL-2.0](LICENSE), as the original SNANDer. See [LICENSE](LICENSE) for the full terms.
+The fonts of the web page, Brass Serif and Brass Mono (IBM Plex), are under the SIL Open Font
+License 1.1: [src/fonts/OFL.txt](src/fonts/OFL.txt).
 
 ## Support
 

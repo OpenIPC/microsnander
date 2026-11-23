@@ -42,13 +42,21 @@ usb-backend: FORCE
 	@[ "$$(cat $@ 2>/dev/null)" = "$(USB_BACKEND)" ] || echo $(USB_BACKEND) > $@
 $(OBJS): usb-backend usb.h usbfs.h
 
-# the page of the web mode, as a C string
-web_page.h: web_page.html
-	sed 's/\\/\\\\/g; s/"/\\"/g; s/^/"/; s/$$/\\n"/' $< | { echo 'static const char web_page[] ='; cat; echo ';'; } > $@
+# the page of the web mode, as a C string; @VER@ in it (the fonts' ?v=) is _VER of main.c
+VER := $(shell sed -n 's/^\#define[[:space:]]*_VER[[:space:]]*"\(.*\)"/\1/p' main.c)
+web_page.h: web_page.html main.c
+	sed 's/@VER@/$(VER)/g; s/\\/\\\\/g; s/"/\\"/g; s/^/"/; s/$$/\\n"/' $< | { echo 'static const char web_page[] ='; cat; echo ';'; } > $@
 
-web.o: web_page.h
+# the page's fonts (brass 1.5.0, fonts/OFL.txt) as arrays; written aside and
+# moved, so a failed run leaves no header
+WEB_FONTS = $(sort $(wildcard fonts/*.woff2))
+web_fonts.h: web_fonts.sh fonts $(WEB_FONTS)
+	sh web_fonts.sh $(WEB_FONTS) > $@.tmp
+	mv -f $@.tmp $@
+
+web.o: web_page.h web_fonts.h
 
 clean:
-	rm -f *.o microsnander* web_page.h usb-backend
+	rm -f *.o microsnander* web_page.h web_fonts.h web_fonts.h.tmp usb-backend
 
 .PHONY: all clean FORCE

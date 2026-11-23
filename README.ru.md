@@ -735,6 +735,8 @@ MicroSNANDer основан на [SNANDer](https://github.com/McMCCRU/SNANDer) �
 ## Лицензия
 
 [GPL-2.0](LICENSE), как и у оригинального SNANDer. Полный текст — в [LICENSE](LICENSE).
+Шрифты веб-страницы, Brass Serif и Brass Mono (IBM Plex), — под лицензией SIL Open Font License 1.1:
+[src/fonts/OFL.txt](src/fonts/OFL.txt).
 
 ## Поддержка
 
