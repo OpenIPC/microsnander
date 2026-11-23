@@ -601,7 +601,7 @@ CH341A 代码。源文件中保留了原始版权声明。
 ## 许可证
 
 [GPL-2.0](LICENSE)，与原版 SNANDer 相同。完整条款见 [LICENSE](LICENSE)。
-Web 页面的字体 Brass Serif 和 Brass Mono（IBM Plex）采用 SIL Open Font License 1.1：
+Web 页面和 Android 应用的字体 Brass Serif 和 Brass Mono（IBM Plex）采用 SIL Open Font License 1.1：
 [src/fonts/OFL.txt](src/fonts/OFL.txt)。
 
 ## 支持

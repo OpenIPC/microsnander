@@ -135,6 +135,7 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle saved) {
         super.onCreate(saved);
         setContentView(R.layout.activity_main);
+        Brass.fonts(findViewById(android.R.id.content));
         usb = (UsbManager) getSystemService(Context.USB_SERVICE);
         meta = findViewById(R.id.meta);
         LinearLayout board = findViewById(R.id.board);
@@ -744,7 +745,7 @@ public class MainActivity extends Activity {
         frame.addView(Brass.title(this, R.string.export_title));
         TextView f = new TextView(this);
         f.setText(getString(R.string.export_file, dump.getName(), sizeOf(dump.length())));
-        f.setTypeface(android.graphics.Typeface.MONOSPACE);
+        f.setTypeface(Brass.mono(this));
         f.setTextColor(col(R.color.dim));
         f.setGravity(Gravity.CENTER_HORIZONTAL);
         f.setPadding(0, Brass.dp(this, 6), 0, Brass.dp(this, 10));
@@ -1306,6 +1307,7 @@ public class MainActivity extends Activity {
             TextView name = new TextView(this);
             name.setText(getString(R.string.sr_n, r + 1));
             name.setTextColor(col(R.color.amber));
+            name.setTypeface(Brass.mono(this));
             regs.addView(name);
             for (int k = 0; k < 8; k++) {
                 TextView b = new TextView(this);
@@ -1313,6 +1315,7 @@ public class MainActivity extends Activity {
                 String n = macronix ? BITS_MACRONIX[k] : BITS[r][k];
                 b.setText(n);
                 b.setGravity(Gravity.CENTER);
+                b.setTypeface(Brass.mono(this));
                 b.setTextSize(11);
                 b.setPadding(6, 6, 6, 6);
                 b.setTextColor(col(on ? R.color.ink_dark : R.color.dim));
