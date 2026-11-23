@@ -4,6 +4,16 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.54.0 — 2026-11-23
+
+- Web page: the fonts of brass 1.5.0, built in and served by microsnander, in the web mode and the
+  Android app's remote access alike: Brass Serif for the title and the buttons, Brass Mono for the
+  rest (both IBM Plex, `src/fonts/OFL.txt`). The page looks the same on every system instead of
+  falling back to whatever Georgia and Courier New it finds. `/fonts/<file>.woff2` needs no
+  password and is cached for a year; the page asks for them with the version (`?v=`). The program
+  grows by about 45 KB.
+- Web page: a long value on the board wraps at its spaces first (the adapter list on a phone).
+
 ## 1.53.0 — 2026-11-23
 
 - Android app: camex 6.2.0 in the tunnel. SETTINGS has a new field, Network selector, after

@@ -145,7 +145,47 @@ int main(void)
 	check(strstr(body_of(), "function detectThen") && strstr(body_of(), "(o==='erase'||o==='write'||o==='selftest'||o==='unprotect')&&!s.chip"),
 	      "  Erase and Write wait for a chip: off without one, a Detect before the question");
 
+	/* brass 1.5.0: the page's own fonts, Brass Serif for headings and buttons, Brass Mono for the rest */
+	{
+		request("GET", "/", NULL, NULL, 0);
+		const char *pg = body_of(), *g, *c;
+		int urls = 0;
+
+		g = strstr(pg, "Georgia"); c = strstr(pg, "'Courier New'");
+		check(g && !strstr(g + 1, "Georgia") && c && !strstr(c + 1, "'Courier New'") &&
+		      strstr(pg, "--serif:'Brass Serif',Georgia,'Times New Roman',serif") &&
+		      strstr(pg, "--mono:'Brass Mono','Courier New',monospace"),
+		      "the page: Georgia and Courier New only as fallbacks in --serif and --mono");
+		check(strstr(pg, "h1,h2,h3{font-family:var(--serif)}") && strstr(pg, ".btn{position:relative;border:0;cursor:pointer;font-family:var(--serif)") &&
+		      strstr(pg, "font-family:var(--mono);display:flex"), "  headings and buttons Brass Serif, the body Brass Mono");
+		for (size_t f = 0; f < sizeof(web_fonts) / sizeof(web_fonts[0]); f++) {
+			char u[96];
+			snprintf(u, sizeof(u), "url(fonts/%s?v=", web_fonts[f].name);
+			urls += strstr(pg, u) != NULL;
+		}
+		check(urls == 3 && !strstr(pg, "@VER@") && sizeof(web_fonts) / sizeof(web_fonts[0]) == 3,
+		      "  three @font-face, each with ?v= the version, and three fonts built in");
+	}
+	for (size_t f = 0; f < sizeof(web_fonts) / sizeof(web_fonts[0]); f++) {
+		char path[96];
+		snprintf(path, sizeof(path), "/fonts/%s?v=1.0.0", web_fonts[f].name);
+		int code = request("GET", path, NULL, NULL, 0);
+		const char *b = body_of();
+		size_t n = nresp - (size_t)(b - resp);
+		if (code != 200 || !strstr(resp, "Content-Type: font/woff2\r\n") ||
+		    !strstr(resp, "Cache-Control: max-age=31536000, immutable\r\n") || strstr(resp, "no-store") ||
+		    n != web_fonts[f].len || memcmp(b, web_fonts[f].data, n) || memcmp(b, "wOF2", 4))
+			check(0, path);
+	}
+	check(1, "GET /fonts/<file>: 200, font/woff2, a year of cache (immutable), the bytes of the file");
+	check(request("GET", "/fonts/none.woff2", NULL, NULL, 0) == 404 && request("GET", "/fonts/../web.c", NULL, NULL, 0) == 404,
+	      "  another name: 404");
+	check(request("GET", "/api/state", NULL, NULL, 0) == 200 && strstr(resp, "Cache-Control: no-store"),
+	      "  the rest stays no-store");
+
 	web_password = "secret";
+	check(request("GET", "/fonts/BrassMono-Regular.woff2", NULL, NULL, 0) == 200 && request("GET", "/", NULL, NULL, 0) == 401,
+	      "with -K: the fonts with no password, the page still asks for it");
 	check(request("GET", "/api/state", NULL, NULL, 0) == 401 &&
 	      strstr(resp, "WWW-Authenticate: Basic realm=\"microsnander\", charset=\"UTF-8\""), "with -K: no password, 401");
 	check(request("GET", "/api/state", "eDp3cm9uZw==", NULL, 0) == 401, "  a wrong password, 401");	/* x:wrong */

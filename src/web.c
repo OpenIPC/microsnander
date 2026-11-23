@@ -28,6 +28,7 @@
  *                          (X-MicroSNANDer-Name: its file name): the dump shown, Write takes it;
  *                          the three newest imports are kept
  *   GET  /dumps/<file>     a dump made by Read or Upload (Range: bytes=A-B gives a part, for the hex view)
+ *   GET  /fonts/<file>     the page's fonts (Brass Serif, Brass Mono): no password, a year of cache
  *
  * The Android app runs the same server in a service (web_serve in a thread of
  * its own, web_stop to end it): it opens the USB device for each operation
@@ -419,6 +420,12 @@ void web_set_tunnel(const char *text)
 #else
 #include "web_page.h"
 #endif
+/* the page's fonts (brass 1.5.0: Brass Serif, Brass Mono; fonts/OFL.txt), made at build time */
+#ifdef WEB_FONTS_H
+#include WEB_FONTS_H
+#else
+#include "web_fonts.h"
+#endif
 
 static int send_all(int fd, const void *p, size_t n)
 {
@@ -438,8 +445,10 @@ static int send_all(int fd, const void *p, size_t n)
 static void reply(int fd, const char *status, const char *type, const char *extra, const void *body, size_t n)
 {
 	char h[512];
+	/* no-store, unless extra brings its own Cache-Control (the fonts) */
+	const char *cache = extra && strstr(extra, "Cache-Control:") ? "" : "Cache-Control: no-store\r\n";
 	int k = snprintf(h, sizeof(h), "HTTP/1.0 %s\r\nContent-Type: %s\r\nContent-Length: %zu\r\n"
-			 "Cache-Control: no-store\r\nConnection: close\r\n%s\r\n", status, type, n, extra ? extra : "");
+			 "%sConnection: close\r\n%s\r\n", status, type, n, cache, extra ? extra : "");
 
 	if (!send_all(fd, h, k) && n)
 		send_all(fd, body, n);
@@ -1052,6 +1061,22 @@ static void handle(int fd)
 	}
 	if (!web_any_host && !host_ok(head)) {
 		reply_text(fd, "403 Forbidden", "Use the address of this machine.\n");
+		return;
+	}
+	/* the fonts of the page: free (OFL) and the same for everyone, so no password; a page
+	   behind one has given it already. They change only with the version: ?v= in the
+	   page's CSS, and a year of cache here */
+	if (!strcmp(method, "GET") && !strncmp(path, "/fonts/", 7)) {
+		char name[64];
+
+		snprintf(name, sizeof(name), "%.*s", (int)strcspn(path + 7, "?"), path + 7);
+		for (size_t f = 0; f < sizeof(web_fonts) / sizeof(web_fonts[0]); f++)
+			if (!strcmp(name, web_fonts[f].name)) {
+				reply(fd, "200 OK", "font/woff2", "Cache-Control: max-age=31536000, immutable\r\n",
+				      web_fonts[f].data, web_fonts[f].len);
+				return;
+			}
+		reply_text(fd, "404 Not Found", "No such font.\n");
 		return;
 	}
 	if (!authorized(head)) {

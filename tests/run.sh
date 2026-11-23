@@ -28,7 +28,7 @@ ${CC:-cc} -std=gnu99 -Wall -Werror -O1 -I"$T/../src" ${LIBUSB_CFLAGS:-} -o "$W/e
 ${CC:-cc} -std=gnu99 -Wall -Werror -O1 -I"$T/../src" -o "$W/spisim" "$T/spisim.c" || exit 1
 ${CC:-cc} -std=gnu99 -Wall -Werror -O1 -I"$T/../src" -o "$W/usbfssim" "$T/usbfssim.c" || exit 1
 ${CC:-cc} -std=gnu99 -Wall -Werror -O1 -I"$T/../src" -o "$W/ispsim" "$T/ispsim.c" || exit 1
-make -s -C "$T/../src" web_page.h || exit 1
+make -s -C "$T/../src" web_page.h web_fonts.h || exit 1
 ${CC:-cc} -std=gnu99 -Wall -Werror -O1 -I"$T/../src" -o "$W/websim" "$T/websim.c" -pthread || exit 1
 cd "$W"; B=./ms; fail=0
 # t <expected exit code> <description> [VAR=value ...] <command>
