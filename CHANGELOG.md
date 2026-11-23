@@ -9,8 +9,7 @@ from every push to `main`; this file is the change history.
 - Android app: camex 6.2.0 in the tunnel. SETTINGS has a new field, Network selector, after
   Network name: needed only for a network whose block on the server sets `selector=` (the server
   then answers CPace for that network alone); empty, nothing changes. It goes with a network name
-  and no psk, and a connect link carries it as `e=`. Export/Import and the page take it as any
-  other field of the tunnel.
+  and no psk, and a connect link carries it as `e=`. It is kept with the other tunnel settings.
 
 ## 1.52.0 — 2026-11-22
 
