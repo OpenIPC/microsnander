@@ -4,6 +4,14 @@ The version lives in `_VER` in `src/main.c`. Binaries are published only as the
 [`latest`](https://github.com/OpenIPC/microsnander/releases/latest) release, rebuilt
 from every push to `main`; this file is the change history.
 
+## 1.53.0 — 2026-11-23
+
+- Android app: camex 6.2.0 in the tunnel. SETTINGS has a new field, Network selector, after
+  Network name: needed only for a network whose block on the server sets `selector=` (the server
+  then answers CPace for that network alone); empty, nothing changes. It goes with a network name
+  and no psk, and a connect link carries it as `e=`. Export/Import and the page take it as any
+  other field of the tunnel.
+
 ## 1.52.0 — 2026-11-22
 
 - SPI NAND: ESMT F50L1G41LC (ID `8C 2C`, 1 Gbit, 2 KB pages with 64 bytes of spare area, 128 KB
